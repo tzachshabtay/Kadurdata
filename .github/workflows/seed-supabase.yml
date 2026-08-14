@@ -2,6 +2,11 @@ name: Seed Supabase
 
 on:
   workflow_dispatch:
+    inputs:
+      seed_limit:
+        description: "Number of matches to seed for a manual run. Use 0 for the full date window."
+        required: false
+        default: "50"
   schedule:
     - cron: "17 3 * * *"
 
@@ -12,6 +17,7 @@ jobs:
 
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SEED_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_limit || '0' }}
 
     steps:
       - name: Checkout
@@ -37,7 +43,12 @@ jobs:
         run: python scripts/apply_migrations.py
 
       - name: Fetch and flatten 365Scores data
-        run: python scripts/ingest_365scores.py --allow-fetch-failures --retries 4 --sleep 1
+        run: |
+          args=(--allow-fetch-failures --retries 4 --sleep 1)
+          if [ "${SEED_LIMIT:-0}" != "0" ]; then
+            args+=(--limit "$SEED_LIMIT")
+          fi
+          python scripts/ingest_365scores.py "${args[@]}"
 
       - name: Load Supabase
         run: python scripts/load_365scores_to_supabase.py

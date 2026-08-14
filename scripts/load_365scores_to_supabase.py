@@ -677,6 +677,7 @@ def load_fixtures(cur: psycopg.Cursor, source_id: str, competition_id: str, seas
 
 
 def load_player_rows(
+    conn: psycopg.Connection,
     cur: psycopg.Cursor,
     source_id: str,
     season_id: str,
@@ -841,6 +842,8 @@ def load_player_rows(
         if len(stat_batch) >= STAT_BATCH_SIZE:
             written_stats += flush_stat_batch(cur, stat_batch)
         if index % 500 == 0:
+            written_stats += flush_stat_batch(cur, stat_batch)
+            conn.commit()
             print(f"processed {index}/{len(rows)} player rows; wrote {written_stats} stat observations", flush=True)
 
     written_stats += flush_stat_batch(cur, stat_batch)
@@ -866,6 +869,7 @@ def parse_team_stat_value(value: str, value_percentage: str) -> tuple[Optional[f
 
 
 def load_team_stats(
+    conn: psycopg.Connection,
     cur: psycopg.Cursor,
     source_id: str,
     season_id: str,
@@ -903,6 +907,7 @@ def load_team_stats(
         if len(stat_batch) >= STAT_BATCH_SIZE:
             written_stats += flush_stat_batch(cur, stat_batch)
     written_stats += flush_stat_batch(cur, stat_batch)
+    conn.commit()
     print(f"processed {len(rows)} team-stat rows; wrote {written_stats} team stat observations", flush=True)
 
 
@@ -924,9 +929,10 @@ def main() -> int:
             season_id = get_or_create_season(cur, source_id, competition_id, fixture_rows)
             print("core competition objects ready", flush=True)
             indexes = load_fixtures(cur, source_id, competition_id, season_id, fixture_rows)
+            conn.commit()
             print(f"loaded fixture graph for {len(indexes['matches'])} matches", flush=True)
-            load_player_rows(cur, source_id, season_id, player_rows, indexes)
-            load_team_stats(cur, source_id, season_id, team_stat_rows, indexes)
+            load_player_rows(conn, cur, source_id, season_id, player_rows, indexes)
+            load_team_stats(conn, cur, source_id, season_id, team_stat_rows, indexes)
         conn.commit()
 
     print(
