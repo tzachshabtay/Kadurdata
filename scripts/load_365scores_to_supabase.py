@@ -584,7 +584,60 @@ def stat_observation_params(
 def flush_stat_batch(cur: psycopg.Cursor, batch: list[tuple[Any, ...]]) -> int:
     if not batch:
         return 0
-    cur.executemany(STAT_OBSERVATION_SQL, batch)
+    cur.execute(
+        """
+        create temp table if not exists stat_observation_stage (
+          source_id uuid not null,
+          metric_id uuid not null,
+          subject_type text not null,
+          subject_id uuid,
+          match_id uuid,
+          team_id uuid,
+          player_id uuid,
+          season_id uuid,
+          source_subject_id text,
+          source_metric_name text,
+          value_numeric numeric(18,6),
+          raw_value text
+        ) on commit preserve rows
+        """
+    )
+    cur.execute("truncate stat_observation_stage")
+    with cur.copy(
+        """
+        copy stat_observation_stage (
+          source_id, metric_id, subject_type, subject_id, match_id, team_id,
+          player_id, season_id, source_subject_id, source_metric_name,
+          value_numeric, raw_value
+        ) from stdin
+        """
+    ) as copy:
+        for row in batch:
+            copy.write_row(row)
+    cur.execute(
+        """
+        insert into obs.stat_observations (
+          source_id, metric_id, subject_type, subject_id, match_id, team_id,
+          player_id, season_id, source_subject_id, source_metric_name,
+          value_numeric, raw_value
+        )
+        select
+          source_id, metric_id, subject_type, subject_id, match_id, team_id,
+          player_id, season_id, source_subject_id, source_metric_name,
+          value_numeric, raw_value
+        from stat_observation_stage
+        on conflict (source_id, subject_type, subject_id, metric_id) do update
+          set match_id = excluded.match_id,
+              team_id = excluded.team_id,
+              player_id = excluded.player_id,
+              season_id = excluded.season_id,
+              source_subject_id = excluded.source_subject_id,
+              source_metric_name = excluded.source_metric_name,
+              value_numeric = excluded.value_numeric,
+              raw_value = excluded.raw_value,
+              observed_at = now()
+        """
+    )
     count = len(batch)
     batch.clear()
     return count
