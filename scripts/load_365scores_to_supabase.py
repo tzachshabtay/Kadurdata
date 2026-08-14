@@ -22,6 +22,25 @@ SOURCE_BASE_URL = "https://webws.365scores.com"
 COUNTRY_ISRAEL = {"name": "Israel", "iso2": "IL", "iso3": "ISR"}
 COMPETITION_SOURCE_ID = "42"
 COMPETITION_NAME = "Israeli Premier League"
+STAT_BATCH_SIZE = 1000
+STAT_OBSERVATION_SQL = """
+insert into obs.stat_observations (
+  source_id, metric_id, subject_type, subject_id, match_id, team_id,
+  player_id, season_id, source_subject_id, source_metric_name,
+  value_numeric, raw_value
+)
+values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+on conflict (source_id, subject_type, subject_id, metric_id) do update
+  set match_id = excluded.match_id,
+      team_id = excluded.team_id,
+      player_id = excluded.player_id,
+      season_id = excluded.season_id,
+      source_subject_id = excluded.source_subject_id,
+      source_metric_name = excluded.source_metric_name,
+      value_numeric = excluded.value_numeric,
+      raw_value = excluded.raw_value,
+      observed_at = now()
+"""
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -514,55 +533,87 @@ def replace_stat_observation(
 ) -> None:
     if value is None and raw_value is None:
         return
-    cur.execute(
-        """
-        insert into obs.stat_observations (
-          source_id, metric_id, subject_type, subject_id, match_id, team_id,
-          player_id, season_id, source_subject_id, source_metric_name,
-          value_numeric, raw_value
-        )
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        on conflict (source_id, subject_type, subject_id, metric_id) do update
-          set match_id = excluded.match_id,
-              team_id = excluded.team_id,
-              player_id = excluded.player_id,
-              season_id = excluded.season_id,
-              source_subject_id = excluded.source_subject_id,
-              source_metric_name = excluded.source_metric_name,
-              value_numeric = excluded.value_numeric,
-              raw_value = excluded.raw_value,
-              observed_at = now()
-        """,
-        (
-            source_id,
-            metric_id,
-            subject_type,
-            subject_id,
-            match_id,
-            team_id,
-            player_id,
-            season_id,
-            source_subject_id,
-            source_metric_name,
-            value,
-            raw_value,
-        ),
+    cur.execute(STAT_OBSERVATION_SQL, stat_observation_params(
+        source_id,
+        metric_id,
+        subject_type,
+        subject_id,
+        source_subject_id,
+        source_metric_name,
+        value,
+        raw_value,
+        match_id,
+        team_id,
+        player_id,
+        season_id,
+    ))
+
+
+def stat_observation_params(
+    source_id: str,
+    metric_id: str,
+    subject_type: str,
+    subject_id: str,
+    source_subject_id: str,
+    source_metric_name: str,
+    value: Optional[float],
+    raw_value: Optional[str],
+    match_id: Optional[str] = None,
+    team_id: Optional[str] = None,
+    player_id: Optional[str] = None,
+    season_id: Optional[str] = None,
+) -> Optional[tuple[Any, ...]]:
+    if value is None and raw_value is None:
+        return None
+    return (
+        source_id,
+        metric_id,
+        subject_type,
+        subject_id,
+        match_id,
+        team_id,
+        player_id,
+        season_id,
+        source_subject_id,
+        source_metric_name,
+        value,
+        raw_value,
     )
+
+
+def flush_stat_batch(cur: psycopg.Cursor, batch: list[tuple[Any, ...]]) -> int:
+    if not batch:
+        return 0
+    cur.executemany(STAT_OBSERVATION_SQL, batch)
+    count = len(batch)
+    batch.clear()
+    return count
 
 
 def load_fixtures(cur: psycopg.Cursor, source_id: str, competition_id: str, season_id: str, rows: list[dict[str, str]]) -> dict[str, Any]:
     teams: dict[str, str] = {}
     matches: dict[str, str] = {}
     match_teams: dict[tuple[str, str], str] = {}
+    stages: dict[Optional[int], str] = {}
+    rounds: dict[tuple[str, Optional[int], Optional[str]], Optional[str]] = {}
 
     for row in rows:
         home_source_id = row["home_team_id"]
         away_source_id = row["away_team_id"]
-        teams[home_source_id] = get_or_create_team(cur, source_id, home_source_id, row["home_team"])
-        teams[away_source_id] = get_or_create_team(cur, source_id, away_source_id, row["away_team"])
+        if home_source_id not in teams:
+            teams[home_source_id] = get_or_create_team(cur, source_id, home_source_id, row["home_team"])
+        if away_source_id not in teams:
+            teams[away_source_id] = get_or_create_team(cur, source_id, away_source_id, row["away_team"])
 
-        stage_id = get_or_create_stage(cur, season_id, to_int(row.get("stage_num")))
-        round_id = get_or_create_round(cur, stage_id, to_int(row.get("round_num")), row.get("round_name"))
+        stage_num = to_int(row.get("stage_num"))
+        if stage_num not in stages:
+            stages[stage_num] = get_or_create_stage(cur, season_id, stage_num)
+        stage_id = stages[stage_num]
+        round_num = to_int(row.get("round_num"))
+        round_key = (stage_id, round_num, row.get("round_name"))
+        if round_key not in rounds:
+            rounds[round_key] = get_or_create_round(cur, stage_id, round_num, row.get("round_name"))
+        round_id = rounds[round_key]
         match_id = upsert_match(
             cur,
             source_id,
@@ -633,8 +684,11 @@ def load_player_rows(
     indexes: dict[str, Any],
 ) -> None:
     metric_ids: dict[str, str] = {}
+    player_ids: dict[str, str] = {}
+    stat_batch: list[tuple[Any, ...]] = []
+    written_stats = 0
 
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
         player_source_id = source_player_id(row)
         if not player_source_id:
             continue
@@ -644,14 +698,16 @@ def load_player_rows(
         if not match_id or not team_id or not opponent_team_id:
             continue
 
-        player_id = get_or_create_player(
-            cur,
-            source_id,
-            player_source_id,
-            row["player_name"],
-            to_int(row.get("country_id")),
-            row.get("position_name"),
-        )
+        if player_source_id not in player_ids:
+            player_ids[player_source_id] = get_or_create_player(
+                cur,
+                source_id,
+                player_source_id,
+                row["player_name"],
+                to_int(row.get("country_id")),
+                row.get("position_name"),
+            )
+        player_id = player_ids[player_source_id]
         appearance_id = upsert_appearance(cur, match_id, player_id, team_id, opponent_team_id, row)
 
         cur.execute(
@@ -697,8 +753,7 @@ def load_player_rows(
         source_subject_id = f"{row['game_id']}:{player_source_id}:{row['team_id']}"
         if row.get("rating"):
             metric_ids.setdefault("rating_365", get_or_create_metric(cur, "rating_365", "player_match", "rating"))
-            replace_stat_observation(
-                cur,
+            params = stat_observation_params(
                 source_id,
                 metric_ids["rating_365"],
                 "player_match",
@@ -712,6 +767,8 @@ def load_player_rows(
                 player_id,
                 season_id,
             )
+            if params:
+                stat_batch.append(params)
 
         stat_bases = sorted({metric_from_stat_column(column) for column in row.keys() if metric_from_stat_column(column)})
         for base in stat_bases:
@@ -721,8 +778,7 @@ def load_player_rows(
             percentage = to_float(row.get(f"stat_{base}_percentage"))
 
             metric_ids.setdefault(base, get_or_create_metric(cur, base, "player_match"))
-            replace_stat_observation(
-                cur,
+            params = stat_observation_params(
                 source_id,
                 metric_ids[base],
                 "player_match",
@@ -736,12 +792,13 @@ def load_player_rows(
                 player_id,
                 season_id,
             )
+            if params:
+                stat_batch.append(params)
 
             if attempted is not None:
                 attempted_code = attempted_metric_code(base)
                 metric_ids.setdefault(attempted_code, get_or_create_metric(cur, attempted_code, "player_match"))
-                replace_stat_observation(
-                    cur,
+                params = stat_observation_params(
                     source_id,
                     metric_ids[attempted_code],
                     "player_match",
@@ -755,6 +812,8 @@ def load_player_rows(
                     player_id,
                     season_id,
                 )
+                if params:
+                    stat_batch.append(params)
 
             if percentage is not None:
                 percentage_code = percentage_metric_code(base)
@@ -762,8 +821,7 @@ def load_player_rows(
                     percentage_code,
                     get_or_create_metric(cur, percentage_code, "player_match", "percentage"),
                 )
-                replace_stat_observation(
-                    cur,
+                params = stat_observation_params(
                     source_id,
                     metric_ids[percentage_code],
                     "player_match",
@@ -777,6 +835,16 @@ def load_player_rows(
                     player_id,
                     season_id,
                 )
+                if params:
+                    stat_batch.append(params)
+
+        if len(stat_batch) >= STAT_BATCH_SIZE:
+            written_stats += flush_stat_batch(cur, stat_batch)
+        if index % 500 == 0:
+            print(f"processed {index}/{len(rows)} player rows; wrote {written_stats} stat observations", flush=True)
+
+    written_stats += flush_stat_batch(cur, stat_batch)
+    print(f"processed {len(rows)} player rows; wrote {written_stats} player stat observations", flush=True)
 
 
 def parse_team_stat_value(value: str, value_percentage: str) -> tuple[Optional[float], str]:
@@ -805,6 +873,8 @@ def load_team_stats(
     indexes: dict[str, Any],
 ) -> None:
     metric_ids: dict[str, str] = {}
+    stat_batch: list[tuple[Any, ...]] = []
+    written_stats = 0
     for row in rows:
         match_id = indexes["matches"].get(row["game_id"])
         team_id = indexes["teams"].get(row["team_id"])
@@ -815,8 +885,7 @@ def load_team_stats(
         value, raw = parse_team_stat_value(row.get("value", ""), row.get("value_percentage", ""))
         value_type = "percentage" if row.get("value_percentage") or "%" in row.get("value", "") else "count"
         metric_ids.setdefault(code, get_or_create_metric(cur, code, "team_match", value_type))
-        replace_stat_observation(
-            cur,
+        params = stat_observation_params(
             source_id,
             metric_ids[code],
             "team_match",
@@ -829,6 +898,12 @@ def load_team_stats(
             team_id=team_id,
             season_id=season_id,
         )
+        if params:
+            stat_batch.append(params)
+        if len(stat_batch) >= STAT_BATCH_SIZE:
+            written_stats += flush_stat_batch(cur, stat_batch)
+    written_stats += flush_stat_batch(cur, stat_batch)
+    print(f"processed {len(rows)} team-stat rows; wrote {written_stats} team stat observations", flush=True)
 
 
 def main() -> int:
@@ -843,10 +918,13 @@ def main() -> int:
     with psycopg.connect(database_url, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             source_id = get_source(cur)
+            print("source ready", flush=True)
             country_id = get_or_create_country(cur)
             competition_id = get_or_create_competition(cur, source_id, country_id)
             season_id = get_or_create_season(cur, source_id, competition_id, fixture_rows)
+            print("core competition objects ready", flush=True)
             indexes = load_fixtures(cur, source_id, competition_id, season_id, fixture_rows)
+            print(f"loaded fixture graph for {len(indexes['matches'])} matches", flush=True)
             load_player_rows(cur, source_id, season_id, player_rows, indexes)
             load_team_stats(cur, source_id, season_id, team_stat_rows, indexes)
         conn.commit()
