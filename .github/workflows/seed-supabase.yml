@@ -30,6 +30,9 @@ jobs:
         run: |
           test -n "$SUPABASE_DB_URL" || (echo "SUPABASE_DB_URL secret is required" && exit 1)
 
+      - name: Validate Supabase DB URL
+        run: python scripts/validate_supabase_db_url.py
+
       - name: Apply database migrations
         run: python scripts/apply_migrations.py
 
