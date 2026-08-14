@@ -643,6 +643,330 @@ def flush_stat_batch(cur: psycopg.Cursor, batch: list[tuple[Any, ...]]) -> int:
     return count
 
 
+def collect_player_stat_metric_specs(rows: list[dict[str, str]]) -> dict[str, tuple[str, str]]:
+    specs: dict[str, tuple[str, str]] = {}
+    if any(row.get("rating") for row in rows):
+        specs["rating_365"] = ("player_match", "rating")
+    for row in rows:
+        for base in {metric_from_stat_column(column) for column in row.keys() if metric_from_stat_column(column)}:
+            raw_value = row.get(f"stat_{base}_raw")
+            if to_float(row.get(f"stat_{base}_value")) is not None or raw_value:
+                specs.setdefault(base, ("player_match", "count"))
+            if to_float(row.get(f"stat_{base}_attempted")) is not None:
+                specs.setdefault(attempted_metric_code(base), ("player_match", "count"))
+            if to_float(row.get(f"stat_{base}_percentage")) is not None:
+                specs.setdefault(percentage_metric_code(base), ("player_match", "percentage"))
+    return specs
+
+
+def ensure_metrics(cur: psycopg.Cursor, specs: dict[str, tuple[str, str]]) -> dict[str, str]:
+    if not specs:
+        return {}
+    cur.execute(
+        """
+        create temp table if not exists metric_stage (
+          code text primary key,
+          name text not null,
+          subject_type text not null,
+          value_type text not null
+        ) on commit preserve rows
+        """
+    )
+    cur.execute("truncate metric_stage")
+    with cur.copy("copy metric_stage (code, name, subject_type, value_type) from stdin") as copy:
+        for code, (subject_type, value_type) in sorted(specs.items()):
+            copy.write_row((code, metric_name(code), subject_type, value_type))
+    cur.execute(
+        """
+        insert into obs.metrics (code, name, subject_type, value_type)
+        select code, name, subject_type, value_type
+        from metric_stage
+        on conflict (code) do update
+          set name = excluded.name,
+              subject_type = excluded.subject_type,
+              value_type = excluded.value_type
+        """
+    )
+    cur.execute(
+        """
+        select m.code, m.id
+        from obs.metrics m
+        join metric_stage s on s.code = m.code
+        """
+    )
+    return {row["code"]: row["id"] for row in cur.fetchall()}
+
+
+def valid_player_rows(rows: list[dict[str, str]], indexes: dict[str, Any]) -> list[dict[str, Any]]:
+    valid: list[dict[str, Any]] = []
+    for row in rows:
+        player_source_id = source_player_id(row)
+        if not player_source_id:
+            continue
+        match_id = indexes["matches"].get(row["game_id"])
+        team_id = indexes["teams"].get(row["team_id"])
+        opponent_team_id = indexes["teams"].get(row["opponent_id"])
+        if not match_id or not team_id or not opponent_team_id:
+            continue
+        valid.append(
+            {
+                "row": row,
+                "source_player_id": player_source_id,
+                "match_id": match_id,
+                "team_id": team_id,
+                "opponent_team_id": opponent_team_id,
+            }
+        )
+    return valid
+
+
+def ensure_players(cur: psycopg.Cursor, source_id: str, rows: list[dict[str, Any]]) -> dict[str, str]:
+    unique_players: dict[str, dict[str, Any]] = {}
+    for item in rows:
+        row = item["row"]
+        unique_players.setdefault(
+            item["source_player_id"],
+            {
+                "source_player_id": item["source_player_id"],
+                "name": row["player_name"],
+                "country_id": to_int(row.get("country_id")),
+                "position_name": row.get("position_name"),
+            },
+        )
+    if not unique_players:
+        return {}
+
+    cur.execute(
+        """
+        create temp table if not exists player_stage (
+          source_player_id text primary key,
+          name text not null,
+          country_id integer,
+          position_name text
+        ) on commit preserve rows
+        """
+    )
+    cur.execute("truncate player_stage")
+    with cur.copy("copy player_stage (source_player_id, name, country_id, position_name) from stdin") as copy:
+        for item in unique_players.values():
+            copy.write_row((item["source_player_id"], item["name"], item["country_id"], item["position_name"]))
+
+    cur.execute(
+        """
+        update core.players p
+        set display_name = s.name,
+            primary_position = coalesce(s.position_name, p.primary_position)
+        from source.source_entity_ids m
+        join player_stage s on s.source_player_id = m.source_entity_id
+        where m.source_id = %s
+          and m.entity_type = 'player'
+          and p.id = m.canonical_id
+        """,
+        (source_id,),
+    )
+    cur.execute(
+        """
+        with new_players as (
+          select s.*
+          from player_stage s
+          left join source.source_entity_ids m
+            on m.source_id = %s
+           and m.entity_type = 'player'
+           and m.source_entity_id = s.source_player_id
+          where m.id is null
+        ),
+        inserted as (
+          insert into core.players (display_name, primary_position, metadata)
+          select
+            name,
+            position_name,
+            jsonb_build_object(
+              '365_country_id', country_id,
+              '365_source_player_id', source_player_id
+            )
+          from new_players
+          returning id, display_name, metadata
+        )
+        insert into source.source_entity_ids (
+          source_id, entity_type, source_entity_id, canonical_table, canonical_id,
+          source_name, last_seen_at
+        )
+        select
+          %s,
+          'player',
+          metadata->>'365_source_player_id',
+          'core.players',
+          id,
+          display_name,
+          now()
+        from inserted
+        on conflict (source_id, entity_type, source_entity_id) do update
+          set canonical_table = excluded.canonical_table,
+              canonical_id = excluded.canonical_id,
+              source_name = excluded.source_name,
+              last_seen_at = now()
+        """,
+        (source_id, source_id),
+    )
+    cur.execute(
+        """
+        select m.source_entity_id, m.canonical_id
+        from source.source_entity_ids m
+        join player_stage s on s.source_player_id = m.source_entity_id
+        where m.source_id = %s
+          and m.entity_type = 'player'
+        """,
+        (source_id,),
+    )
+    return {row["source_entity_id"]: row["canonical_id"] for row in cur.fetchall()}
+
+
+def ensure_appearances(
+    cur: psycopg.Cursor,
+    source_id: str,
+    rows: list[dict[str, Any]],
+    player_ids: dict[str, str],
+) -> dict[tuple[str, str, str], str]:
+    cur.execute(
+        """
+        create temp table if not exists appearance_stage (
+          source_match_id text not null,
+          source_player_id text not null,
+          source_team_id text not null,
+          match_id uuid not null,
+          player_id uuid not null,
+          team_id uuid not null,
+          opponent_team_id uuid not null,
+          side text,
+          shirt_number integer,
+          lineup_status text,
+          position_name text,
+          formation_position text,
+          minutes_played numeric(5,2),
+          rating numeric(6,3),
+          heatmap_url text,
+          primary key (source_match_id, source_player_id, source_team_id)
+        ) on commit preserve rows
+        """
+    )
+    cur.execute("truncate appearance_stage")
+    with cur.copy(
+        """
+        copy appearance_stage (
+          source_match_id, source_player_id, source_team_id, match_id, player_id,
+          team_id, opponent_team_id, side, shirt_number, lineup_status,
+          position_name, formation_position, minutes_played, rating, heatmap_url
+        ) from stdin
+        """
+    ) as copy:
+        for item in rows:
+            row = item["row"]
+            player_id = player_ids.get(item["source_player_id"])
+            if not player_id:
+                continue
+            copy.write_row(
+                (
+                    row["game_id"],
+                    item["source_player_id"],
+                    row["team_id"],
+                    item["match_id"],
+                    player_id,
+                    item["team_id"],
+                    item["opponent_team_id"],
+                    row.get("team_side"),
+                    to_int(row.get("jersey_number")),
+                    row.get("lineup_status_text"),
+                    row.get("position_name"),
+                    row.get("formation_name"),
+                    to_float(row.get("stat_minutes_value")),
+                    to_float(row.get("rating")),
+                    row.get("heatmap_url"),
+                )
+            )
+
+    cur.execute(
+        """
+        insert into core.player_match_appearances (
+          match_id, player_id, team_id, opponent_team_id, side, shirt_number,
+          lineup_status, position_name, formation_position, minutes_played
+        )
+        select
+          match_id, player_id, team_id, opponent_team_id, side, shirt_number,
+          lineup_status, position_name, formation_position, minutes_played
+        from appearance_stage
+        on conflict (match_id, player_id, team_id) do update
+          set opponent_team_id = excluded.opponent_team_id,
+              side = excluded.side,
+              shirt_number = excluded.shirt_number,
+              lineup_status = excluded.lineup_status,
+              position_name = excluded.position_name,
+              formation_position = excluded.formation_position,
+              minutes_played = excluded.minutes_played
+        """
+    )
+    cur.execute(
+        """
+        insert into obs.player_appearance_observations (
+          source_id, appearance_id, match_id, player_id, team_id,
+          source_match_id, source_player_id, source_team_id,
+          lineup_status, position_name, formation_name, shirt_number, rating, heatmap_url
+        )
+        select
+          %s,
+          pma.id,
+          s.match_id,
+          s.player_id,
+          s.team_id,
+          s.source_match_id,
+          s.source_player_id,
+          s.source_team_id,
+          s.lineup_status,
+          s.position_name,
+          s.formation_position,
+          s.shirt_number,
+          s.rating,
+          s.heatmap_url
+        from appearance_stage s
+        join core.player_match_appearances pma
+          on pma.match_id = s.match_id
+         and pma.player_id = s.player_id
+         and pma.team_id = s.team_id
+        on conflict (source_id, source_match_id, source_player_id) do update
+          set appearance_id = excluded.appearance_id,
+              match_id = excluded.match_id,
+              player_id = excluded.player_id,
+              team_id = excluded.team_id,
+              source_team_id = excluded.source_team_id,
+              lineup_status = excluded.lineup_status,
+              position_name = excluded.position_name,
+              formation_name = excluded.formation_name,
+              shirt_number = excluded.shirt_number,
+              rating = excluded.rating,
+              heatmap_url = excluded.heatmap_url,
+              observed_at = now()
+        """,
+        (source_id,),
+    )
+    cur.execute(
+        """
+        select
+          s.source_match_id,
+          s.source_player_id,
+          s.source_team_id,
+          pma.id
+        from appearance_stage s
+        join core.player_match_appearances pma
+          on pma.match_id = s.match_id
+         and pma.player_id = s.player_id
+         and pma.team_id = s.team_id
+        """
+    )
+    return {
+        (row["source_match_id"], row["source_player_id"], row["source_team_id"]): row["id"]
+        for row in cur.fetchall()
+    }
+
+
 def load_fixtures(cur: psycopg.Cursor, source_id: str, competition_id: str, season_id: str, rows: list[dict[str, str]]) -> dict[str, Any]:
     teams: dict[str, str] = {}
     matches: dict[str, str] = {}
@@ -737,76 +1061,28 @@ def load_player_rows(
     rows: list[dict[str, str]],
     indexes: dict[str, Any],
 ) -> None:
-    metric_ids: dict[str, str] = {}
-    player_ids: dict[str, str] = {}
+    valid_rows = valid_player_rows(rows, indexes)
+    metric_ids = ensure_metrics(cur, collect_player_stat_metric_specs([item["row"] for item in valid_rows]))
+    player_ids = ensure_players(cur, source_id, valid_rows)
+    appearance_ids = ensure_appearances(cur, source_id, valid_rows, player_ids)
     stat_batch: list[tuple[Any, ...]] = []
     written_stats = 0
 
-    for index, row in enumerate(rows, start=1):
-        player_source_id = source_player_id(row)
-        if not player_source_id:
-            continue
-        match_id = indexes["matches"].get(row["game_id"])
-        team_id = indexes["teams"].get(row["team_id"])
-        opponent_team_id = indexes["teams"].get(row["opponent_id"])
-        if not match_id or not team_id or not opponent_team_id:
-            continue
+    print(
+        f"prepared {len(player_ids)} players and {len(appearance_ids)} player appearances",
+        flush=True,
+    )
 
-        if player_source_id not in player_ids:
-            player_ids[player_source_id] = get_or_create_player(
-                cur,
-                source_id,
-                player_source_id,
-                row["player_name"],
-                to_int(row.get("country_id")),
-                row.get("position_name"),
-            )
-        player_id = player_ids[player_source_id]
-        appearance_id = upsert_appearance(cur, match_id, player_id, team_id, opponent_team_id, row)
-
-        cur.execute(
-            """
-            insert into obs.player_appearance_observations (
-              source_id, appearance_id, match_id, player_id, team_id,
-              source_match_id, source_player_id, source_team_id,
-              lineup_status, position_name, formation_name, shirt_number, rating, heatmap_url
-            )
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            on conflict (source_id, source_match_id, source_player_id) do update
-              set appearance_id = excluded.appearance_id,
-                  match_id = excluded.match_id,
-                  player_id = excluded.player_id,
-                  team_id = excluded.team_id,
-                  source_team_id = excluded.source_team_id,
-                  lineup_status = excluded.lineup_status,
-                  position_name = excluded.position_name,
-                  formation_name = excluded.formation_name,
-                  shirt_number = excluded.shirt_number,
-                  rating = excluded.rating,
-                  heatmap_url = excluded.heatmap_url,
-                  observed_at = now()
-            """,
-            (
-                source_id,
-                appearance_id,
-                match_id,
-                player_id,
-                team_id,
-                row["game_id"],
-                player_source_id,
-                row["team_id"],
-                row.get("lineup_status_text"),
-                row.get("position_name"),
-                row.get("formation_name"),
-                to_int(row.get("jersey_number")),
-                to_float(row.get("rating")),
-                row.get("heatmap_url"),
-            ),
-        )
+    for index, item in enumerate(valid_rows, start=1):
+        row = item["row"]
+        player_source_id = item["source_player_id"]
+        player_id = player_ids.get(player_source_id)
+        appearance_id = appearance_ids.get((row["game_id"], player_source_id, row["team_id"]))
+        if not player_id or not appearance_id:
+            continue
 
         source_subject_id = f"{row['game_id']}:{player_source_id}:{row['team_id']}"
         if row.get("rating"):
-            metric_ids.setdefault("rating_365", get_or_create_metric(cur, "rating_365", "player_match", "rating"))
             params = stat_observation_params(
                 source_id,
                 metric_ids["rating_365"],
@@ -816,8 +1092,8 @@ def load_player_rows(
                 "365 rating",
                 to_float(row.get("rating")),
                 row.get("rating"),
-                match_id,
-                team_id,
+                item["match_id"],
+                item["team_id"],
                 player_id,
                 season_id,
             )
@@ -831,7 +1107,6 @@ def load_player_rows(
             attempted = to_float(row.get(f"stat_{base}_attempted"))
             percentage = to_float(row.get(f"stat_{base}_percentage"))
 
-            metric_ids.setdefault(base, get_or_create_metric(cur, base, "player_match"))
             params = stat_observation_params(
                 source_id,
                 metric_ids[base],
@@ -841,8 +1116,8 @@ def load_player_rows(
                 base,
                 value,
                 raw_value,
-                match_id,
-                team_id,
+                item["match_id"],
+                item["team_id"],
                 player_id,
                 season_id,
             )
@@ -851,7 +1126,6 @@ def load_player_rows(
 
             if attempted is not None:
                 attempted_code = attempted_metric_code(base)
-                metric_ids.setdefault(attempted_code, get_or_create_metric(cur, attempted_code, "player_match"))
                 params = stat_observation_params(
                     source_id,
                     metric_ids[attempted_code],
@@ -861,8 +1135,8 @@ def load_player_rows(
                     f"{base}_attempted",
                     attempted,
                     raw_value,
-                    match_id,
-                    team_id,
+                    item["match_id"],
+                    item["team_id"],
                     player_id,
                     season_id,
                 )
@@ -871,10 +1145,6 @@ def load_player_rows(
 
             if percentage is not None:
                 percentage_code = percentage_metric_code(base)
-                metric_ids.setdefault(
-                    percentage_code,
-                    get_or_create_metric(cur, percentage_code, "player_match", "percentage"),
-                )
                 params = stat_observation_params(
                     source_id,
                     metric_ids[percentage_code],
@@ -884,8 +1154,8 @@ def load_player_rows(
                     f"{base}_percentage",
                     percentage,
                     raw_value,
-                    match_id,
-                    team_id,
+                    item["match_id"],
+                    item["team_id"],
                     player_id,
                     season_id,
                 )
@@ -897,10 +1167,10 @@ def load_player_rows(
         if index % 500 == 0:
             written_stats += flush_stat_batch(cur, stat_batch)
             conn.commit()
-            print(f"processed {index}/{len(rows)} player rows; wrote {written_stats} stat observations", flush=True)
+            print(f"processed {index}/{len(valid_rows)} player rows; wrote {written_stats} stat observations", flush=True)
 
     written_stats += flush_stat_batch(cur, stat_batch)
-    print(f"processed {len(rows)} player rows; wrote {written_stats} player stat observations", flush=True)
+    print(f"processed {len(valid_rows)} player rows; wrote {written_stats} player stat observations", flush=True)
 
 
 def parse_team_stat_value(value: str, value_percentage: str) -> tuple[Optional[float], str]:
