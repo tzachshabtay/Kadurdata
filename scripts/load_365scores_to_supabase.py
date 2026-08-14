@@ -1191,6 +1191,21 @@ def parse_team_stat_value(value: str, value_percentage: str) -> tuple[Optional[f
         return None, raw
 
 
+def team_metric_code(source_stat_name: str) -> str:
+    return f"team_{slugify(source_stat_name)}"
+
+
+def collect_team_stat_metric_specs(rows: list[dict[str, str]]) -> dict[str, tuple[str, str]]:
+    specs: dict[str, tuple[str, str]] = {}
+    for row in rows:
+        if not row.get("stat_name"):
+            continue
+        code = team_metric_code(row["stat_name"])
+        value_type = "percentage" if row.get("value_percentage") or "%" in row.get("value", "") else "count"
+        specs.setdefault(code, ("team_match", value_type))
+    return specs
+
+
 def load_team_stats(
     conn: psycopg.Connection,
     cur: psycopg.Cursor,
@@ -1199,7 +1214,7 @@ def load_team_stats(
     rows: list[dict[str, str]],
     indexes: dict[str, Any],
 ) -> None:
-    metric_ids: dict[str, str] = {}
+    metric_ids = ensure_metrics(cur, collect_team_stat_metric_specs(rows))
     stat_batch: list[tuple[Any, ...]] = []
     written_stats = 0
     for row in rows:
@@ -1208,10 +1223,8 @@ def load_team_stats(
         match_team_id = indexes["match_teams"].get((row["game_id"], row["team_id"]))
         if not match_id or not team_id or not match_team_id or not row.get("stat_name"):
             continue
-        code = slugify(row["stat_name"])
+        code = team_metric_code(row["stat_name"])
         value, raw = parse_team_stat_value(row.get("value", ""), row.get("value_percentage", ""))
-        value_type = "percentage" if row.get("value_percentage") or "%" in row.get("value", "") else "count"
-        metric_ids.setdefault(code, get_or_create_metric(cur, code, "team_match", value_type))
         params = stat_observation_params(
             source_id,
             metric_ids[code],
