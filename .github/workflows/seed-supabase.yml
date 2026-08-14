@@ -37,7 +37,7 @@ jobs:
         run: python scripts/apply_migrations.py
 
       - name: Fetch and flatten 365Scores data
-        run: python scripts/ingest_365scores.py
+        run: python scripts/ingest_365scores.py --allow-fetch-failures --retries 4 --sleep 1
 
       - name: Load Supabase
         run: python scripts/load_365scores_to_supabase.py

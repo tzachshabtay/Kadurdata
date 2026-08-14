@@ -465,6 +465,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-fixture-pages", type=int, default=50)
     parser.add_argument("--sleep", type=float, default=0.25)
     parser.add_argument("--retries", type=int, default=2)
+    parser.add_argument(
+        "--allow-fetch-failures",
+        action="store_true",
+        help="Write partial outputs and exit successfully when some match payloads fail.",
+    )
     parser.add_argument("--refresh", action="store_true", help="Ignore cached raw JSON files.")
     return parser.parse_args()
 
@@ -517,7 +522,7 @@ def main() -> int:
     }
     write_json(args.processed_dir / "365scores_manifest.json", manifest)
     print(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
-    return 1 if failures else 0
+    return 0 if args.allow_fetch_failures or not failures else 1
 
 
 if __name__ == "__main__":
