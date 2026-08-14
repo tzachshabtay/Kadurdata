@@ -920,7 +920,7 @@ def main() -> int:
     player_rows = read_csv(PROCESSED_DIR / "365scores_player_match_stats.csv")
     team_stat_rows = read_csv(PROCESSED_DIR / "365scores_team_match_stats.csv")
 
-    with psycopg.connect(database_url, row_factory=dict_row) as conn:
+    with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
             source_id = get_source(cur)
             print("source ready", flush=True)
