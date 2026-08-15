@@ -27,16 +27,10 @@ with match_totals as (
   select
     season_id,
     count(*)::integer as match_count,
-    count(*) filter (
-      where lower(coalesce(status, '')) in ('ended', 'after et', 'after penalties', 'awarded')
-        and home_score >= 0
-        and away_score >= 0
-    )::integer
+    count(*) filter (where home_score is not null and away_score is not null)::integer
       as completed_match_count,
     coalesce(sum(home_score + away_score) filter (
-      where lower(coalesce(status, '')) in ('ended', 'after et', 'after penalties', 'awarded')
-        and home_score >= 0
-        and away_score >= 0
+      where home_score is not null and away_score is not null
     ), 0)::integer as goals_scored,
     min(scheduled_at) as first_match_at,
     max(scheduled_at) as latest_match_at
@@ -96,11 +90,7 @@ select
   r.round_number,
   coalesce(r.name, 'Round') as round_name,
   count(m.id)::integer as match_count,
-  count(m.id) filter (
-    where lower(coalesce(m.status, '')) in ('ended', 'after et', 'after penalties', 'awarded')
-      and m.home_score >= 0
-      and m.away_score >= 0
-  )::integer
+  count(m.id) filter (where m.home_score is not null and m.away_score is not null)::integer
     as completed_match_count,
   min(m.scheduled_at) as first_match_at,
   max(m.scheduled_at) as last_match_at
@@ -154,9 +144,7 @@ with club_matches as (
     opponent.score as opponent_score,
     mt.score,
     m.scheduled_at,
-    lower(coalesce(m.status, '')) in ('ended', 'after et', 'after penalties', 'awarded')
-      and m.home_score >= 0
-      and m.away_score >= 0 as is_completed
+    m.home_score is not null and m.away_score is not null as is_completed
   from core.match_teams mt
   join core.matches m on m.id = mt.match_id
   left join core.match_teams opponent
