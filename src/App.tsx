@@ -1,164 +1,268 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
+  ArrowUpRight,
   BarChart3,
-  Database,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CircleDot,
+  LayoutDashboard,
+  ListFilter,
   Loader2,
   RefreshCcw,
   Search,
-  Settings,
-  TrendingUp,
+  Shield,
+  Trophy,
   Users,
 } from "lucide-react";
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
-import type { Metric, Overview, Player, PlayerMatchStat } from "./lib/types";
+import type {
+  Club,
+  Competition,
+  Match,
+  MatchPlayerStat,
+  MatchTeamStat,
+  Metric,
+  Overview,
+  PlayerHistory,
+  Round,
+  Season,
+  SeasonPlayer,
+} from "./lib/types";
 
-const formatter = new Intl.NumberFormat("en-US");
+type View = "overview" | "matches" | "clubs" | "players";
+type RoleFilter = "All" | SeasonPlayer["role_group"];
+type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
+
+const numberFormatter = new Intl.NumberFormat("en-US");
 const compactFormatter = new Intl.NumberFormat("en-US", { notation: "compact" });
+const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
+const comparisonMetrics = [
+  "team_possession",
+  "team_total_shots",
+  "team_shots_on_target",
+  "team_expected_goals",
+  "team_big_chances_created",
+  "team_corners",
+  "team_passes_completed",
+];
 
-const demoOverview: Overview = {
-  match_count: 240,
-  player_count: 682,
-  team_count: 14,
-  stat_observation_count: 596524,
-  latest_observed_at: new Date().toISOString(),
+const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "matches", label: "Matches", icon: CalendarDays },
+  { id: "clubs", label: "Clubs", icon: Shield },
+  { id: "players", label: "Players", icon: Users },
+];
+
+const demoCompetition: Competition = {
+  competition_id: "demo-competition",
+  name: "Israeli Premier League",
+  name_he: "ליגת העל",
+  competition_type: "league",
+  country_name: "Israel",
+  season_count: 1,
+  latest_season_id: "demo-season",
+  latest_season_name: "2025/26",
 };
 
-const demoPlayers: Player[] = [
-  {
-    player_id: "demo-1",
-    display_name: "Demo Midfielder",
-    primary_position: "CM",
-    current_team_id: "team-1",
-    current_team_name: "Maccabi Tel Aviv",
-    appearances: 29,
-    minutes: 2411,
-  },
-  {
-    player_id: "demo-2",
-    display_name: "Demo Forward",
-    primary_position: "ST",
-    current_team_id: "team-2",
-    current_team_name: "Maccabi Haifa",
-    appearances: 27,
-    minutes: 2184,
-  },
-  {
-    player_id: "demo-3",
-    display_name: "Demo Fullback",
-    primary_position: "RB",
-    current_team_id: "team-3",
-    current_team_name: "Hapoel Be'er Sheva",
-    appearances: 25,
-    minutes: 2019,
-  },
-];
+const demoSeason: Season = {
+  season_id: "demo-season",
+  competition_id: "demo-competition",
+  competition_name: "Israeli Premier League",
+  competition_name_he: "ליגת העל",
+  season_name: "2025/26",
+  start_date: "2025-08-23",
+  end_date: "2026-05-24",
+  match_count: 240,
+  completed_match_count: 218,
+  team_count: 14,
+  player_count: 525,
+  goals_scored: 582,
+  first_match_at: "2025-08-23T17:15:00Z",
+  latest_match_at: "2026-05-24T17:00:00Z",
+  is_latest: true,
+};
 
-const demoMetrics: Metric[] = [
-  {
-    metric_id: "metric-1",
-    code: "accurate_passes_percentage",
-    name: "Accurate passes %",
-    subject_type: "player_match",
-    value_type: "percentage",
-  },
-  {
-    metric_id: "metric-2",
-    code: "key_passes",
-    name: "Key passes",
-    subject_type: "player_match",
-    value_type: "number",
-  },
-];
-
-const demoStats: PlayerMatchStat[] = Array.from({ length: 12 }, (_, index) => ({
-  player_id: "demo-1",
-  display_name: "Demo Midfielder",
-  team_id: "team-1",
-  team_name: "Maccabi Tel Aviv",
-  opponent_team_id: "opponent",
-  opponent_team_name: index % 2 ? "Maccabi Haifa" : "Hapoel Be'er Sheva",
-  match_id: `demo-match-${index}`,
-  scheduled_at: new Date(2026, 0, 5 + index * 7).toISOString(),
-  home_score: index % 4,
-  away_score: (index + 1) % 3,
-  side: index % 2 ? "away" : "home",
-  minutes_played: index % 5 === 0 ? 72 : 90,
-  metric_id: "metric-1",
-  metric_code: "accurate_passes_percentage",
-  metric_name: "Accurate passes %",
-  value_type: "percentage",
-  value_numeric: 71 + Math.round(Math.sin(index / 2) * 8 + index * 1.4),
-  raw_value: null,
+const demoRounds: Round[] = Array.from({ length: 5 }, (_, index) => ({
+  round_id: `demo-round-${index + 25}`,
+  season_id: "demo-season",
+  stage_id: "demo-stage",
+  stage_name: index > 1 ? "Playoffs" : "Regular Season",
+  stage_type: index > 1 ? "playoff" : "regular",
+  stage_number: index > 1 ? 2 : 1,
+  round_number: index + 25,
+  round_name: "Round",
+  match_count: 7,
+  completed_match_count: 7,
+  first_match_at: `2026-04-${10 + index}T17:00:00Z`,
+  last_match_at: `2026-04-${12 + index}T20:00:00Z`,
 }));
 
-type LoadState = "loading" | "ready" | "demo" | "error";
+const demoClubNames = ["Maccabi Tel Aviv FC", "Hapoel Be'er Sheva FC", "Maccabi Haifa FC", "Beitar Jerusalem FC"];
+const demoClubs: Club[] = demoClubNames.map((team_name, index) => ({
+  season_id: "demo-season",
+  competition_id: "demo-competition",
+  team_id: `demo-team-${index}`,
+  team_name,
+  team_name_he: null,
+  short_name: null,
+  city: null,
+  founded_year: null,
+  primary_color: null,
+  secondary_color: null,
+  played: 30,
+  won: 20 - index * 2,
+  drawn: 5 + index,
+  lost: 5 + index,
+  goals_for: 61 - index * 6,
+  goals_against: 25 + index * 4,
+  goal_difference: 36 - index * 10,
+  points: 65 - index * 7,
+  last_played_at: "2026-04-18T17:00:00Z",
+}));
+
+const demoMatches: Match[] = Array.from({ length: 8 }, (_, index) => ({
+  match_id: `demo-match-${index}`,
+  season_id: "demo-season",
+  season_name: "2025/26",
+  competition_id: "demo-competition",
+  competition_name: "Israeli Premier League",
+  competition_name_he: "ליגת העל",
+  stage_id: "demo-stage",
+  stage_name: "Playoffs",
+  stage_number: 2,
+  round_id: "demo-round-29",
+  round_number: 29,
+  round_name: "Round",
+  scheduled_at: `2026-04-${18 + index}T17:00:00Z`,
+  status: "Ended",
+  home_team_id: `demo-team-${index % 4}`,
+  home_team_name: demoClubNames[index % 4],
+  home_team_name_he: null,
+  home_team_short_name: null,
+  home_team_color: null,
+  away_team_id: `demo-team-${(index + 1) % 4}`,
+  away_team_name: demoClubNames[(index + 1) % 4],
+  away_team_name_he: null,
+  away_team_short_name: null,
+  away_team_color: null,
+  home_score: index % 4,
+  away_score: (index + 1) % 3,
+}));
+
+const demoPlayers: SeasonPlayer[] = [
+  ["Dor Peretz", "Midfielders", 11, 7, 7.31],
+  ["Omer Atzili", "Attackers", 14, 8, 7.48],
+  ["Miguel Silva", "Goalkeepers", 0, 0, 7.08],
+  ["Or Blorian", "Defenders", 3, 1, 7.16],
+  ["Yarden Shua", "Attackers", 12, 10, 7.42],
+].map(([display_name, role_group, goals, assists, average_rating], index) => ({
+  season_id: "demo-season",
+  competition_id: "demo-competition",
+  player_id: `demo-player-${index}`,
+  display_name: String(display_name),
+  display_name_he: null,
+  primary_position: String(role_group).replace(/s$/, ""),
+  role_group: role_group as SeasonPlayer["role_group"],
+  team_id: `demo-team-${index % 4}`,
+  team_name: demoClubNames[index % 4],
+  appearances: 28,
+  starts: 25,
+  minutes: 2250 - index * 90,
+  goals: Number(goals),
+  assists: Number(assists),
+  average_rating: Number(average_rating),
+}));
+
+const demoMetrics: Metric[] = [
+  { metric_id: "rating", code: "rating_365", name: "Rating", subject_type: "player_match", value_type: "rating" },
+  { metric_id: "passes", code: "pass_completion_pct", name: "Pass completion", subject_type: "player_match", value_type: "percentage" },
+  { metric_id: "goals", code: "goals", name: "Goals", subject_type: "player_match", value_type: "count" },
+  { metric_id: "shots", code: "total_shots", name: "Total shots", subject_type: "player_match", value_type: "count" },
+];
 
 export function App() {
+  const [view, setView] = useState<View>(readViewFromHash);
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [players, setPlayers] = useState<SeasonPlayer[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
-  const [stats, setStats] = useState<PlayerMatchStat[]>([]);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
-  const [selectedMetricCode, setSelectedMetricCode] = useState<string>("");
-  const [query, setQuery] = useState("");
-  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [playerHistory, setPlayerHistory] = useState<PlayerHistory[]>([]);
+  const [matchPlayerStats, setMatchPlayerStats] = useState<MatchPlayerStat[]>([]);
+  const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
+  const [competitionId, setCompetitionId] = useState("");
+  const [seasonId, setSeasonId] = useState("");
+  const [roundId, setRoundId] = useState("");
+  const [matchId, setMatchId] = useState("");
+  const [clubId, setClubId] = useState("");
+  const [playerId, setPlayerId] = useState("");
+  const [metricCode, setMetricCode] = useState("");
+  const [matchSide, setMatchSide] = useState<"home" | "away">("home");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
+  const [clubFilter, setClubFilter] = useState("all");
+  const [playerQuery, setPlayerQuery] = useState("");
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [seasonLoading, setSeasonLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadReferenceData() {
+    setLoading(true);
     setError(null);
 
     if (!hasSupabaseConfig || !supabase) {
-      setOverview(demoOverview);
-      setPlayers(demoPlayers);
+      setOverview({ match_count: 240, player_count: 525, team_count: 14, stat_observation_count: 622000, latest_observed_at: null });
+      setCompetitions([demoCompetition]);
+      setSeasons([demoSeason]);
       setMetrics(demoMetrics);
-      setSelectedPlayerId(demoPlayers[0].player_id);
-      setSelectedMetricCode(demoMetrics[0].code);
-      setLoadState("demo");
+      setCompetitionId(demoCompetition.competition_id);
+      setSeasonId(demoSeason.season_id);
+      setLoading(false);
       return;
     }
 
-    setLoadState("loading");
-
-    const [overviewResult, playersResult, metricsResult] = await Promise.all([
+    const [competitionResult, seasonResult, metricResult, overviewResult] = await Promise.all([
+      supabase.from("api_competitions").select("*").order("name"),
+      supabase.from("api_seasons").select("*").order("start_date", { ascending: false }),
+      supabase.from("api_metrics").select("*").eq("subject_type", "player_match").order("name"),
       supabase.from("api_overview").select("*").single(),
-      supabase
-        .from("api_players")
-        .select("*")
-        .order("minutes", { ascending: false })
-        .limit(500),
-      supabase
-        .from("api_metrics")
-        .select("*")
-        .eq("subject_type", "player_match")
-        .order("name", { ascending: true }),
     ]);
-
-    const firstError = overviewResult.error ?? playersResult.error ?? metricsResult.error;
+    const firstError = competitionResult.error ?? seasonResult.error ?? metricResult.error ?? overviewResult.error;
     if (firstError) {
       setError(firstError.message);
-      setLoadState("error");
+      setLoading(false);
       return;
     }
 
-    const nextPlayers = (playersResult.data ?? []) as Player[];
-    const nextMetrics = (metricsResult.data ?? []) as Metric[];
+    const nextCompetitions = (competitionResult.data ?? []) as Competition[];
+    const nextSeasons = (seasonResult.data ?? []) as Season[];
+    const nextMetrics = (metricResult.data ?? []) as Metric[];
+    const defaultCompetition = nextCompetitions.find((item) => item.name.toLowerCase().includes("premier")) ?? nextCompetitions[0];
+    const defaultSeason = nextSeasons.find((item) => item.competition_id === defaultCompetition?.competition_id && item.is_latest)
+      ?? nextSeasons.find((item) => item.competition_id === defaultCompetition?.competition_id);
 
     setOverview(overviewResult.data as Overview);
-    setPlayers(nextPlayers);
+    setCompetitions(nextCompetitions);
+    setSeasons(nextSeasons);
     setMetrics(nextMetrics);
-    setSelectedPlayerId((current) => current || nextPlayers[0]?.player_id || "");
-    setSelectedMetricCode((current) => current || nextMetrics[0]?.code || "");
-    setLoadState("ready");
+    setCompetitionId((current) => current || defaultCompetition?.competition_id || "");
+    setSeasonId((current) => current || defaultSeason?.season_id || "");
+    setMetricCode((current) => current || preferredMetric(nextMetrics));
+    setLoading(false);
   }
 
   useEffect(() => {
@@ -166,280 +270,860 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    async function loadStats() {
-      if (!selectedPlayerId || !selectedMetricCode) {
-        setStats([]);
-        return;
-      }
+    const onHashChange = () => setView(readViewFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
-      if (!hasSupabaseConfig || !supabase) {
-        setStats(demoStats);
-        return;
-      }
-
-      const result = await supabase
-        .from("api_player_match_stats")
-        .select("*")
-        .eq("player_id", selectedPlayerId)
-        .eq("metric_code", selectedMetricCode)
-        .order("scheduled_at", { ascending: true })
-        .limit(120);
-
-      if (result.error) {
-        setError(result.error.message);
-        setLoadState("error");
-        return;
-      }
-
-      setStats((result.data ?? []) as PlayerMatchStat[]);
-    }
-
-    void loadStats();
-  }, [selectedMetricCode, selectedPlayerId]);
-
-  const selectedPlayer = players.find((player) => player.player_id === selectedPlayerId);
-  const selectedMetric = metrics.find((metric) => metric.code === selectedMetricCode);
-
-  const filteredPlayers = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return players;
-
-    return players.filter((player) =>
-      [player.display_name, player.current_team_name, player.primary_position]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(normalizedQuery)),
-    );
-  }, [players, query]);
-
-  const chartData = useMemo(
-    () =>
-      stats
-        .filter((row) => row.value_numeric !== null)
-        .map((row, index) => ({
-          match: index + 1,
-          date: row.scheduled_at ? formatShortDate(row.scheduled_at) : `Match ${index + 1}`,
-          value: Number(row.value_numeric),
-          opponent: row.opponent_team_name ?? "Unknown",
-        })),
-    [stats],
+  const availableSeasons = useMemo(
+    () => seasons.filter((season) => season.competition_id === competitionId),
+    [competitionId, seasons],
   );
 
-  const recentStats = [...stats].reverse().slice(0, 8);
-  const averageValue =
-    chartData.length > 0
-      ? chartData.reduce((sum, point) => sum + point.value, 0) / chartData.length
-      : null;
+  useEffect(() => {
+    if (!competitionId || availableSeasons.some((season) => season.season_id === seasonId)) return;
+    const nextSeason = availableSeasons.find((season) => season.is_latest) ?? availableSeasons[0];
+    setSeasonId(nextSeason?.season_id ?? "");
+  }, [availableSeasons, competitionId, seasonId]);
+
+  useEffect(() => {
+    async function loadSeasonData() {
+      if (!seasonId) return;
+      setSeasonLoading(true);
+      setError(null);
+
+      if (!hasSupabaseConfig || !supabase) {
+        setRounds(demoRounds);
+        setMatches(demoMatches);
+        setClubs(demoClubs);
+        setPlayers(demoPlayers);
+        setRoundId(demoRounds[demoRounds.length - 1]?.round_id ?? "");
+        setClubId(demoClubs[0]?.team_id ?? "");
+        setPlayerId(demoPlayers[0]?.player_id ?? "");
+        setSeasonLoading(false);
+        return;
+      }
+
+      const [roundResult, matchResult, clubResult, playerResult] = await Promise.all([
+        supabase.from("api_rounds").select("*").eq("season_id", seasonId).order("stage_number").order("round_number"),
+        supabase.from("api_matches").select("*").eq("season_id", seasonId).order("scheduled_at"),
+        supabase.from("api_clubs").select("*").eq("season_id", seasonId).order("points", { ascending: false }),
+        supabase.from("api_season_players").select("*").eq("season_id", seasonId).order("minutes", { ascending: false }).limit(1000),
+      ]);
+      const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error;
+      if (firstError) {
+        setError(firstError.message);
+        setSeasonLoading(false);
+        return;
+      }
+
+      const nextRounds = (roundResult.data ?? []) as Round[];
+      const nextMatches = (matchResult.data ?? []) as Match[];
+      const nextClubs = (clubResult.data ?? []) as Club[];
+      const nextPlayers = (playerResult.data ?? []) as SeasonPlayer[];
+      const latestPlayedRound = [...nextRounds].reverse().find((round) => round.completed_match_count > 0) ?? nextRounds[nextRounds.length - 1];
+
+      setRounds(nextRounds);
+      setMatches(nextMatches);
+      setClubs(nextClubs);
+      setPlayers(nextPlayers);
+      setRoundId((current) => nextRounds.some((round) => round.round_id === current) ? current : latestPlayedRound?.round_id ?? "");
+      setClubId((current) => nextClubs.some((club) => club.team_id === current) ? current : nextClubs[0]?.team_id ?? "");
+      setPlayerId((current) => nextPlayers.some((player) => player.player_id === current) ? current : nextPlayers[0]?.player_id ?? "");
+      setSeasonLoading(false);
+    }
+
+    void loadSeasonData();
+  }, [refreshToken, seasonId]);
+
+  const roundMatches = useMemo(
+    () => matches.filter((match) => match.round_id === roundId),
+    [matches, roundId],
+  );
+
+  useEffect(() => {
+    setMatchId((current) => roundMatches.some((match) => match.match_id === current) ? current : roundMatches[0]?.match_id ?? "");
+  }, [roundMatches]);
+
+  useEffect(() => {
+    async function loadMatchDetail() {
+      if (!matchId) {
+        setMatchPlayerStats([]);
+        setMatchTeamStats([]);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) return;
+      setDetailLoading(true);
+      const [playersResult, teamsResult] = await Promise.all([
+        supabase.from("api_match_player_stats").select("*").eq("match_id", matchId).limit(5000),
+        supabase.from("api_match_team_stats").select("*").eq("match_id", matchId).limit(500),
+      ]);
+      const firstError = playersResult.error ?? teamsResult.error;
+      if (firstError) setError(firstError.message);
+      setMatchPlayerStats((playersResult.data ?? []) as MatchPlayerStat[]);
+      setMatchTeamStats((teamsResult.data ?? []) as MatchTeamStat[]);
+      setDetailLoading(false);
+    }
+
+    void loadMatchDetail();
+  }, [matchId]);
+
+  useEffect(() => {
+    async function loadPlayerDetail() {
+      if (!playerId || !metricCode) {
+        setPlayerHistory([]);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) {
+        setPlayerHistory(makeDemoHistory(playerId, metricCode));
+        return;
+      }
+      setDetailLoading(true);
+      const result = await supabase
+        .from("api_player_history")
+        .select("*")
+        .eq("season_id", seasonId)
+        .eq("player_id", playerId)
+        .eq("metric_code", metricCode)
+        .order("scheduled_at")
+        .limit(250);
+      if (result.error) setError(result.error.message);
+      setPlayerHistory((result.data ?? []) as PlayerHistory[]);
+      setDetailLoading(false);
+    }
+
+    void loadPlayerDetail();
+  }, [metricCode, playerId, seasonId]);
+
+  const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
+  const currentRound = rounds.find((round) => round.round_id === roundId);
+  const selectedMatch = matches.find((match) => match.match_id === matchId);
+  const selectedClub = clubs.find((club) => club.team_id === clubId);
+  const selectedPlayer = players.find((player) => player.player_id === playerId);
+  const playerMetrics = metrics.filter((metric) => metric.subject_type === "player_match");
+
+  const standings = useMemo(
+    () => [...clubs].sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference),
+    [clubs],
+  );
+  const topScorers = useMemo(
+    () => [...players].sort((a, b) => Number(b.goals) - Number(a.goals) || Number(b.minutes) - Number(a.minutes)).slice(0, 5),
+    [players],
+  );
+  const filteredPlayers = useMemo(() => {
+    const query = playerQuery.trim().toLowerCase();
+    return players.filter((player) => {
+      const matchesRole = roleFilter === "All" || player.role_group === roleFilter;
+      const matchesClub = clubFilter === "all" || player.team_id === clubFilter;
+      const matchesQuery = !query || [player.display_name, player.team_name, player.primary_position]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query));
+      return matchesRole && matchesClub && matchesQuery;
+    });
+  }, [clubFilter, playerQuery, players, roleFilter]);
+  const clubMatches = useMemo(
+    () => [...matches]
+      .filter((match) => match.home_team_id === clubId || match.away_team_id === clubId)
+      .sort((a, b) => dateValue(b.scheduled_at) - dateValue(a.scheduled_at)),
+    [clubId, matches],
+  );
+  const clubSquad = useMemo(
+    () => players.filter((player) => player.team_id === clubId),
+    [clubId, players],
+  );
+  const playerChartData = useMemo(() => aggregatePlayerHistory(playerHistory), [playerHistory]);
+  const playerAverage = playerChartData.length
+    ? playerChartData.reduce((total, point) => total + point.value, 0) / playerChartData.length
+    : null;
+  const matchPlayers = useMemo(() => pivotMatchPlayers(matchPlayerStats), [matchPlayerStats]);
+  const visibleMatchPlayers = matchPlayers.filter((player) => player.side === matchSide);
+  const teamComparisons = useMemo(() => buildTeamComparisons(matchTeamStats), [matchTeamStats]);
+
+  function navigate(nextView: View) {
+    setView(nextView);
+    window.history.pushState(null, "", `#${nextView}`);
+  }
+
+  function openMatch(match: Match) {
+    if (match.round_id) setRoundId(match.round_id);
+    setMatchId(match.match_id);
+    setMatchSide("home");
+    navigate("matches");
+  }
+
+  function openPlayer(nextPlayerId: string) {
+    setPlayerId(nextPlayerId);
+    navigate("players");
+  }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <div className="brand-row">
-            <Database size={22} aria-hidden="true" />
-            <span>Kadurdata</span>
-          </div>
-          <h1>Israeli soccer stats workbench</h1>
+    <div className="site-shell">
+      <header className="site-header">
+        <div className="header-main">
+          <button className="brand" type="button" onClick={() => navigate("overview")}>
+            <span className="brand-mark"><Trophy size={19} aria-hidden="true" /></span>
+            <span><strong>Kadurdata</strong><small>Israeli football intelligence</small></span>
+          </button>
+
+          <nav className="primary-nav" aria-label="Primary navigation">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button className={view === item.id ? "active" : ""} key={item.id} type="button" onClick={() => navigate(item.id)}>
+                  <Icon size={17} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <button className="icon-button" type="button" onClick={() => { void loadReferenceData(); setRefreshToken((value) => value + 1); }} title="Refresh data" aria-label="Refresh data">
+            <RefreshCcw size={18} aria-hidden="true" />
+          </button>
         </div>
-        <button className="icon-button" type="button" onClick={loadReferenceData} title="Refresh data">
-          <RefreshCcw size={18} aria-hidden="true" />
-        </button>
+
+        <div className="context-bar">
+          <div className="context-copy">
+            <span>Viewing</span>
+            <strong>{competitionLabel(competitions.find((item) => item.competition_id === competitionId)?.name)}</strong>
+          </div>
+          <label className="context-select">
+            <span>Competition</span>
+            <select value={competitionId} onChange={(event) => setCompetitionId(event.target.value)}>
+              {competitions.map((competition) => (
+                <option key={competition.competition_id} value={competition.competition_id}>{competitionLabel(competition.name)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="context-select">
+            <span>Season</span>
+            <select value={seasonId} onChange={(event) => setSeasonId(event.target.value)}>
+              {availableSeasons.map((season) => (
+                <option key={season.season_id} value={season.season_id}>{season.season_name}{season.is_latest ? " · Latest" : ""}</option>
+              ))}
+            </select>
+          </label>
+          <span className="data-status"><CircleDot size={15} aria-hidden="true" /> {compactFormatter.format(overview?.stat_observation_count ?? 0)} observations</span>
+        </div>
       </header>
 
-      {loadState === "demo" && (
-        <section className="notice">
-          <Settings size={18} aria-hidden="true" />
-          <span>
-            Supabase anon key is not configured locally, so this preview is using demo data.
-            GitHub Pages will use the `SUPABASE_ANON_KEY` repo variable or secret.
-          </span>
-        </section>
-      )}
+      <main className="page-shell">
+        {error && <div className="error-banner"><strong>Data could not be loaded.</strong><span>{error}</span></div>}
+        {!hasSupabaseConfig && <div className="demo-banner">Previewing the interface with sample data.</div>}
 
-      {loadState === "error" && (
-        <section className="notice notice-error">
-          <Activity size={18} aria-hidden="true" />
-          <span>{error ?? "Could not load Supabase data."}</span>
-        </section>
-      )}
+        {loading || seasonLoading ? (
+          <LoadingState />
+        ) : view === "overview" ? (
+          <OverviewView
+            season={currentSeason}
+            round={currentRound}
+            roundMatches={roundMatches}
+            standings={standings}
+            scorers={topScorers}
+            openMatch={openMatch}
+            openClub={(id) => { setClubId(id); navigate("clubs"); }}
+            openPlayer={openPlayer}
+            showMatches={() => navigate("matches")}
+          />
+        ) : view === "matches" ? (
+          <MatchesView
+            rounds={rounds}
+            round={currentRound}
+            roundId={roundId}
+            setRoundId={setRoundId}
+            matches={roundMatches}
+            selectedMatch={selectedMatch}
+            selectMatch={(id) => { setMatchId(id); setMatchSide("home"); }}
+            matchSide={matchSide}
+            setMatchSide={setMatchSide}
+            players={visibleMatchPlayers}
+            comparisons={teamComparisons}
+            detailLoading={detailLoading}
+            openPlayer={openPlayer}
+          />
+        ) : view === "clubs" ? (
+          <ClubsView
+            clubs={standings}
+            selectedClub={selectedClub}
+            setClubId={setClubId}
+            matches={clubMatches}
+            squad={clubSquad}
+            openMatch={openMatch}
+            openPlayer={openPlayer}
+          />
+        ) : (
+          <PlayersView
+            players={filteredPlayers}
+            allPlayersCount={players.length}
+            selectedPlayer={selectedPlayer}
+            selectPlayer={setPlayerId}
+            roles={roleFilters}
+            roleFilter={roleFilter}
+            setRoleFilter={setRoleFilter}
+            clubs={clubs}
+            clubFilter={clubFilter}
+            setClubFilter={setClubFilter}
+            query={playerQuery}
+            setQuery={setPlayerQuery}
+            metrics={playerMetrics}
+            metricCode={metricCode}
+            setMetricCode={setMetricCode}
+            chartData={playerChartData}
+            average={playerAverage}
+            detailLoading={detailLoading}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
 
-      <section className="stat-grid">
-        <StatCard icon={<BarChart3 size={19} />} label="Matches" value={overview?.match_count} />
-        <StatCard icon={<Users size={19} />} label="Players" value={overview?.player_count} />
-        <StatCard icon={<Activity size={19} />} label="Teams" value={overview?.team_count} />
-        <StatCard
-          icon={<TrendingUp size={19} />}
-          label="Observations"
-          value={overview?.stat_observation_count}
-          compact
-        />
+function OverviewView({
+  season,
+  round,
+  roundMatches,
+  standings,
+  scorers,
+  openMatch,
+  openClub,
+  openPlayer,
+  showMatches,
+}: {
+  season: Season;
+  round?: Round;
+  roundMatches: Match[];
+  standings: Club[];
+  scorers: SeasonPlayer[];
+  openMatch: (match: Match) => void;
+  openClub: (id: string) => void;
+  openPlayer: (id: string) => void;
+  showMatches: () => void;
+}) {
+  return (
+    <>
+      <PageHeading eyebrow={`${competitionLabel(season.competition_name)} · ${season.season_name}`} title="Season overview" description="The current shape of the league, from the latest results to the players setting the pace." />
+      <section className="stat-band" aria-label="Season summary">
+        <Stat label="Matches played" value={`${numberFormatter.format(season.completed_match_count)} / ${numberFormatter.format(season.match_count)}`} note={`${Math.round((season.completed_match_count / Math.max(season.match_count, 1)) * 100)}% complete`} />
+        <Stat label="Clubs" value={numberFormatter.format(season.team_count)} note="League participants" />
+        <Stat label="Players used" value={numberFormatter.format(season.player_count)} note="Across all matchdays" />
+        <Stat label="Goals" value={numberFormatter.format(season.goals_scored)} note={`${(season.goals_scored / Math.max(season.completed_match_count, 1)).toFixed(2)} per match`} accent />
       </section>
 
-      <section className="workspace-grid">
-        <aside className="panel player-panel">
-          <div className="panel-heading">
-            <h2>Players</h2>
-            <span>{formatter.format(filteredPlayers.length)}</span>
+      <div className="overview-grid">
+        <section className="surface round-surface">
+          <SectionHeading eyebrow={round?.stage_name ?? "Latest matchday"} title={`Round ${round?.round_number ?? "-"}`} action="All matches" onAction={showMatches} />
+          <div className="score-list">
+            {roundMatches.slice(0, 7).map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />)}
           </div>
-          <label className="search-box">
-            <Search size={17} aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, team, position"
-            />
-          </label>
-          <div className="player-list">
-            {filteredPlayers.map((player) => (
-              <button
-                className={player.player_id === selectedPlayerId ? "player-row active" : "player-row"}
-                key={player.player_id}
-                type="button"
-                onClick={() => setSelectedPlayerId(player.player_id)}
-              >
-                <span>
-                  <strong>{player.display_name}</strong>
-                  <small>{player.current_team_name ?? "No team"} · {player.primary_position ?? "Unknown"}</small>
-                </span>
-                <em>{formatter.format(Math.round(Number(player.minutes)))}</em>
+        </section>
+
+        <section className="surface standings-surface">
+          <SectionHeading eyebrow="League table" title="The leading pack" action="All clubs" onAction={() => openClub(standings[0]?.team_id ?? "")} />
+          <div className="mini-table" role="table" aria-label="League standings">
+            <div className="mini-table-head" role="row"><span>#</span><span>Club</span><span>GD</span><span>Pts</span></div>
+            {standings.slice(0, 7).map((club, index) => (
+              <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
+                <span className="rank">{index + 1}</span>
+                <span className="club-cell"><ClubBadge name={club.team_name} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
+                <span>{signed(club.goal_difference)}</span>
+                <strong>{club.points}</strong>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="surface leaders-surface">
+          <SectionHeading eyebrow="Player leaders" title="Top scorers" action="All players" onAction={() => openPlayer(scorers[0]?.player_id ?? "")} />
+          <div className="leader-list">
+            {scorers.map((player, index) => (
+              <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
+                <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
+                <span className="leader-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "")}</small></span>
+                <span className="leader-value"><strong>{formatNumber(player.goals)}</strong><small>goals</small></span>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+function MatchesView({
+  rounds,
+  round,
+  roundId,
+  setRoundId,
+  matches,
+  selectedMatch,
+  selectMatch,
+  matchSide,
+  setMatchSide,
+  players,
+  comparisons,
+  detailLoading,
+  openPlayer,
+}: {
+  rounds: Round[];
+  round?: Round;
+  roundId: string;
+  setRoundId: (id: string) => void;
+  matches: Match[];
+  selectedMatch?: Match;
+  selectMatch: (id: string) => void;
+  matchSide: "home" | "away";
+  setMatchSide: (side: "home" | "away") => void;
+  players: PlayerPivot[];
+  comparisons: Array<{ code: string; label: string; home: number; away: number }>;
+  detailLoading: boolean;
+  openPlayer: (id: string) => void;
+}) {
+  const roundIndex = rounds.findIndex((item) => item.round_id === roundId);
+  return (
+    <>
+      <PageHeading eyebrow={round?.stage_name ?? "Season schedule"} title="Fixtures & results" description="Move through the season by round, then open any match for team and player-level detail." />
+      <div className="round-toolbar">
+        <button className="icon-button compact" type="button" disabled={roundIndex <= 0} onClick={() => setRoundId(rounds[roundIndex - 1]?.round_id)} aria-label="Previous round"><ChevronLeft size={18} /></button>
+        <label>
+          <span>Matchday</span>
+          <select value={roundId} onChange={(event) => setRoundId(event.target.value)}>
+            {rounds.map((item) => <option key={item.round_id} value={item.round_id}>{item.stage_name} · Round {item.round_number}</option>)}
+          </select>
+        </label>
+        <button className="icon-button compact" type="button" disabled={roundIndex < 0 || roundIndex >= rounds.length - 1} onClick={() => setRoundId(rounds[roundIndex + 1]?.round_id)} aria-label="Next round"><ChevronRight size={18} /></button>
+        <span className="round-date">{formatDateRange(round?.first_match_at, round?.last_match_at)}</span>
+      </div>
+
+      <div className="match-workspace">
+        <aside className="surface fixture-rail">
+          <div className="rail-heading"><strong>{matches.length} matches</strong><span>{round?.completed_match_count ?? 0} completed</span></div>
+          <div className="fixture-list">
+            {matches.map((match) => (
+              <button className={selectedMatch?.match_id === match.match_id ? "active" : ""} key={match.match_id} type="button" onClick={() => selectMatch(match.match_id)}>
+                <time>{formatFixtureDate(match.scheduled_at)}</time>
+                <span className="fixture-clubs"><span>{cleanTeamName(match.home_team_name)}</span><span>{cleanTeamName(match.away_team_name)}</span></span>
+                <strong className="fixture-score"><span>{match.home_score ?? "-"}</span><span>{match.away_score ?? "-"}</span></strong>
+                <ChevronRight size={16} aria-hidden="true" />
               </button>
             ))}
           </div>
         </aside>
 
-        <section className="panel analysis-panel">
-          <div className="analysis-header">
-            <div>
-              <p>Selected player</p>
-              <h2>{selectedPlayer?.display_name ?? "No player selected"}</h2>
-            </div>
-            <select
-              value={selectedMetricCode}
-              onChange={(event) => setSelectedMetricCode(event.target.value)}
-              aria-label="Metric"
-            >
-              {metrics.map((metric) => (
-                <option key={metric.metric_id} value={metric.code}>
-                  {metric.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="chart-summary">
-            <div>
-              <span>Metric</span>
-              <strong>{selectedMetric?.name ?? "Choose a metric"}</strong>
-            </div>
-            <div>
-              <span>Sample</span>
-              <strong>{formatter.format(chartData.length)} matches</strong>
-            </div>
-            <div>
-              <span>Average</span>
-              <strong>{averageValue === null ? "No data" : formatMetricValue(averageValue)}</strong>
-            </div>
-          </div>
-
-          <div className="chart-frame">
-            {loadState === "loading" ? (
-              <div className="empty-state">
-                <Loader2 className="spin" size={24} aria-hidden="true" />
-                <span>Loading match stats</span>
+        <section className="surface match-detail">
+          {selectedMatch ? (
+            <>
+              <MatchScoreboard match={selectedMatch} />
+              <div className="detail-grid">
+                <div className="comparison-panel">
+                  <SectionHeading eyebrow="Team comparison" title="Match profile" />
+                  {detailLoading ? <InlineLoading /> : comparisons.length ? comparisons.map((item) => <ComparisonBar key={item.code} {...item} />) : <EmptyState text="Team comparison data is not available for this match." />}
+                </div>
+                <div className="lineup-panel">
+                  <div className="lineup-heading">
+                    <div><span>Player statistics</span><strong>{matchSide === "home" ? cleanTeamName(selectedMatch.home_team_name) : cleanTeamName(selectedMatch.away_team_name)}</strong></div>
+                    <div className="segmented compact-segmented">
+                      <button className={matchSide === "home" ? "active" : ""} type="button" onClick={() => setMatchSide("home")}>Home</button>
+                      <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => setMatchSide("away")}>Away</button>
+                    </div>
+                  </div>
+                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} openPlayer={openPlayer} />}
+                </div>
               </div>
-            ) : chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 20, right: 24, bottom: 10, left: 0 }}>
-                  <CartesianGrid stroke="#dde4ea" strokeDasharray="4 4" />
-                  <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={26} />
-                  <YAxis tickLine={false} axisLine={false} width={48} />
-                  <Tooltip
-                    contentStyle={{
-                      border: "1px solid #d6dee6",
-                      borderRadius: 8,
-                      boxShadow: "0 16px 40px rgba(15, 23, 42, 0.12)",
-                    }}
-                    formatter={(value) => [formatMetricValue(Number(value)), selectedMetric?.name ?? "Value"]}
-                    labelFormatter={(_, payload) => payload?.[0]?.payload?.opponent ?? "Match"}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#0f766e"
-                    strokeWidth={3}
-                    dot={{ r: 3, strokeWidth: 2 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty-state">No observations found for this player and metric.</div>
-            )}
-          </div>
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Opponent</th>
-                  <th>Minutes</th>
-                  <th>Score</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentStats.map((row) => (
-                  <tr key={`${row.match_id}-${row.metric_code}`}>
-                    <td>{row.scheduled_at ? formatShortDate(row.scheduled_at) : "-"}</td>
-                    <td>{row.opponent_team_name ?? "-"}</td>
-                    <td>{row.minutes_played ?? "-"}</td>
-                    <td>{formatScore(row)}</td>
-                    <td>{formatMetricValue(row.value_numeric)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            </>
+          ) : <EmptyState text="Select a match to inspect its statistics." />}
         </section>
-      </section>
-    </main>
-  );
-}
-
-function StatCard({
-  compact = false,
-  icon,
-  label,
-  value,
-}: {
-  compact?: boolean;
-  icon: React.ReactNode;
-  label: string;
-  value: number | undefined;
-}) {
-  return (
-    <article className="stat-card">
-      <div className="stat-icon">{icon}</div>
-      <div>
-        <span>{label}</span>
-        <strong>{value === undefined ? "-" : compact ? compactFormatter.format(value) : formatter.format(value)}</strong>
       </div>
-    </article>
+    </>
   );
 }
 
-function formatShortDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(value));
+function ClubsView({ clubs, selectedClub, setClubId, matches, squad, openMatch, openPlayer }: {
+  clubs: Club[];
+  selectedClub?: Club;
+  setClubId: (id: string) => void;
+  matches: Match[];
+  squad: SeasonPlayer[];
+  openMatch: (match: Match) => void;
+  openPlayer: (id: string) => void;
+}) {
+  const recent = matches.filter(isCompletedMatch).slice(0, 5);
+  return (
+    <>
+      <PageHeading eyebrow="Season directory" title="Clubs" description="Compare league position, form, results, and the players carrying each team through the season." />
+      <div className="club-workspace">
+        <aside className="surface club-directory">
+          <div className="club-table-head"><span>#</span><span>Club</span><span>P</span><span>Pts</span></div>
+          {clubs.map((club, index) => (
+            <button className={club.team_id === selectedClub?.team_id ? "active" : ""} key={club.team_id} type="button" onClick={() => setClubId(club.team_id)}>
+              <span>{index + 1}</span>
+              <span className="club-cell"><ClubBadge name={club.team_name} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
+              <span>{club.played}</span><strong>{club.points}</strong>
+            </button>
+          ))}
+        </aside>
+
+        <section className="club-detail">
+          {selectedClub ? (
+            <>
+              <div className="club-identity">
+                <ClubBadge name={selectedClub.team_name} size="large" />
+                <div><span>League position {clubs.findIndex((club) => club.team_id === selectedClub.team_id) + 1}</span><h2>{cleanTeamName(selectedClub.team_name)}</h2><p>{selectedClub.city ?? "Israel"} · {selectedClub.played} matches played</p></div>
+                <div className="form-strip" aria-label="Recent form">
+                  {recent.map((match) => <span className={clubResult(match, selectedClub.team_id).toLowerCase()} key={match.match_id}>{clubResult(match, selectedClub.team_id)}</span>)}
+                </div>
+              </div>
+              <section className="stat-band club-stats">
+                <Stat label="Record" value={`${selectedClub.won}-${selectedClub.drawn}-${selectedClub.lost}`} note="W-D-L" />
+                <Stat label="Goals" value={`${selectedClub.goals_for}:${selectedClub.goals_against}`} note="For : against" />
+                <Stat label="Goal difference" value={signed(selectedClub.goal_difference)} note="Season total" />
+                <Stat label="Points" value={String(selectedClub.points)} note={`${(selectedClub.points / Math.max(selectedClub.played, 1)).toFixed(2)} per match`} accent />
+              </section>
+              <div className="club-detail-grid">
+                <section className="surface club-results">
+                  <SectionHeading eyebrow="Season schedule" title="Recent matches" />
+                  {matches.slice(0, 8).map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />)}
+                </section>
+                <section className="surface squad-panel">
+                  <SectionHeading eyebrow={`${squad.length} players`} title="Season squad" />
+                  <div className="squad-list">
+                    {[...squad].sort((a, b) => Number(b.minutes) - Number(a.minutes)).slice(0, 14).map((player) => (
+                      <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
+                        <span className="avatar">{initials(player.display_name)}</span>
+                        <span><strong>{player.display_name}</strong><small>{player.primary_position ?? player.role_group}</small></span>
+                        <em>{numberFormatter.format(Math.round(Number(player.minutes)))}'</em>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </>
+          ) : <EmptyState text="Select a club to open its season workspace." />}
+        </section>
+      </div>
+    </>
+  );
 }
 
-function formatMetricValue(value: number | null) {
-  if (value === null || Number.isNaN(value)) return "-";
-  return Number.isInteger(value) ? formatter.format(value) : value.toFixed(1);
+function PlayersView({
+  players,
+  allPlayersCount,
+  selectedPlayer,
+  selectPlayer,
+  roles,
+  roleFilter,
+  setRoleFilter,
+  clubs,
+  clubFilter,
+  setClubFilter,
+  query,
+  setQuery,
+  metrics,
+  metricCode,
+  setMetricCode,
+  chartData,
+  average,
+  detailLoading,
+}: {
+  players: SeasonPlayer[];
+  allPlayersCount: number;
+  selectedPlayer?: SeasonPlayer;
+  selectPlayer: (id: string) => void;
+  roles: RoleFilter[];
+  roleFilter: RoleFilter;
+  setRoleFilter: (role: RoleFilter) => void;
+  clubs: Club[];
+  clubFilter: string;
+  setClubFilter: (id: string) => void;
+  query: string;
+  setQuery: (value: string) => void;
+  metrics: Metric[];
+  metricCode: string;
+  setMetricCode: (code: string) => void;
+  chartData: Array<{ match: number; date: string; value: number; opponent: string; score: string }>;
+  average: number | null;
+  detailLoading: boolean;
+}) {
+  const metric = metrics.find((item) => item.code === metricCode);
+  return (
+    <>
+      <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} players`} title="Player explorer" description="Filter the league by role or club, then track an individual metric from match to match." />
+      <div className="player-filters">
+        <div className="segmented role-segments">
+          {roles.map((role) => <button className={roleFilter === role ? "active" : ""} key={role} type="button" onClick={() => setRoleFilter(role)}>{role}</button>)}
+        </div>
+        <label className="filter-select"><ListFilter size={16} /><select value={clubFilter} onChange={(event) => setClubFilter(event.target.value)}><option value="all">All clubs</option>{clubs.map((club) => <option key={club.team_id} value={club.team_id}>{cleanTeamName(club.team_name)}</option>)}</select></label>
+        <label className="search-field"><Search size={17} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search players" /></label>
+      </div>
+
+      <div className="player-workspace">
+        <aside className="surface player-directory">
+          <div className="rail-heading"><strong>{numberFormatter.format(players.length)} results</strong><span>Min · G · A</span></div>
+          <div className="player-list">
+            {players.slice(0, 140).map((player) => (
+              <button className={player.player_id === selectedPlayer?.player_id ? "active" : ""} key={player.player_id} type="button" onClick={() => selectPlayer(player.player_id)}>
+                <span className="avatar">{initials(player.display_name)}</span>
+                <span className="player-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "Free agent")} · {player.primary_position ?? player.role_group}</small></span>
+                <span className="player-numbers"><strong>{numberFormatter.format(Math.round(Number(player.minutes)))}</strong><small>{formatNumber(player.goals)} · {formatNumber(player.assists)}</small></span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="surface player-detail">
+          {selectedPlayer ? (
+            <>
+              <div className="player-profile-head">
+                <span className="avatar large">{initials(selectedPlayer.display_name)}</span>
+                <div><span>{selectedPlayer.role_group} · {cleanTeamName(selectedPlayer.team_name ?? "")}</span><h2>{selectedPlayer.display_name}</h2></div>
+                <label className="metric-select"><span>Metric</span><select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>{metrics.map((item) => <option key={item.metric_id} value={item.code}>{item.name}</option>)}</select></label>
+              </div>
+              <section className="stat-band player-stats">
+                <Stat label="Appearances" value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} starts`} />
+                <Stat label="Minutes" value={numberFormatter.format(Math.round(Number(selectedPlayer.minutes)))} note="Season total" />
+                <Stat label="Goals + assists" value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} goals · ${formatNumber(selectedPlayer.assists)} assists`} />
+                <Stat label={metric?.name ?? "Average"} value={average === null ? "-" : formatMetric(average, metric?.value_type)} note={`${chartData.length} matches sampled`} accent />
+              </section>
+              <div className="trend-heading"><div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div><span className="trend-key"><i /> Season trend</span></div>
+              <div className="chart-frame">
+                {detailLoading ? <InlineLoading /> : chartData.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 18, right: 12, bottom: 4, left: -12 }}>
+                      <defs><linearGradient id="performanceFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#137a55" stopOpacity={0.28} /><stop offset="100%" stopColor="#137a55" stopOpacity={0.02} /></linearGradient></defs>
+                      <CartesianGrid vertical={false} stroke="#dfe6e2" strokeDasharray="3 5" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} minTickGap={28} />
+                      <YAxis axisLine={false} tickLine={false} width={54} />
+                      <Tooltip contentStyle={{ border: "1px solid #cfd9d3", borderRadius: 6, boxShadow: "0 12px 30px rgba(20, 35, 29, .12)" }} formatter={(value) => [formatMetric(Number(value), metric?.value_type), metric?.name ?? "Value"]} labelFormatter={(_, payload) => payload?.[0]?.payload?.opponent ?? "Match"} />
+                      <Area type="monotone" dataKey="value" stroke="#137a55" strokeWidth={3} fill="url(#performanceFill)" dot={{ r: 3, fill: "#f8faf8", strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : <EmptyState text="No observations were recorded for this player and metric." />}
+              </div>
+              <div className="history-strip">
+                {chartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatMetric(item.value, metric?.value_type)}</strong><small>{item.score}</small></div>)}
+              </div>
+            </>
+          ) : <EmptyState text="Select a player to explore their season." />}
+        </section>
+      </div>
+    </>
+  );
 }
 
-function formatScore(row: PlayerMatchStat) {
-  if (row.home_score === null || row.away_score === null) return "-";
-  return `${row.home_score}-${row.away_score}`;
+function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+  return <div className="page-heading"><span>{eyebrow}</span><h1>{title}</h1><p>{description}</p></div>;
 }
 
+function SectionHeading({ eyebrow, title, action, onAction }: { eyebrow: string; title: string; action?: string; onAction?: () => void }) {
+  return <div className="section-heading"><div><span>{eyebrow}</span><h2>{title}</h2></div>{action && <button type="button" onClick={onAction}>{action}<ArrowUpRight size={15} /></button>}</div>;
+}
+
+function Stat({ label, value, note, accent = false }: { label: string; value: string; note: string; accent?: boolean }) {
+  return <div className={accent ? "stat accent" : "stat"}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;
+}
+
+function CompactMatch({ match, onClick }: { match: Match; onClick: () => void }) {
+  return (
+    <button className="compact-match" type="button" onClick={onClick}>
+      <time>{formatFixtureDate(match.scheduled_at)}</time>
+      <span className="compact-club"><ClubBadge name={match.home_team_name} size="tiny" /><strong>{cleanTeamName(match.home_team_name)}</strong></span>
+      <span className="compact-score">{match.home_score ?? "-"}</span>
+      <span className="compact-club"><ClubBadge name={match.away_team_name} size="tiny" /><strong>{cleanTeamName(match.away_team_name)}</strong></span>
+      <span className="compact-score">{match.away_score ?? "-"}</span>
+      <ChevronRight size={16} />
+    </button>
+  );
+}
+
+function MatchScoreboard({ match }: { match: Match }) {
+  return (
+    <div className="match-scoreboard">
+      <div className="match-meta"><span>{match.stage_name} · Round {match.round_number}</span><strong>{formatLongDate(match.scheduled_at)}</strong></div>
+      <div className="scoreboard-main">
+        <div className="score-club home"><div><strong>{cleanTeamName(match.home_team_name)}</strong><span>Home</span></div><ClubBadge name={match.home_team_name} size="large" /></div>
+        <div className="big-score"><strong>{match.home_score ?? "-"}</strong><span>:</span><strong>{match.away_score ?? "-"}</strong><small>{match.status ?? "Scheduled"}</small></div>
+        <div className="score-club"><ClubBadge name={match.away_team_name} size="large" /><div><strong>{cleanTeamName(match.away_team_name)}</strong><span>Away</span></div></div>
+      </div>
+    </div>
+  );
+}
+
+function ComparisonBar({ label, home, away }: { label: string; home: number; away: number }) {
+  const total = Math.max(home + away, 1);
+  const homeWidth = `${Math.max((home / total) * 100, 4)}%`;
+  const awayWidth = `${Math.max((away / total) * 100, 4)}%`;
+  return (
+    <div className="comparison-row">
+      <div><strong>{formatMetric(home)}</strong><span>{label}</span><strong>{formatMetric(away)}</strong></div>
+      <div className="comparison-track"><i className="home" style={{ width: homeWidth }} /><i className="away" style={{ width: awayWidth }} /></div>
+    </div>
+  );
+}
+
+function PlayerMatchTable({ players, openPlayer }: { players: PlayerPivot[]; openPlayer: (id: string) => void }) {
+  if (!players.length) return <EmptyState text="Player statistics are not available for this side." />;
+  return (
+    <div className="data-table-wrap">
+      <table className="player-stat-table">
+        <thead><tr><th>Player</th><th>Min</th><th>Rating</th><th>G</th><th>A</th><th>Pass %</th><th>Shots</th></tr></thead>
+        <tbody>{players.map((player) => (
+          <tr key={player.appearance_id}>
+            <td><button type="button" onClick={() => openPlayer(player.player_id)}><span>{player.shirt_number ?? "-"}</span><span><strong>{player.display_name}</strong><small>{player.position_name ?? player.lineup_status ?? "Player"}</small></span></button></td>
+            <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetric(player.values.pass_completion_pct, "percentage")}</td><td>{formatMetric(player.values.total_shots)}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function ClubBadge({ name, size }: { name: string; size: "tiny" | "small" | "large" }) {
+  return <span className={`club-badge ${size}`} aria-hidden="true">{initials(cleanTeamName(name))}</span>;
+}
+
+function LoadingState() {
+  return <div className="loading-state"><Loader2 className="spin" size={28} /><strong>Building the season view</strong><span>Loading matches, clubs, and player data.</span></div>;
+}
+
+function InlineLoading() {
+  return <div className="inline-loading"><Loader2 className="spin" size={20} /><span>Loading match data</span></div>;
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div className="empty-state"><BarChart3 size={22} /><span>{text}</span></div>;
+}
+
+function pivotMatchPlayers(rows: MatchPlayerStat[]): PlayerPivot[] {
+  const pivots = new Map<string, { base: MatchPlayerStat; values: Map<string, number[]> }>();
+  rows.forEach((row) => {
+    const current = pivots.get(row.appearance_id) ?? { base: row, values: new Map<string, number[]>() };
+    if (row.value_numeric !== null) {
+      const metricValues = current.values.get(row.metric_code) ?? [];
+      metricValues.push(Number(row.value_numeric));
+      current.values.set(row.metric_code, metricValues);
+    }
+    pivots.set(row.appearance_id, current);
+  });
+  return [...pivots.values()].map(({ base, values }) => ({
+    ...base,
+    values: Object.fromEntries([...values.entries()].map(([code, numbers]) => [code, average(numbers)])),
+  })).sort((a, b) => Number(b.minutes_played ?? 0) - Number(a.minutes_played ?? 0));
+}
+
+function buildTeamComparisons(rows: MatchTeamStat[]) {
+  const grouped = new Map<string, { label: string; home: number[]; away: number[] }>();
+  rows.filter((row) => comparisonMetrics.includes(row.metric_code) && row.value_numeric !== null).forEach((row) => {
+    const current = grouped.get(row.metric_code) ?? { label: friendlyMetric(row.metric_name), home: [], away: [] };
+    current[row.side].push(Number(row.value_numeric));
+    grouped.set(row.metric_code, current);
+  });
+  return comparisonMetrics.flatMap((code) => {
+    const values = grouped.get(code);
+    return values && values.home.length && values.away.length ? [{ code, label: values.label, home: average(values.home), away: average(values.away) }] : [];
+  });
+}
+
+function aggregatePlayerHistory(rows: PlayerHistory[]) {
+  const grouped = new Map<string, PlayerHistory[]>();
+  rows.forEach((row) => grouped.set(row.match_id, [...(grouped.get(row.match_id) ?? []), row]));
+  return [...grouped.values()].map((matchRows, index) => {
+    const row = matchRows[0];
+    return {
+      match: index + 1,
+      date: formatShortDate(row.scheduled_at),
+      value: average(matchRows.map((item) => Number(item.value_numeric)).filter(Number.isFinite)),
+      opponent: cleanTeamName(row.opponent_team_name ?? "Opponent"),
+      score: formatScore(row.home_score, row.away_score),
+    };
+  }).filter((item) => Number.isFinite(item.value));
+}
+
+function makeDemoHistory(playerId: string, metricCode: string): PlayerHistory[] {
+  return Array.from({ length: 16 }, (_, index) => ({
+    player_id: playerId, display_name: "Demo Player", season_id: "demo-season", competition_id: "demo-competition", stage_id: null, round_id: null, round_number: index + 1, appearance_id: `appearance-${index}`, team_id: "demo-team-0", team_name: demoClubNames[0], opponent_team_id: "demo-team-1", opponent_team_name: demoClubNames[(index + 1) % 4], match_id: `history-${index}`, scheduled_at: `2025-${String(8 + Math.floor(index / 4)).padStart(2, "0")}-${String(5 + (index % 4) * 6).padStart(2, "0")}T17:00:00Z`, home_score: index % 3, away_score: (index + 1) % 3, side: "home", minutes_played: 90, metric_id: metricCode, metric_code: metricCode, metric_name: metricCode, value_type: metricCode.includes("pct") ? "percentage" : "number", source_id: "demo-source", source_code: "demo", source_name: "Demo", value_numeric: metricCode === "rating_365" ? 6.7 + Math.sin(index / 2) * .5 + index * .025 : 70 + Math.sin(index / 2) * 8 + index * .6, raw_value: null,
+  }));
+}
+
+function readViewFromHash(): View {
+  const value = window.location.hash.replace("#", "") as View;
+  return navItems.some((item) => item.id === value) ? value : "overview";
+}
+
+function preferredMetric(metrics: Metric[]) {
+  return metrics.find((metric) => metric.code === "rating_365")?.code
+    ?? metrics.find((metric) => metric.code === "pass_completion_pct")?.code
+    ?? metrics[0]?.code
+    ?? "";
+}
+
+function competitionLabel(name?: string) {
+  return name?.toLowerCase().includes("israeli premier") ? "Ligat Ha'Al" : name ?? "Competition";
+}
+
+function cleanTeamName(name: string) {
+  return name.replace(/\s+FC$/i, "").replace(/^Ihoud\s+/i, "");
+}
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+}
+
+function friendlyMetric(name: string) {
+  return name.replace(/^Team\s+/i, "");
+}
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function dateValue(value: string | null) {
+  return value ? new Date(value).getTime() : 0;
+}
+
+function formatNumber(value: number | string) {
+  return numberFormatter.format(Math.round(Number(value)));
+}
+
+function signed(value: number) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function formatMetric(value: number | null | undefined, valueType?: string) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "-";
+  const numeric = Number(value);
+  const formatted = Number.isInteger(numeric) ? numberFormatter.format(numeric) : numeric.toFixed(numeric < 10 ? 2 : 1);
+  return valueType === "percentage" ? `${formatted}%` : formatted;
+}
+
+function formatShortDate(value: string | null) {
+  return value ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(value)) : "-";
+}
+
+function formatFixtureDate(value: string | null) {
+  return value ? new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-digit", month: "short" }).format(new Date(value)) : "TBD";
+}
+
+function formatLongDate(value: string | null) {
+  return value ? new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "Date to be confirmed";
+}
+
+function formatDateRange(start?: string | null, end?: string | null) {
+  if (!start) return "Dates to be confirmed";
+  if (!end || formatShortDate(start) === formatShortDate(end)) return formatShortDate(start);
+  return `${formatShortDate(start)} – ${formatShortDate(end)}`;
+}
+
+function formatScore(home: number | null, away: number | null) {
+  return home === null || away === null ? "-" : `${home}:${away}`;
+}
+
+function isCompletedMatch(match: Match) {
+  return match.home_score !== null && match.away_score !== null;
+}
+
+function clubResult(match: Match, clubId: string) {
+  if (!isCompletedMatch(match)) return "-";
+  const isHome = match.home_team_id === clubId;
+  const clubScore = isHome ? Number(match.home_score) : Number(match.away_score);
+  const opponentScore = isHome ? Number(match.away_score) : Number(match.home_score);
+  return clubScore > opponentScore ? "W" : clubScore < opponentScore ? "L" : "D";
+}

@@ -6,14 +6,117 @@ export type Overview = {
   latest_observed_at: string | null;
 };
 
-export type Player = {
+export type Competition = {
+  competition_id: string;
+  name: string;
+  name_he: string | null;
+  competition_type: string;
+  country_name: string | null;
+  season_count: number;
+  latest_season_id: string | null;
+  latest_season_name: string | null;
+};
+
+export type Season = {
+  season_id: string;
+  competition_id: string;
+  competition_name: string;
+  competition_name_he: string | null;
+  season_name: string;
+  start_date: string | null;
+  end_date: string | null;
+  match_count: number;
+  completed_match_count: number;
+  team_count: number;
+  player_count: number;
+  goals_scored: number;
+  first_match_at: string | null;
+  latest_match_at: string | null;
+  is_latest: boolean;
+};
+
+export type Round = {
+  round_id: string;
+  season_id: string;
+  stage_id: string;
+  stage_name: string;
+  stage_type: string | null;
+  stage_number: number | null;
+  round_number: number | null;
+  round_name: string;
+  match_count: number;
+  completed_match_count: number;
+  first_match_at: string | null;
+  last_match_at: string | null;
+};
+
+export type Match = {
+  match_id: string;
+  season_id: string;
+  season_name: string;
+  competition_id: string;
+  competition_name: string;
+  competition_name_he: string | null;
+  stage_id: string | null;
+  stage_name: string | null;
+  stage_number: number | null;
+  round_id: string | null;
+  round_number: number | null;
+  round_name: string | null;
+  scheduled_at: string | null;
+  status: string | null;
+  home_team_id: string;
+  home_team_name: string;
+  home_team_name_he: string | null;
+  home_team_short_name: string | null;
+  home_team_color: string | null;
+  away_team_id: string;
+  away_team_name: string;
+  away_team_name_he: string | null;
+  away_team_short_name: string | null;
+  away_team_color: string | null;
+  home_score: number | null;
+  away_score: number | null;
+};
+
+export type Club = {
+  season_id: string;
+  competition_id: string;
+  team_id: string;
+  team_name: string;
+  team_name_he: string | null;
+  short_name: string | null;
+  city: string | null;
+  founded_year: number | null;
+  primary_color: string | null;
+  secondary_color: string | null;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+  last_played_at: string | null;
+};
+
+export type SeasonPlayer = {
+  season_id: string;
+  competition_id: string;
   player_id: string;
   display_name: string;
+  display_name_he: string | null;
   primary_position: string | null;
-  current_team_id: string | null;
-  current_team_name: string | null;
+  role_group: "Goalkeepers" | "Defenders" | "Midfielders" | "Attackers" | "Other";
+  team_id: string | null;
+  team_name: string | null;
   appearances: number;
+  starts: number;
   minutes: number;
+  goals: number;
+  assists: number;
+  average_rating: number | null;
 };
 
 export type Metric = {
@@ -24,9 +127,15 @@ export type Metric = {
   value_type: string;
 };
 
-export type PlayerMatchStat = {
+export type PlayerHistory = {
   player_id: string;
   display_name: string;
+  season_id: string;
+  competition_id: string;
+  stage_id: string | null;
+  round_id: string | null;
+  round_number: number | null;
+  appearance_id: string;
   team_id: string;
   team_name: string;
   opponent_team_id: string | null;
@@ -35,13 +144,63 @@ export type PlayerMatchStat = {
   scheduled_at: string | null;
   home_score: number | null;
   away_score: number | null;
-  side: string | null;
+  side: "home" | "away" | null;
   minutes_played: number | null;
   metric_id: string;
   metric_code: string;
   metric_name: string;
   value_type: string;
+  source_id: string;
+  source_code: string;
+  source_name: string;
   value_numeric: number | null;
   raw_value: string | null;
 };
 
+export type MatchPlayerStat = {
+  match_id: string;
+  season_id: string;
+  appearance_id: string;
+  player_id: string;
+  display_name: string;
+  team_id: string;
+  team_name: string;
+  opponent_team_id: string | null;
+  opponent_team_name: string | null;
+  side: "home" | "away" | null;
+  shirt_number: number | null;
+  lineup_status: string | null;
+  position_name: string | null;
+  formation_position: string | null;
+  minutes_played: number | null;
+  metric_id: string;
+  metric_code: string;
+  metric_name: string;
+  value_type: string;
+  source_id: string;
+  source_code: string;
+  source_name: string;
+  value_numeric: number | null;
+  raw_value: string | null;
+};
+
+export type MatchTeamStat = {
+  match_id: string;
+  season_id: string;
+  match_team_id: string;
+  team_id: string;
+  team_name: string;
+  opponent_team_id: string | null;
+  opponent_team_name: string | null;
+  side: "home" | "away";
+  score: number | null;
+  metric_id: string;
+  metric_code: string;
+  metric_name: string;
+  value_type: string;
+  source_id: string;
+  source_code: string;
+  source_name: string;
+  value_numeric: number | null;
+  raw_value: string | null;
+};
