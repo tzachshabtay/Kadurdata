@@ -524,8 +524,8 @@ export function App() {
       <header className="site-header">
         <div className="header-main">
           <button className="brand" type="button" onClick={() => navigate("overview")}>
-            <span className="brand-mark" aria-hidden="true">KD</span>
-            <span><strong>KADURDATA</strong><small>Israeli football intelligence</small></span>
+            <BrandMark />
+            <span><strong>KADUR<span className="brand-data">DATA</span></strong><small>Israeli football intelligence</small></span>
           </button>
 
           <nav className="primary-nav" aria-label="Primary navigation">
@@ -1068,6 +1068,21 @@ function PlayerMatchTable({ players, openPlayer }: { players: PlayerPivot[]; ope
 
 function ClubBadge({ name, size }: { name: string; size: "tiny" | "small" | "large" }) {
   return <span className={`club-badge ${size}`} aria-hidden="true">{initials(cleanTeamName(name))}</span>;
+}
+
+function BrandMark() {
+  return (
+    <span className="brand-mark" aria-hidden="true">
+      <span className="brand-centerline" />
+      <span className="brand-center-circle" />
+      <span className="brand-step step-a" />
+      <span className="brand-step step-b" />
+      <span className="brand-step step-c" />
+      <span className="brand-rise rise-a" />
+      <span className="brand-rise rise-b" />
+      <span className="brand-terminal" />
+    </span>
+  );
 }
 
 function LoadingState() {
