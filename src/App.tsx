@@ -35,6 +35,7 @@ import type {
   Round,
   Season,
   SeasonPlayer,
+  TeamAsset,
 } from "./lib/types";
 
 type View = "overview" | "matches" | "clubs" | "players";
@@ -131,6 +132,7 @@ const demoClubs: Club[] = demoClubNames.map((team_name, index) => ({
   founded_year: null,
   primary_color: null,
   secondary_color: null,
+  logo_url: null,
   played: 30,
   won: 20 - index * 2,
   drawn: 5 + index,
@@ -162,11 +164,13 @@ const demoMatches: Match[] = Array.from({ length: 8 }, (_, index) => ({
   home_team_name_he: null,
   home_team_short_name: null,
   home_team_color: null,
+  home_team_logo_url: null,
   away_team_id: `demo-team-${(index + 1) % 4}`,
   away_team_name: demoClubNames[(index + 1) % 4],
   away_team_name_he: null,
   away_team_short_name: null,
   away_team_color: null,
+  away_team_logo_url: null,
   home_score: index % 4,
   away_score: (index + 1) % 3,
 }));
@@ -318,18 +322,28 @@ export function App() {
         return;
       }
 
-      const [roundResult, matchResult, clubResult, playerResult] = await Promise.all([
+      const [roundResult, matchResult, clubResult, playerResult, teamAssetResult] = await Promise.all([
         supabase.from("api_rounds").select("*").eq("season_id", seasonId).order("stage_number").order("round_number"),
         supabase.from("api_matches").select("*").eq("season_id", seasonId).order("scheduled_at"),
         supabase.from("api_clubs").select("*").eq("season_id", seasonId).order("points", { ascending: false }),
         supabase.from("api_season_players").select("*").eq("season_id", seasonId).order("minutes", { ascending: false }).limit(1000),
+        supabase.from("api_team_assets").select("*"),
       ]);
-      const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error;
+      const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error ?? teamAssetResult.error;
       if (firstError) setError(firstError.message);
 
       const nextRounds = (roundResult.error ? [] : roundResult.data ?? []) as Round[];
-      const nextMatches = (matchResult.error ? [] : matchResult.data ?? []) as Match[];
-      const nextClubs = (clubResult.error ? [] : clubResult.data ?? []) as Club[];
+      const teamAssets = (teamAssetResult.error ? [] : teamAssetResult.data ?? []) as TeamAsset[];
+      const assetByTeamId = new Map(teamAssets.map((asset) => [asset.team_id, asset]));
+      const nextMatches = ((matchResult.error ? [] : matchResult.data ?? []) as Omit<Match, "home_team_logo_url" | "away_team_logo_url">[]).map((match) => ({
+        ...match,
+        home_team_logo_url: assetByTeamId.get(match.home_team_id)?.logo_url ?? null,
+        away_team_logo_url: assetByTeamId.get(match.away_team_id)?.logo_url ?? null,
+      }));
+      const nextClubs = ((clubResult.error ? [] : clubResult.data ?? []) as Omit<Club, "logo_url">[]).map((club) => ({
+        ...club,
+        logo_url: assetByTeamId.get(club.team_id)?.logo_url ?? null,
+      }));
       const nextPlayers = (playerResult.error ? [] : playerResult.data ?? []) as SeasonPlayer[];
       const latestPlayedRound = [...nextRounds].reverse().find((round) => round.completed_match_count > 0) ?? nextRounds[nextRounds.length - 1];
 
@@ -705,7 +719,7 @@ function OverviewView({
               {standings.map((club, index) => (
                 <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
                   <span className="rank">{index + 1}</span>
-                  <span className="club-cell"><ClubBadge name={club.team_name} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
+                  <span className="club-cell"><ClubBadge name={club.team_name} logoUrl={club.logo_url} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
                   <span>{signed(club.goal_difference)}</span>
                   <strong>{club.points}</strong>
                 </button>
@@ -847,7 +861,7 @@ function ClubsView({ clubs, selectedClub, setClubId, matches, squad, openMatch, 
           {clubs.map((club, index) => (
             <button className={club.team_id === selectedClub?.team_id ? "active" : ""} key={club.team_id} type="button" onClick={() => setClubId(club.team_id)}>
               <span>{index + 1}</span>
-              <span className="club-cell"><ClubBadge name={club.team_name} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
+              <span className="club-cell"><ClubBadge name={club.team_name} logoUrl={club.logo_url} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
               <span>{club.played}</span><strong>{club.points}</strong>
             </button>
           ))}
@@ -857,7 +871,7 @@ function ClubsView({ clubs, selectedClub, setClubId, matches, squad, openMatch, 
           {selectedClub ? (
             <>
               <div className="club-identity">
-                <ClubBadge name={selectedClub.team_name} size="large" />
+                <ClubBadge name={selectedClub.team_name} logoUrl={selectedClub.logo_url} size="large" />
                 <div><span>League position {clubs.findIndex((club) => club.team_id === selectedClub.team_id) + 1}</span><h2>{cleanTeamName(selectedClub.team_name)}</h2><p>{selectedClub.city ?? "Israel"} · {selectedClub.played} matches played</p></div>
                 <div className="form-strip" aria-label="Recent form">
                   {recent.map((match) => <span className={clubResult(match, selectedClub.team_id).toLowerCase()} key={match.match_id}>{clubResult(match, selectedClub.team_id)}</span>)}
@@ -1015,9 +1029,9 @@ function CompactMatch({ match, onClick }: { match: Match; onClick: () => void })
   return (
     <button className="compact-match" type="button" onClick={onClick}>
       <time>{formatFixtureDate(match.scheduled_at)}</time>
-      <span className="compact-club"><ClubBadge name={match.home_team_name} size="tiny" /><strong>{cleanTeamName(match.home_team_name)}</strong></span>
+      <span className="compact-club"><ClubBadge name={match.home_team_name} logoUrl={match.home_team_logo_url} size="tiny" /><strong>{cleanTeamName(match.home_team_name)}</strong></span>
       <span className="compact-score">{match.home_score ?? "-"}</span>
-      <span className="compact-club"><ClubBadge name={match.away_team_name} size="tiny" /><strong>{cleanTeamName(match.away_team_name)}</strong></span>
+      <span className="compact-club"><ClubBadge name={match.away_team_name} logoUrl={match.away_team_logo_url} size="tiny" /><strong>{cleanTeamName(match.away_team_name)}</strong></span>
       <span className="compact-score">{match.away_score ?? "-"}</span>
       <ChevronRight size={16} />
     </button>
@@ -1029,9 +1043,9 @@ function MatchScoreboard({ match }: { match: Match }) {
     <div className="match-scoreboard">
       <div className="match-meta"><span>{match.stage_name} · Round {match.round_number}</span><strong>{formatLongDate(match.scheduled_at)}</strong></div>
       <div className="scoreboard-main">
-        <div className="score-club home"><div><strong>{cleanTeamName(match.home_team_name)}</strong><span>Home</span></div><ClubBadge name={match.home_team_name} size="large" /></div>
+        <div className="score-club home"><div><strong>{cleanTeamName(match.home_team_name)}</strong><span>Home</span></div><ClubBadge name={match.home_team_name} logoUrl={match.home_team_logo_url} size="large" /></div>
         <div className="big-score"><strong>{match.home_score ?? "-"}</strong><span>:</span><strong>{match.away_score ?? "-"}</strong><small>{match.status ?? "Scheduled"}</small></div>
-        <div className="score-club"><ClubBadge name={match.away_team_name} size="large" /><div><strong>{cleanTeamName(match.away_team_name)}</strong><span>Away</span></div></div>
+        <div className="score-club"><ClubBadge name={match.away_team_name} logoUrl={match.away_team_logo_url} size="large" /><div><strong>{cleanTeamName(match.away_team_name)}</strong><span>Away</span></div></div>
       </div>
     </div>
   );
@@ -1066,8 +1080,13 @@ function PlayerMatchTable({ players, openPlayer }: { players: PlayerPivot[]; ope
   );
 }
 
-function ClubBadge({ name, size }: { name: string; size: "tiny" | "small" | "large" }) {
-  return <span className={`club-badge ${size}`} aria-hidden="true">{initials(cleanTeamName(name))}</span>;
+function ClubBadge({ name, logoUrl, size }: { name: string; logoUrl?: string | null; size: "tiny" | "small" | "large" }) {
+  return (
+    <span className={`club-badge ${size}`} aria-hidden="true">
+      <span className="club-badge-fallback">{initials(cleanTeamName(name))}</span>
+      {logoUrl ? <img src={logoUrl} alt="" onError={(event) => event.currentTarget.remove()} /> : null}
+    </span>
+  );
 }
 
 function BrandMark() {

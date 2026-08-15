@@ -198,22 +198,33 @@ def upsert_mapping(
     canonical_id: str,
     source_name: Optional[str] = None,
     source_slug: Optional[str] = None,
+    metadata: Optional[dict[str, Any]] = None,
 ) -> None:
     cur.execute(
         """
         insert into source.source_entity_ids (
           source_id, entity_type, source_entity_id, canonical_table, canonical_id,
-          source_name, source_slug, last_seen_at
+          source_name, source_slug, metadata, last_seen_at
         )
-        values (%s, %s, %s, %s, %s, %s, %s, now())
+        values (%s, %s, %s, %s, %s, %s, %s, %s, now())
         on conflict (source_id, entity_type, source_entity_id) do update
           set canonical_table = excluded.canonical_table,
               canonical_id = excluded.canonical_id,
               source_name = coalesce(excluded.source_name, source.source_entity_ids.source_name),
               source_slug = coalesce(excluded.source_slug, source.source_entity_ids.source_slug),
+              metadata = source.source_entity_ids.metadata || excluded.metadata,
               last_seen_at = now()
         """,
-        (source_id, entity_type, source_entity_id, canonical_table, canonical_id, source_name, source_slug),
+        (
+            source_id,
+            entity_type,
+            source_entity_id,
+            canonical_table,
+            canonical_id,
+            source_name,
+            source_slug,
+            Jsonb(metadata or {}),
+        ),
     )
 
 
@@ -313,15 +324,76 @@ def get_or_create_round(cur: psycopg.Cursor, stage_id: str, round_num: Optional[
     return row["id"]
 
 
-def get_or_create_team(cur: psycopg.Cursor, source_id: str, source_team_id: str, name: str) -> str:
+def get_or_create_team(
+    cur: psycopg.Cursor,
+    source_id: str,
+    source_team_id: str,
+    name: str,
+    logo_url: Optional[str],
+    image_version: Optional[int],
+    primary_color: Optional[str],
+    secondary_color: Optional[str],
+) -> str:
+    source_metadata = {
+        key: value
+        for key, value in {
+            "logo_url": logo_url,
+            "image_version": image_version,
+            "primary_color": primary_color,
+            "secondary_color": secondary_color,
+        }.items()
+        if value is not None
+    }
     mapped = get_mapping(cur, source_id, "team", source_team_id)
     if mapped:
-        cur.execute("update core.teams set name = %s where id = %s", (name, mapped))
+        cur.execute(
+            """
+            update core.teams
+            set name = %s,
+                primary_color = coalesce(%s, primary_color),
+                secondary_color = coalesce(%s, secondary_color),
+                logo_url = coalesce(%s, logo_url),
+                logo_source_id = case when %s is not null then %s else logo_source_id end
+            where id = %s
+            """,
+            (name, primary_color, secondary_color, logo_url, logo_url, source_id, mapped),
+        )
+        upsert_mapping(
+            cur,
+            source_id,
+            "team",
+            source_team_id,
+            "core.teams",
+            mapped,
+            name,
+            slugify(name),
+            source_metadata,
+        )
         return mapped
-    row = execute_one(cur, "insert into core.teams (name) values (%s) returning id", (name,))
+    row = execute_one(
+        cur,
+        """
+        insert into core.teams (
+          name, primary_color, secondary_color, logo_url, logo_source_id
+        )
+        values (%s, %s, %s, %s, %s)
+        returning id
+        """,
+        (name, primary_color, secondary_color, logo_url, source_id if logo_url else None),
+    )
     assert row is not None
     team_id = row["id"]
-    upsert_mapping(cur, source_id, "team", source_team_id, "core.teams", team_id, name, slugify(name))
+    upsert_mapping(
+        cur,
+        source_id,
+        "team",
+        source_team_id,
+        "core.teams",
+        team_id,
+        name,
+        slugify(name),
+        source_metadata,
+    )
     return team_id
 
 
@@ -978,9 +1050,27 @@ def load_fixtures(cur: psycopg.Cursor, source_id: str, competition_id: str, seas
         home_source_id = row["home_team_id"]
         away_source_id = row["away_team_id"]
         if home_source_id not in teams:
-            teams[home_source_id] = get_or_create_team(cur, source_id, home_source_id, row["home_team"])
+            teams[home_source_id] = get_or_create_team(
+                cur,
+                source_id,
+                home_source_id,
+                row["home_team"],
+                empty_to_none(row.get("home_team_logo_url")),
+                to_int(row.get("home_team_image_version")),
+                empty_to_none(row.get("home_team_color")),
+                empty_to_none(row.get("home_team_away_color")),
+            )
         if away_source_id not in teams:
-            teams[away_source_id] = get_or_create_team(cur, source_id, away_source_id, row["away_team"])
+            teams[away_source_id] = get_or_create_team(
+                cur,
+                source_id,
+                away_source_id,
+                row["away_team"],
+                empty_to_none(row.get("away_team_logo_url")),
+                to_int(row.get("away_team_image_version")),
+                empty_to_none(row.get("away_team_color")),
+                empty_to_none(row.get("away_team_away_color")),
+            )
 
         stage_num = to_int(row.get("stage_num"))
         if stage_num not in stages:

@@ -70,11 +70,13 @@ export type Match = {
   home_team_name_he: string | null;
   home_team_short_name: string | null;
   home_team_color: string | null;
+  home_team_logo_url: string | null;
   away_team_id: string;
   away_team_name: string;
   away_team_name_he: string | null;
   away_team_short_name: string | null;
   away_team_color: string | null;
+  away_team_logo_url: string | null;
   home_score: number | null;
   away_score: number | null;
 };
@@ -90,6 +92,7 @@ export type Club = {
   founded_year: number | null;
   primary_color: string | null;
   secondary_color: string | null;
+  logo_url: string | null;
   played: number;
   won: number;
   drawn: number;
@@ -99,6 +102,14 @@ export type Club = {
   goal_difference: number;
   points: number;
   last_played_at: string | null;
+};
+
+export type TeamAsset = {
+  team_id: string;
+  logo_url: string | null;
+  logo_source_id: string | null;
+  primary_color: string | null;
+  secondary_color: string | null;
 };
 
 export type SeasonPlayer = {

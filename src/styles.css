@@ -645,15 +645,39 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .club-badge {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   color: var(--teal);
-  border: 1px solid var(--green);
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
   background: var(--panel-deep);
   font-weight: 900;
+}
+
+.club-badge-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.club-badge img {
+  position: absolute;
+  inset: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  object-fit: contain;
+}
+
+.club-badge.large img {
+  inset: 5px;
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
 }
 
 .club-badge.tiny {

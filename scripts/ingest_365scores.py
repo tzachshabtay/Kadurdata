@@ -24,6 +24,10 @@ from urllib.request import Request, urlopen
 
 
 BASE_URL = "https://webws.365scores.com"
+COMPETITOR_IMAGE_BASE_URL = (
+    "https://imagecache.365scores.com/image/upload/"
+    "f_png,w_128,h_128,c_limit,q_auto:eco,dpr_2,d_Competitors:default1.png"
+)
 DEFAULT_COMPETITION_ID = 42
 DEFAULT_LANG_ID = 1
 DEFAULT_TIMEZONE = "Asia/Jerusalem"
@@ -308,6 +312,14 @@ def team_name(team: Dict[str, Any]) -> Optional[str]:
     return team.get("longName") or team.get("name")
 
 
+def team_logo_url(team: Dict[str, Any]) -> Optional[str]:
+    team_id = team.get("id")
+    image_version = team.get("imageVersion")
+    if team_id is None or image_version is None:
+        return None
+    return f"{COMPETITOR_IMAGE_BASE_URL}/v{image_version}/Competitors/{team_id}"
+
+
 def base_game_row(game: Dict[str, Any]) -> Dict[str, Any]:
     home = game.get("homeCompetitor") or {}
     away = game.get("awayCompetitor") or {}
@@ -323,9 +335,17 @@ def base_game_row(game: Dict[str, Any]) -> Dict[str, Any]:
         "status_text": game.get("statusText"),
         "home_team_id": home.get("id"),
         "home_team": team_name(home),
+        "home_team_logo_url": team_logo_url(home),
+        "home_team_image_version": home.get("imageVersion"),
+        "home_team_color": home.get("color"),
+        "home_team_away_color": home.get("awayColor"),
         "home_score": home.get("score"),
         "away_team_id": away.get("id"),
         "away_team": team_name(away),
+        "away_team_logo_url": team_logo_url(away),
+        "away_team_image_version": away.get("imageVersion"),
+        "away_team_color": away.get("color"),
+        "away_team_away_color": away.get("awayColor"),
         "away_score": away.get("score"),
     }
 
