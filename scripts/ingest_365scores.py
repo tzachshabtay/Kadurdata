@@ -362,13 +362,24 @@ def collect_fixtures(args: argparse.Namespace, raw_dir: Path) -> Tuple[List[Dict
             continue
         seen_page_keys.add(page_key)
 
-        page_payload = cached_fetch(
-            build_url("/web/games/", params),
-            fixture_page_cache_path(raw_dir, params),
-            retries=args.retries,
-            sleep_seconds=args.sleep,
-            refresh=args.refresh,
-        )
+        try:
+            page_payload = cached_fetch(
+                build_url("/web/games/", params),
+                fixture_page_cache_path(raw_dir, params),
+                retries=args.page_retries,
+                sleep_seconds=args.sleep,
+                refresh=args.refresh,
+            )
+        except RuntimeError as exc:
+            pages.append(
+                {
+                    "kind": "page_error",
+                    "direction": params["direction"],
+                    "aftergame": params["aftergame"],
+                    "error": str(exc),
+                }
+            )
+            continue
         page_games = page_payload.get("games") or []
         in_window_games = [game for game in page_games if game_is_in_window(game, args.start_date, args.end_date)]
         for game in in_window_games:
@@ -684,6 +695,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-fixture-pages", type=int, default=50)
     parser.add_argument("--sleep", type=float, default=0.25)
     parser.add_argument("--retries", type=int, default=2)
+    parser.add_argument("--page-retries", type=int, default=1)
     parser.add_argument("--workers", type=int, default=6, help="Concurrent match-detail requests.")
     parser.add_argument(
         "--fixtures-only",

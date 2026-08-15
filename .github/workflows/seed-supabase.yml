@@ -16,6 +16,10 @@ on:
         description: "Matches per competition. Use 0 for every match in the selected window."
         required: false
         default: "0"
+      competition_ids:
+        description: "Optional comma-separated 365Scores competition IDs. Blank means all Israeli competitions."
+        required: false
+        default: ""
   schedule:
     - cron: "17 3 * * *"
 
@@ -28,6 +32,7 @@ jobs:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SEED_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_limit || '0' }}
       SEED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_mode || 'recent' }}
+      COMPETITION_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.competition_ids || '' }}
 
     steps:
       - name: Checkout
@@ -58,9 +63,13 @@ jobs:
             --all-israeli-competitions
             --allow-fetch-failures
             --retries 4
+            --page-retries 1
             --sleep 0.25
             --workers 8
           )
+          if [ -n "$COMPETITION_IDS" ]; then
+            args+=(--competition-ids "$COMPETITION_IDS")
+          fi
           if [ "$SEED_MODE" = "fixtures" ]; then
             args+=(--fixtures-only)
           elif [ "$SEED_MODE" = "recent" ]; then
@@ -70,7 +79,7 @@ jobs:
             )
           fi
           if [ "${SEED_LIMIT:-0}" != "0" ]; then
-            args+=(--limit "$SEED_LIMIT")
+            args+=(--limit "$SEED_LIMIT" --max-fixture-pages 5)
           fi
           python scripts/ingest_365scores.py "${args[@]}"
 
