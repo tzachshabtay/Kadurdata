@@ -42,13 +42,18 @@ type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
 type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type"> & { kind: "season" | "match" };
-type PlayerChartMetric = Metric & { chartKey: string; chartMode: "single" | "paired" };
+type PlayerChartMetric = Metric & {
+  chartKey: string;
+  chartMode: "single" | "paired";
+  normalization: "raw" | "per90";
+};
 type PlayerChartPoint = {
   match: number;
   date: string;
   value: number;
   opponent: string;
   score: string;
+  minutes: number | null;
   numerator: number | null;
   denominator: number | null;
 };
@@ -419,7 +424,7 @@ export function App() {
         setPlayerHistory([]);
         return;
       }
-      const sourceMetricCode = metricCode.replace(/::paired$/, "");
+      const sourceMetricCode = metricCode.replace(/::(paired|per90)$/, "");
       const selectedMetric = metrics.find((metric) => metric.code === sourceMetricCode);
       const metricCodes = [...new Set([
         sourceMetricCode,
@@ -546,12 +551,24 @@ export function App() {
       .filter((metric) => !ratioComponentCodes.has(metric.code))
       .flatMap((metric): PlayerChartMetric[] => {
         if (metric.value_type !== "percentage") {
-          return [{ ...metric, chartKey: metric.code, chartMode: "single" }];
+          const rawMetric: PlayerChartMetric = {
+            ...metric,
+            chartKey: metric.code,
+            chartMode: "single",
+            normalization: "raw",
+          };
+          return metric.value_type === "count" && metric.code !== "minutes"
+            ? [
+                rawMetric,
+                { ...rawMetric, name: `${metric.name} (90 mins)`, chartKey: `${metric.code}::per90`, normalization: "per90" },
+              ]
+            : [rawMetric];
         }
         const groupName = percentageMetricGroupName(metric);
         return [
-          { ...metric, name: groupName, chartKey: `${metric.code}::paired`, chartMode: "paired" },
-          { ...metric, name: `${groupName} (%)`, chartKey: metric.code, chartMode: "single" },
+          { ...metric, name: groupName, chartKey: `${metric.code}::paired`, chartMode: "paired", normalization: "raw" },
+          { ...metric, name: `${groupName} (%)`, chartKey: metric.code, chartMode: "single", normalization: "raw" },
+          { ...metric, name: `${groupName} (90 mins)`, chartKey: `${metric.code}::per90`, chartMode: "paired", normalization: "per90" },
         ];
       });
   }, [playerMetrics]);
@@ -1097,8 +1114,37 @@ function PlayersView({
   const isPairedMetric = metric?.chartMode === "paired"
     && Boolean(metric.numerator_metric_code)
     && Boolean(metric.denominator_metric_code);
+  const isPer90Metric = metric?.normalization === "per90";
   const numeratorLabel = ratioComponentLabel(metric?.numerator_metric_code);
   const denominatorLabel = ratioComponentLabel(metric?.denominator_metric_code);
+  const plottedChartData = isPer90Metric ? chartData.flatMap((point) => {
+    if (point.minutes === null || point.minutes <= 0) return [];
+    const factor = 90 / point.minutes;
+    return [{
+      ...point,
+      value: isPairedMetric ? point.value : point.value * factor,
+      numerator: point.numerator === null ? null : point.numerator * factor,
+      denominator: point.denominator === null ? null : point.denominator * factor,
+    }];
+  }) : chartData;
+  const totalSampleMinutes = chartData.reduce((total, point) => total + Number(point.minutes ?? 0), 0);
+  const per90Value = totalSampleMinutes > 0
+    ? chartData.reduce((total, point) => total + point.value, 0) * 90 / totalSampleMinutes
+    : null;
+  const per90Numerator = totalSampleMinutes > 0
+    ? chartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0) * 90 / totalSampleMinutes
+    : null;
+  const per90Denominator = totalSampleMinutes > 0
+    ? chartData.reduce((total, point) => total + Number(point.denominator ?? 0), 0) * 90 / totalSampleMinutes
+    : null;
+  const summaryValue = isPer90Metric
+    ? isPairedMetric
+      ? per90Numerator === null || per90Denominator === null ? "-" : `${formatMetric(per90Numerator)} / ${formatMetric(per90Denominator)}`
+      : formatMetric(per90Value)
+    : average === null ? "-" : formatMetricWithRatio(average, metric?.value_type, averageNumerator, averageDenominator);
+  const summaryNote = isPer90Metric
+    ? isPairedMetric ? `${numeratorLabel} / ${denominatorLabel} per 90` : "Minutes-weighted rate per 90"
+    : `${chartData.length} matches sampled`;
   return (
     <>
       <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} players`} title="Player explorer" description="Filter the league by role or club, then track an individual metric from match to match." />
@@ -1136,7 +1182,7 @@ function PlayersView({
                 <Stat label="Appearances" value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} starts`} />
                 <Stat label="Minutes" value={numberFormatter.format(Math.round(Number(selectedPlayer.minutes)))} note="Season total" />
                 <Stat label="Goals + assists" value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} goals · ${formatNumber(selectedPlayer.assists)} assists`} />
-                <Stat label={metric?.name ?? "Average"} value={average === null ? "-" : formatMetricWithRatio(average, metric?.value_type, averageNumerator, averageDenominator)} note={`${chartData.length} matches sampled`} accent />
+                <Stat label={metric?.name ?? "Average"} value={summaryValue} note={summaryNote} accent />
               </section>
               <div className="trend-heading">
                 <div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div>
@@ -1150,9 +1196,9 @@ function PlayersView({
                 </div>
               </div>
               <div className="chart-frame">
-                {detailLoading ? <InlineLoading /> : chartData.length ? (
+                {detailLoading ? <InlineLoading /> : plottedChartData.length ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 18, right: 12, bottom: 4, left: -12 }}>
+                    <AreaChart data={plottedChartData} margin={{ top: 18, right: 12, bottom: 4, left: -12 }}>
                       <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
                       <XAxis dataKey="date" axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} minTickGap={28} />
                       <YAxis axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} width={54} />
@@ -1180,7 +1226,7 @@ function PlayersView({
                 ) : <EmptyState text="No match data is available for this player and metric." />}
               </div>
               <div className="history-strip">
-                {chartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatMetricWithRatio(item.value, metric?.value_type, item.numerator, item.denominator)}</strong><small>{item.score}</small></div>)}
+                {plottedChartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{isPer90Metric && isPairedMetric ? `${formatMetric(item.numerator)} / ${formatMetric(item.denominator)}` : formatMetricWithRatio(item.value, metric?.value_type, item.numerator, item.denominator)}</strong><small>{item.score}</small></div>)}
               </div>
             </>
           ) : <EmptyState text="Select a player to explore their season." />}
@@ -1349,6 +1395,7 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric): PlayerC
       value,
       opponent: cleanTeamName(row.opponent_team_name ?? "Opponent"),
       score: formatScore(row.home_score, row.away_score),
+      minutes: row.minutes_played === null ? null : Number(row.minutes_played),
       numerator,
       denominator,
     };
