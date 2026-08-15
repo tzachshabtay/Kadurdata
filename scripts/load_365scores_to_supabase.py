@@ -1322,29 +1322,30 @@ def load_player_rows(
 
         stat_bases = sorted({metric_from_stat_column(column) for column in row.keys() if metric_from_stat_column(column)})
         for base in stat_bases:
-            raw_value = row.get(f"stat_{base}_raw")
+            raw_value = empty_to_none(row.get(f"stat_{base}_raw"))
             value = to_float(row.get(f"stat_{base}_value"))
             attempted = to_float(row.get(f"stat_{base}_attempted"))
             percentage = to_float(row.get(f"stat_{base}_percentage"))
             if raw_value is None and value is None and attempted is None and percentage is None:
                 continue
 
-            params = stat_observation_params(
-                source_id,
-                metric_ids[base],
-                "player_match",
-                appearance_id,
-                source_subject_id,
-                base,
-                value,
-                raw_value,
-                item["match_id"],
-                item["team_id"],
-                player_id,
-                season_id,
-            )
-            if params:
-                stat_batch.append(params)
+            if value is not None or raw_value is not None:
+                params = stat_observation_params(
+                    source_id,
+                    metric_ids[base],
+                    "player_match",
+                    appearance_id,
+                    source_subject_id,
+                    base,
+                    value,
+                    raw_value,
+                    item["match_id"],
+                    item["team_id"],
+                    player_id,
+                    season_id,
+                )
+                if params:
+                    stat_batch.append(params)
 
             if attempted is not None:
                 attempted_code = attempted_metric_code(base)
