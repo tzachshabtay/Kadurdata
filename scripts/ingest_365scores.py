@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Spike ingestion for Israeli Premier League data from 365Scores.
+"""Fetch and flatten Israeli competition data from 365Scores.
 
-This is intentionally a source-shape probe, not a production scraper. It fetches
-fixtures, match details, team stats, and per-player lineup stats, then writes
-raw JSON plus flattened CSVs for inspection.
+The source exposes a live Israeli competition catalog. This command can ingest
+one competition or discover every Israeli football competition, then fetch
+fixtures, match details, team stats, and per-player lineup stats.
 """
 
 from __future__ import annotations
@@ -15,7 +15,9 @@ import re
 import socket
 import sys
 import time
-from datetime import datetime
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
@@ -33,12 +35,22 @@ DEFAULT_LANG_ID = 1
 DEFAULT_TIMEZONE = "Asia/Jerusalem"
 DEFAULT_USER_COUNTRY_ID = 6
 DEFAULT_APP_TYPE_ID = 5
-DEFAULT_START_DATE = "2025-08-01"
-DEFAULT_END_DATE = "2026-05-31"
+ISRAEL_COUNTRY_ID = 6
+FOOTBALL_SPORT_ID = 1
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 )
+
+
+def default_date_window() -> Tuple[str, str]:
+    now = datetime.now()
+    if now.month >= 7:
+        return f"{now.year - 1}-07-01", f"{now.year + 1}-06-30"
+    return f"{now.year - 1}-07-01", f"{now.year}-06-30"
+
+
+DEFAULT_START_DATE, DEFAULT_END_DATE = default_date_window()
 
 
 def slugify(value: str) -> str:
@@ -106,6 +118,139 @@ def cached_fetch(
     write_json(cache_path, payload)
     time.sleep(sleep_seconds)
     return payload
+
+
+def competition_type(name: str) -> str:
+    normalized = name.lower()
+    if "super cup" in normalized:
+        return "super_cup"
+    if "cup" in normalized:
+        return "cup"
+    return "league"
+
+
+def normalize_competition(source_competition: Dict[str, Any]) -> Dict[str, Any]:
+    source_name = source_competition.get("name") or f"Competition {source_competition.get('id')}"
+    display_name = (
+        source_competition.get("longName")
+        or source_competition.get("shortName")
+        or source_name
+    )
+    is_youth = "youth" in source_name.lower()
+    return {
+        "id": source_competition.get("id"),
+        "name": display_name,
+        "source_name": source_name,
+        "short_name": source_competition.get("shortName"),
+        "long_name": source_competition.get("longName"),
+        "competition_type": competition_type(source_name),
+        "gender": "women" if "women" in source_name.lower() else "men",
+        "age_group": "youth" if is_youth else "senior",
+        "current_season_num": source_competition.get("currentSeasonNum"),
+        "has_stats": bool(source_competition.get("hasStats")),
+        "has_history": bool(source_competition.get("hasHistory")),
+        "has_standings": bool(source_competition.get("hasStandings")),
+        "has_brackets": bool(source_competition.get("hasBrackets")),
+    }
+
+
+def collect_competition_catalog(args: argparse.Namespace, raw_dir: Path) -> List[Dict[str, Any]]:
+    payload = cached_fetch(
+        build_url(
+            "/web/competitions/",
+            {
+                "appTypeId": args.app_type_id,
+                "langId": args.lang_id,
+                "timezoneName": args.timezone,
+                "userCountryId": args.user_country_id,
+                "countries": ISRAEL_COUNTRY_ID,
+                "sports": FOOTBALL_SPORT_ID,
+            },
+        ),
+        raw_dir / "competitions.json",
+        retries=args.retries,
+        sleep_seconds=args.sleep,
+        refresh=args.refresh,
+    )
+    competitions = [normalize_competition(item) for item in payload.get("competitions") or []]
+    return sorted((item for item in competitions if item.get("id") is not None), key=lambda item: item["id"])
+
+
+def collect_competition_history(
+    args: argparse.Namespace,
+    raw_dir: Path,
+    competition_id: int,
+) -> List[Dict[str, Any]]:
+    payload = cached_fetch(
+        build_url(
+            "/web/competitions/history/",
+            {
+                "appTypeId": args.app_type_id,
+                "langId": args.lang_id,
+                "timezoneName": args.timezone,
+                "userCountryId": args.user_country_id,
+                "competitions": competition_id,
+            },
+        ),
+        raw_dir / "history.json",
+        retries=min(args.retries, 1),
+        sleep_seconds=args.sleep,
+        refresh=args.refresh,
+    )
+    rows = (payload.get("table") or {}).get("rows") or []
+    return [
+        {
+            "num": row.get("seasonNum"),
+            "name": row.get("title"),
+            "has_table": bool(row.get("hasTable")),
+            "has_group": bool(row.get("hasGroup")),
+        }
+        for row in rows
+        if row.get("seasonNum") is not None and row.get("title")
+    ]
+
+
+def inferred_season_name(games: Iterable[Dict[str, Any]]) -> str:
+    labels: Counter[str] = Counter()
+    for game in games:
+        date = game_date(game)
+        if len(date) < 7:
+            continue
+        year = int(date[:4])
+        month = int(date[5:7])
+        start_year = year if month >= 7 else year - 1
+        labels[f"{start_year}/{start_year + 1}"] += 1
+    return labels.most_common(1)[0][0] if labels else "unknown"
+
+
+def competition_seasons(
+    competition: Dict[str, Any],
+    games: Iterable[Dict[str, Any]],
+    history: Iterable[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    history_by_num = {str(row["num"]): row for row in history}
+    games_by_season: Dict[str, List[Dict[str, Any]]] = {}
+    for game in games:
+        season_num = game.get("seasonNum")
+        if season_num is None:
+            continue
+        games_by_season.setdefault(str(season_num), []).append(game)
+
+    seasons = []
+    for season_num, season_games in games_by_season.items():
+        history_row = history_by_num.get(season_num) or {}
+        dates = sorted(game_date(game) for game in season_games if game_date(game))
+        seasons.append(
+            {
+                "num": int(season_num),
+                "name": history_row.get("name") or inferred_season_name(season_games),
+                "start_date": dates[0] if dates else None,
+                "end_date": dates[-1] if dates else None,
+                "match_count": len(season_games),
+                "is_current": int(season_num) == competition.get("current_season_num"),
+            }
+        )
+    return sorted(seasons, key=lambda season: (season["start_date"] or "", season["num"]))
 
 
 def parse_stat_value(value: Any) -> Tuple[Optional[float], Optional[float], Optional[float]]:
@@ -181,8 +326,20 @@ def collect_fixtures(args: argparse.Namespace, raw_dir: Path) -> Tuple[List[Dict
         sleep_seconds=args.sleep,
         refresh=args.refresh,
     )
-    games_by_id = {game.get("id"): game for game in payload.get("games") or [] if game.get("id") is not None}
-    pages = [{"kind": "initial", "game_count": len(payload.get("games") or []), "paging": payload.get("paging")}]
+    initial_games = payload.get("games") or []
+    games_by_id = {
+        game.get("id"): game
+        for game in initial_games
+        if game.get("id") is not None and game_is_in_window(game, args.start_date, args.end_date)
+    }
+    pages = [
+        {
+            "kind": "initial",
+            "game_count": len(initial_games),
+            "in_window_game_count": len(games_by_id),
+            "paging": payload.get("paging"),
+        }
+    ]
 
     if not args.walk_pages:
         return list(games_by_id.values()), {"initial": payload, "pages": pages}
@@ -247,31 +404,42 @@ def collect_fixtures(args: argparse.Namespace, raw_dir: Path) -> Tuple[List[Dict
     return list(games_by_id.values()), {"initial": payload, "pages": pages}
 
 
-def collect_match_payloads(
+def collect_game_payload(
     args: argparse.Namespace,
     raw_dir: Path,
-    games: Iterable[Dict[str, Any]],
-) -> Tuple[Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]], List[Dict[str, Any]]]:
-    details: Dict[int, Dict[str, Any]] = {}
-    stats: Dict[int, Dict[str, Any]] = {}
+    game: Dict[str, Any],
+    fetch_team_stats: bool,
+) -> Tuple[int, Optional[Dict[str, Any]], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
     failures: List[Dict[str, Any]] = []
+    game_id = game.get("id")
+    if game_id is None:
+        return 0, None, None, failures
 
-    for game in games:
-        game_id = game.get("id")
-        if game_id is None:
-            continue
-
-        detail_url = build_url(
-            "/web/game/",
-            {
-                "appTypeId": args.app_type_id,
-                "langId": args.lang_id,
-                "timezoneName": args.timezone,
-                "userCountryId": args.user_country_id,
-                "gameId": game_id,
-                "topBookmaker": 14,
-            },
+    detail_url = build_url(
+        "/web/game/",
+        {
+            "appTypeId": args.app_type_id,
+            "langId": args.lang_id,
+            "timezoneName": args.timezone,
+            "userCountryId": args.user_country_id,
+            "gameId": game_id,
+            "topBookmaker": 14,
+        },
+    )
+    detail_payload = None
+    stats_payload = None
+    try:
+        detail_payload = cached_fetch(
+            detail_url,
+            raw_dir / "matches" / f"{game_id}.json",
+            retries=args.retries,
+            sleep_seconds=args.sleep,
+            refresh=args.refresh,
         )
+    except RuntimeError as exc:
+        failures.append({"game_id": game_id, "kind": "details", "error": str(exc)})
+
+    if fetch_team_stats:
         stats_url = build_url(
             "/web/game/stats/",
             {
@@ -282,20 +450,8 @@ def collect_match_payloads(
                 "games": game_id,
             },
         )
-
         try:
-            details[int(game_id)] = cached_fetch(
-                detail_url,
-                raw_dir / "matches" / f"{game_id}.json",
-                retries=args.retries,
-                sleep_seconds=args.sleep,
-                refresh=args.refresh,
-            )
-        except RuntimeError as exc:
-            failures.append({"game_id": game_id, "kind": "details", "error": str(exc)})
-
-        try:
-            stats[int(game_id)] = cached_fetch(
+            stats_payload = cached_fetch(
                 stats_url,
                 raw_dir / "match_stats" / f"{game_id}.json",
                 retries=args.retries,
@@ -304,6 +460,35 @@ def collect_match_payloads(
             )
         except RuntimeError as exc:
             failures.append({"game_id": game_id, "kind": "stats", "error": str(exc)})
+
+    return int(game_id), detail_payload, stats_payload, failures
+
+
+def collect_match_payloads(
+    args: argparse.Namespace,
+    raw_dir: Path,
+    games: Iterable[Dict[str, Any]],
+    *,
+    fetch_team_stats: bool = True,
+) -> Tuple[Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]], List[Dict[str, Any]]]:
+    details: Dict[int, Dict[str, Any]] = {}
+    stats: Dict[int, Dict[str, Any]] = {}
+    failures: List[Dict[str, Any]] = []
+    game_list = list(games)
+
+    workers = max(1, getattr(args, "workers", 1))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(collect_game_payload, args, raw_dir, game, fetch_team_stats): game
+            for game in game_list
+        }
+        for future in as_completed(futures):
+            game_id, detail_payload, stats_payload, game_failures = future.result()
+            if detail_payload is not None:
+                details[game_id] = detail_payload
+            if stats_payload is not None:
+                stats[game_id] = stats_payload
+            failures.extend(game_failures)
 
     return details, stats, failures
 
@@ -470,8 +655,17 @@ def summarize(rows: List[Dict[str, Any]], key: str) -> List[Any]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fetch and flatten 365Scores Israeli Premier League data.")
+    parser = argparse.ArgumentParser(description="Fetch and flatten Israeli football data from 365Scores.")
     parser.add_argument("--competition-id", type=int, default=DEFAULT_COMPETITION_ID)
+    parser.add_argument(
+        "--all-israeli-competitions",
+        action="store_true",
+        help="Discover and ingest every Israeli football competition returned by the source.",
+    )
+    parser.add_argument(
+        "--competition-ids",
+        help="Optional comma-separated competition IDs to select when using --all-israeli-competitions.",
+    )
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", default=DEFAULT_END_DATE)
     parser.add_argument("--lang-id", type=int, default=DEFAULT_LANG_ID)
@@ -480,11 +674,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--app-type-id", type=int, default=DEFAULT_APP_TYPE_ID)
     parser.add_argument("--raw-dir", type=Path, default=Path("data/raw/365scores"))
     parser.add_argument("--processed-dir", type=Path, default=Path("data/processed"))
-    parser.add_argument("--limit", type=int, default=0, help="Limit matches fetched; useful while iterating.")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Limit matches fetched (per competition in all-competition mode); useful while iterating.",
+    )
     parser.add_argument("--walk-pages", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--max-fixture-pages", type=int, default=50)
     parser.add_argument("--sleep", type=float, default=0.25)
     parser.add_argument("--retries", type=int, default=2)
+    parser.add_argument("--workers", type=int, default=6, help="Concurrent match-detail requests.")
+    parser.add_argument(
+        "--fixtures-only",
+        action="store_true",
+        help="Fetch the competition and match catalog without match detail/stat payloads.",
+    )
+    parser.add_argument(
+        "--include-unplayed-payloads",
+        action="store_true",
+        help="Also request match detail/stat payloads for matches that have not ended.",
+    )
     parser.add_argument(
         "--allow-fetch-failures",
         action="store_true",
@@ -499,14 +709,120 @@ def main() -> int:
     ensure_dir(args.raw_dir)
     ensure_dir(args.processed_dir)
 
-    games, fixture_payload = collect_fixtures(args, args.raw_dir)
-    games_by_id = {game.get("id"): game for game in games if game.get("id") is not None}
-    games = list(games_by_id.values())
-    games.sort(key=lambda game: game.get("startTime") or "")
-    if args.limit:
-        games = games[: args.limit]
+    catalog_failures: List[Dict[str, Any]] = []
+    if args.all_israeli_competitions:
+        competitions = collect_competition_catalog(args, args.raw_dir)
+        if args.competition_ids:
+            selected_ids = {int(value.strip()) for value in args.competition_ids.split(",") if value.strip()}
+            competitions = [competition for competition in competitions if competition["id"] in selected_ids]
+    else:
+        competitions = [
+            {
+                "id": args.competition_id,
+                "name": "Israeli Premier League" if args.competition_id == 42 else f"Competition {args.competition_id}",
+                "source_name": "Premier League" if args.competition_id == 42 else f"Competition {args.competition_id}",
+                "competition_type": "league",
+                "gender": "men",
+                "age_group": "senior",
+                "current_season_num": None,
+                "has_stats": True,
+                "has_history": args.competition_id == 42,
+                "has_standings": True,
+                "has_brackets": False,
+            }
+        ]
 
-    details, stats, failures = collect_match_payloads(args, args.raw_dir, games)
+    if not competitions:
+        raise SystemExit("no competitions selected")
+
+    all_games: Dict[int, Dict[str, Any]] = {}
+    details: Dict[int, Dict[str, Any]] = {}
+    stats: Dict[int, Dict[str, Any]] = {}
+    failures: List[Dict[str, Any]] = []
+    fixture_pages: List[Dict[str, Any]] = []
+    competition_manifests: List[Dict[str, Any]] = []
+
+    for competition in competitions:
+        competition_id = int(competition["id"])
+        competition_args = argparse.Namespace(**{**vars(args), "competition_id": competition_id})
+        competition_raw_dir = (
+            args.raw_dir / "competitions" / str(competition_id)
+            if args.all_israeli_competitions
+            else args.raw_dir
+        )
+        print(f"discovering {competition['name']} ({competition_id})", flush=True)
+        try:
+            games, fixture_payload = collect_fixtures(competition_args, competition_raw_dir)
+        except RuntimeError as exc:
+            failure = {"competition_id": competition_id, "kind": "fixtures", "error": str(exc)}
+            if not args.allow_fetch_failures:
+                raise
+            failures.append(failure)
+            games = []
+            fixture_payload = {"pages": []}
+
+        games = sorted(
+            {int(game["id"]): game for game in games if game.get("id") is not None}.values(),
+            key=lambda game: game.get("startTime") or "",
+        )
+        if args.limit:
+            games = games[: args.limit]
+        all_games.update({int(game["id"]): game for game in games})
+
+        history: List[Dict[str, Any]] = []
+        if competition.get("has_history"):
+            try:
+                history = collect_competition_history(competition_args, competition_raw_dir, competition_id)
+            except RuntimeError as exc:
+                catalog_failures.append(
+                    {"competition_id": competition_id, "kind": "history", "error": str(exc)}
+                )
+
+        competition_manifest = {
+            **competition,
+            "seasons": competition_seasons(competition, games, history),
+            "source_history_seasons": [
+                season for season in history if season.get("has_table") or season.get("has_group")
+            ],
+        }
+        competition_manifests.append(competition_manifest)
+        fixture_pages.append(
+            {
+                "competition_id": competition_id,
+                "page_count": len(fixture_payload.get("pages") or []),
+                "pages": fixture_payload.get("pages") or [],
+            }
+        )
+
+        if args.fixtures_only:
+            continue
+        payload_games = (
+            [
+                game
+                for game in games
+                if args.include_unplayed_payloads or game.get("statusGroup") == 4
+            ]
+            if competition.get("has_stats")
+            else []
+        )
+        print(
+            f"fetching details for {len(payload_games)} completed {competition['name']} matches",
+            flush=True,
+        )
+        competition_details, competition_stats, competition_failures = collect_match_payloads(
+            competition_args,
+            competition_raw_dir,
+            payload_games,
+            fetch_team_stats=True,
+        )
+        details.update(competition_details)
+        stats.update(competition_stats)
+        failures.extend(
+            {**failure, "competition_id": competition_id}
+            for failure in competition_failures
+        )
+
+    games = sorted(all_games.values(), key=lambda game: game.get("startTime") or "")
     fixture_rows = flatten_fixtures(games)
     player_rows, stat_names = flatten_player_match_rows(details)
     team_stat_rows = flatten_team_stats(stats)
@@ -516,8 +832,10 @@ def main() -> int:
     write_csv(args.processed_dir / "365scores_team_match_stats.csv", team_stat_rows)
 
     manifest = {
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "competition_id": args.competition_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "competition_id": args.competition_id if not args.all_israeli_competitions else None,
+        "all_israeli_competitions": args.all_israeli_competitions,
+        "competitions": competition_manifests,
         "start_date": args.start_date,
         "end_date": args.end_date,
         "raw_dir": str(args.raw_dir),
@@ -532,16 +850,38 @@ def main() -> int:
         "round_nums": summarize(fixture_rows, "round_num"),
         "player_stat_keys": stat_names,
         "failures": failures,
-        "fixture_page_count": len(fixture_payload.get("pages") or []),
-        "fixture_pages": fixture_payload.get("pages"),
-        "source_paging": (fixture_payload.get("initial") or {}).get("paging"),
+        "fixture_page_count": sum(item["page_count"] for item in fixture_pages),
+        "fixture_pages": fixture_pages,
+        "catalog_failures": catalog_failures,
         "note": (
-            "This is a source spike. Fixtures are discovered from the initial date-window endpoint "
-            "plus paged /web/games/ responses, then filtered back to the requested date window."
+            "Fixtures are discovered from the source's current results endpoint plus paged "
+            "/web/games/ responses, then filtered to the requested date window. Source history "
+            "without match payloads is retained as metadata but is not loaded as an empty season."
         ),
     }
     write_json(args.processed_dir / "365scores_manifest.json", manifest)
-    print(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "competitions": [
+                    {
+                        "id": competition["id"],
+                        "name": competition["name"],
+                        "seasons": [season["name"] for season in competition["seasons"]],
+                    }
+                    for competition in competition_manifests
+                ],
+                "fixture_count": len(games),
+                "match_detail_count": len(details),
+                "player_match_row_count": len(player_rows),
+                "team_stat_row_count": len(team_stat_rows),
+                "failure_count": len(failures) + len(catalog_failures),
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0 if args.allow_fetch_failures or not failures else 1
 
 

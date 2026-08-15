@@ -3,21 +3,31 @@ name: Seed Supabase
 on:
   workflow_dispatch:
     inputs:
-      seed_limit:
-        description: "Number of matches to seed for a manual run. Use 0 for the full date window."
+      seed_mode:
+        description: "Full backfill, fixtures only, or a small recent refresh."
         required: false
-        default: "50"
+        default: "full"
+        type: choice
+        options:
+          - full
+          - fixtures
+          - recent
+      seed_limit:
+        description: "Matches per competition. Use 0 for every match in the selected window."
+        required: false
+        default: "0"
   schedule:
     - cron: "17 3 * * *"
 
 jobs:
   seed:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 360
 
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SEED_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_limit || '0' }}
+      SEED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_mode || 'recent' }}
 
     steps:
       - name: Checkout
@@ -44,7 +54,21 @@ jobs:
 
       - name: Fetch and flatten 365Scores data
         run: |
-          args=(--allow-fetch-failures --retries 4 --sleep 1)
+          args=(
+            --all-israeli-competitions
+            --allow-fetch-failures
+            --retries 4
+            --sleep 0.25
+            --workers 8
+          )
+          if [ "$SEED_MODE" = "fixtures" ]; then
+            args+=(--fixtures-only)
+          elif [ "$SEED_MODE" = "recent" ]; then
+            args+=(
+              --start-date "$(date -u -d '14 days ago' +%F)"
+              --end-date "$(date -u -d '370 days' +%F)"
+            )
+          fi
           if [ "${SEED_LIMIT:-0}" != "0" ]; then
             args+=(--limit "$SEED_LIMIT")
           fi

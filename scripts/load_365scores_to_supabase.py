@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
+import json
 import os
 import re
 from pathlib import Path
@@ -50,6 +52,20 @@ def read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def read_manifest(processed_dir: Path) -> dict[str, Any]:
+    path = processed_dir / "365scores_manifest.json"
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Load processed 365Scores rows into Supabase.")
+    parser.add_argument("--processed-dir", type=Path, default=PROCESSED_DIR)
+    return parser.parse_args()
+
+
 def empty_to_none(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -72,12 +88,17 @@ def to_float(value: Any) -> Optional[float]:
 
 
 def season_name(rows: Iterable[dict[str, str]]) -> str:
-    years = sorted({(row.get("start_time") or "")[:4] for row in rows if row.get("start_time")})
-    if len(years) >= 2:
-        return f"{years[0]}/{years[-1][-2:]}"
-    if years:
-        return years[0]
-    return "unknown"
+    labels: dict[str, int] = {}
+    for row in rows:
+        date = (row.get("start_time") or "")[:10]
+        if len(date) < 7:
+            continue
+        year = int(date[:4])
+        month = int(date[5:7])
+        start_year = year if month >= 7 else year - 1
+        label = f"{start_year}/{start_year + 1}"
+        labels[label] = labels.get(label, 0) + 1
+    return max(labels, key=labels.get) if labels else "unknown"
 
 
 def normalize_stage_name(stage_num: Optional[int]) -> str:
@@ -228,18 +249,55 @@ def upsert_mapping(
     )
 
 
-def get_or_create_competition(cur: psycopg.Cursor, source_id: str, country_id: str) -> str:
-    mapped = get_mapping(cur, source_id, "competition", COMPETITION_SOURCE_ID)
+def get_or_create_competition(
+    cur: psycopg.Cursor,
+    source_id: str,
+    country_id: str,
+    competition: dict[str, Any],
+) -> str:
+    competition_source_id = str(competition["id"])
+    name = competition.get("name") or f"Competition {competition_source_id}"
+    source_name = competition.get("source_name") or name
+    competition_kind = competition.get("competition_type") or "league"
+    gender = competition.get("gender") or "men"
+    metadata = {
+        key: value
+        for key, value in competition.items()
+        if key not in {"seasons", "source_history_seasons"} and value is not None
+    }
+    mapped = get_mapping(cur, source_id, "competition", competition_source_id)
     if mapped:
+        cur.execute(
+            """
+            update core.competitions
+            set name = %s,
+                competition_type = %s,
+                gender = %s,
+                metadata = metadata || %s
+            where id = %s
+            """,
+            (name, competition_kind, gender, Jsonb(metadata), mapped),
+        )
+        upsert_mapping(
+            cur,
+            source_id,
+            "competition",
+            competition_source_id,
+            "core.competitions",
+            mapped,
+            source_name,
+            slugify(source_name),
+            metadata,
+        )
         return mapped
     row = execute_one(
         cur,
         """
-        insert into core.competitions (country_id, name, competition_type, gender)
-        values (%s, %s, 'league', 'men')
+        insert into core.competitions (country_id, name, competition_type, gender, metadata)
+        values (%s, %s, %s, %s, %s)
         returning id
         """,
-        (country_id, COMPETITION_NAME),
+        (country_id, name, competition_kind, gender, Jsonb(metadata)),
     )
     assert row is not None
     competition_id = row["id"]
@@ -247,40 +305,112 @@ def get_or_create_competition(cur: psycopg.Cursor, source_id: str, country_id: s
         cur,
         source_id,
         "competition",
-        COMPETITION_SOURCE_ID,
+        competition_source_id,
         "core.competitions",
         competition_id,
-        COMPETITION_NAME,
-        "premier-league",
+        source_name,
+        slugify(source_name),
+        metadata,
     )
     return competition_id
 
 
-def get_or_create_season(cur: psycopg.Cursor, source_id: str, competition_id: str, rows: list[dict[str, str]]) -> str:
+def get_or_create_season(
+    cur: psycopg.Cursor,
+    source_id: str,
+    competition_id: str,
+    competition_source_id: str,
+    rows: list[dict[str, str]],
+    season: Optional[dict[str, Any]] = None,
+) -> str:
     season_num = rows[0].get("season_num") or "unknown"
-    source_entity_id = f"{COMPETITION_SOURCE_ID}:{season_num}"
+    source_entity_id = f"{competition_source_id}:{season_num}"
+    season = season or {}
+    name = season.get("name") or season_name(rows)
+    date_values = [(row.get("start_time") or "")[:10] for row in rows if row.get("start_time")]
+    start_date = min(date_values) if date_values else season.get("start_date")
+    end_date = max(date_values) if date_values else season.get("end_date")
+    metadata = {
+        "source_competition_id": competition_source_id,
+        "source_season_num": to_int(season_num),
+        "is_current": bool(season.get("is_current")),
+    }
     mapped = get_mapping(cur, source_id, "season", source_entity_id)
     if mapped:
+        cur.execute(
+            """
+            update core.seasons
+            set name = %s,
+                start_date = case
+                  when start_date is null then %s
+                  when %s::date is null then start_date
+                  else least(start_date, %s::date)
+                end,
+                end_date = case
+                  when end_date is null then %s
+                  when %s::date is null then end_date
+                  else greatest(end_date, %s::date)
+                end,
+                metadata = metadata || %s
+            where id = %s
+            """,
+            (
+                name,
+                start_date,
+                start_date,
+                start_date,
+                end_date,
+                end_date,
+                end_date,
+                Jsonb(metadata),
+                mapped,
+            ),
+        )
+        upsert_mapping(
+            cur,
+            source_id,
+            "season",
+            source_entity_id,
+            "core.seasons",
+            mapped,
+            name,
+            metadata=metadata,
+        )
         return mapped
 
-    name = season_name(rows)
-    start_date = min((row.get("start_time") or "")[:10] for row in rows if row.get("start_time"))
-    end_date = max((row.get("start_time") or "")[:10] for row in rows if row.get("start_time"))
     row = execute_one(
         cur,
         """
-        insert into core.seasons (competition_id, name, start_date, end_date)
-        values (%s, %s, %s, %s)
+        insert into core.seasons (competition_id, name, start_date, end_date, metadata)
+        values (%s, %s, %s, %s, %s)
         on conflict (competition_id, name) do update
-          set start_date = least(core.seasons.start_date, excluded.start_date),
-              end_date = greatest(core.seasons.end_date, excluded.end_date)
+          set start_date = case
+                when core.seasons.start_date is null then excluded.start_date
+                when excluded.start_date is null then core.seasons.start_date
+                else least(core.seasons.start_date, excluded.start_date)
+              end,
+              end_date = case
+                when core.seasons.end_date is null then excluded.end_date
+                when excluded.end_date is null then core.seasons.end_date
+                else greatest(core.seasons.end_date, excluded.end_date)
+              end,
+              metadata = core.seasons.metadata || excluded.metadata
         returning id
         """,
-        (competition_id, name, start_date, end_date),
+        (competition_id, name, start_date, end_date, Jsonb(metadata)),
     )
     assert row is not None
     season_id = row["id"]
-    upsert_mapping(cur, source_id, "season", source_entity_id, "core.seasons", season_id, name)
+    upsert_mapping(
+        cur,
+        source_id,
+        "season",
+        source_entity_id,
+        "core.seasons",
+        season_id,
+        name,
+        metadata=metadata,
+    )
     return season_id
 
 
@@ -1337,28 +1467,134 @@ def load_team_stats(
     print(f"processed {len(rows)} team-stat rows; wrote {written_stats} team stat observations", flush=True)
 
 
+def manifest_competitions(
+    manifest: dict[str, Any],
+    fixture_rows: list[dict[str, str]],
+) -> dict[str, dict[str, Any]]:
+    competitions = {
+        str(competition["id"]): competition
+        for competition in manifest.get("competitions") or []
+        if competition.get("id") is not None
+    }
+    for source_id in sorted({row.get("competition_id") for row in fixture_rows if row.get("competition_id")}):
+        competitions.setdefault(
+            str(source_id),
+            {
+                "id": source_id,
+                "name": COMPETITION_NAME if str(source_id) == COMPETITION_SOURCE_ID else f"Competition {source_id}",
+                "source_name": "Premier League" if str(source_id) == COMPETITION_SOURCE_ID else f"Competition {source_id}",
+                "competition_type": "league",
+                "gender": "men",
+                "age_group": "senior",
+                "seasons": [],
+            },
+        )
+    return competitions
+
+
+def season_manifest(competition: dict[str, Any], season_num: str) -> Optional[dict[str, Any]]:
+    return next(
+        (
+            season
+            for season in competition.get("seasons") or []
+            if str(season.get("num")) == str(season_num)
+        ),
+        None,
+    )
+
+
 def main() -> int:
+    args = parse_args()
     database_url = os.environ.get("SUPABASE_DB_URL")
     if not database_url:
         raise SystemExit("SUPABASE_DB_URL is required")
 
-    fixture_rows = read_csv(PROCESSED_DIR / "365scores_fixtures.csv")
-    player_rows = read_csv(PROCESSED_DIR / "365scores_player_match_stats.csv")
-    team_stat_rows = read_csv(PROCESSED_DIR / "365scores_team_match_stats.csv")
+    fixture_rows = read_csv(args.processed_dir / "365scores_fixtures.csv")
+    player_rows = read_csv(args.processed_dir / "365scores_player_match_stats.csv")
+    team_stat_rows = read_csv(args.processed_dir / "365scores_team_match_stats.csv")
+    manifest = read_manifest(args.processed_dir)
+    if not fixture_rows:
+        raise SystemExit("processed fixture file contains no rows")
+
+    competitions = manifest_competitions(manifest, fixture_rows)
+    fixture_groups: dict[tuple[str, str], list[dict[str, str]]] = {}
+    game_groups: dict[str, tuple[str, str]] = {}
+    for row in fixture_rows:
+        key = (row.get("competition_id") or "unknown", row.get("season_num") or "unknown")
+        fixture_groups.setdefault(key, []).append(row)
+        if row.get("game_id"):
+            game_groups[row["game_id"]] = key
+
+    player_groups: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for row in player_rows:
+        key = game_groups.get(row.get("game_id") or "")
+        if key:
+            player_groups.setdefault(key, []).append(row)
+
+    team_stat_groups: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for row in team_stat_rows:
+        key = game_groups.get(row.get("game_id") or "")
+        if key:
+            team_stat_groups.setdefault(key, []).append(row)
 
     with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
             source_id = get_source(cur)
             print("source ready", flush=True)
             country_id = get_or_create_country(cur)
-            competition_id = get_or_create_competition(cur, source_id, country_id)
-            season_id = get_or_create_season(cur, source_id, competition_id, fixture_rows)
-            print("core competition objects ready", flush=True)
-            indexes = load_fixtures(cur, source_id, competition_id, season_id, fixture_rows)
-            conn.commit()
-            print(f"loaded fixture graph for {len(indexes['matches'])} matches", flush=True)
-            load_player_rows(conn, cur, source_id, season_id, player_rows, indexes)
-            load_team_stats(conn, cur, source_id, season_id, team_stat_rows, indexes)
+            canonical_competitions: dict[str, str] = {}
+
+            ordered_groups = sorted(
+                fixture_groups.items(),
+                key=lambda item: (
+                    competitions.get(item[0][0], {}).get("name") or item[0][0],
+                    min((row.get("start_time") or "") for row in item[1]),
+                ),
+            )
+            for (competition_source_id, season_num), season_fixture_rows in ordered_groups:
+                competition = competitions[competition_source_id]
+                competition_id = canonical_competitions.get(competition_source_id)
+                if competition_id is None:
+                    competition_id = get_or_create_competition(cur, source_id, country_id, competition)
+                    canonical_competitions[competition_source_id] = competition_id
+
+                season_id = get_or_create_season(
+                    cur,
+                    source_id,
+                    competition_id,
+                    competition_source_id,
+                    season_fixture_rows,
+                    season_manifest(competition, season_num),
+                )
+                indexes = load_fixtures(
+                    cur,
+                    source_id,
+                    competition_id,
+                    season_id,
+                    season_fixture_rows,
+                )
+                conn.commit()
+                print(
+                    f"loaded {competition['name']} season {season_num}: "
+                    f"{len(indexes['matches'])} matches",
+                    flush=True,
+                )
+                load_player_rows(
+                    conn,
+                    cur,
+                    source_id,
+                    season_id,
+                    player_groups.get((competition_source_id, season_num), []),
+                    indexes,
+                )
+                load_team_stats(
+                    conn,
+                    cur,
+                    source_id,
+                    season_id,
+                    team_stat_groups.get((competition_source_id, season_num), []),
+                    indexes,
+                )
         conn.commit()
 
     print(
