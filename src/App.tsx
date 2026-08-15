@@ -55,6 +55,15 @@ const comparisonMetrics = [
   "team_corners",
   "team_passes_completed",
 ];
+const matchPlayerMetrics = [
+  "rating_365",
+  "goals",
+  "assists",
+  "pass_completion_pct",
+  "total_shots",
+  "tackles_won",
+  "minutes",
+];
 
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -355,7 +364,12 @@ export function App() {
       if (!hasSupabaseConfig || !supabase) return;
       setDetailLoading(true);
       const [playersResult, teamsResult] = await Promise.all([
-        supabase.from("api_match_player_stats").select("*").eq("match_id", matchId).limit(5000),
+        supabase
+          .from("api_match_player_stats")
+          .select("*")
+          .eq("match_id", matchId)
+          .in("metric_code", matchPlayerMetrics)
+          .limit(1000),
         supabase.from("api_match_team_stats").select("*").eq("match_id", matchId).limit(500),
       ]);
       const firstError = playersResult.error ?? teamsResult.error;
