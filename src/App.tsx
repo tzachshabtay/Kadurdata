@@ -606,8 +606,8 @@ export function App() {
   );
   const leaderQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === leaderMetricCode));
   const squadQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === squadMetricCode));
-  const leaderMinimum = leaderMinimums[leaderMetricCode] ?? leaderQualification.defaultValue;
-  const squadMinimum = squadMinimums[squadMetricCode] ?? squadQualification.defaultValue;
+  const leaderMinimum = leaderQualification ? leaderMinimums[leaderMetricCode] ?? leaderQualification.defaultValue : 0;
+  const squadMinimum = squadQualification ? squadMinimums[squadMetricCode] ?? squadQualification.defaultValue : 0;
   const qualifiedLeaderboardRows = filterLeaderboardRows(leaderboardRows, players, leaderQualification, leaderMinimum);
 
   const standings = useMemo(
@@ -737,6 +737,7 @@ export function App() {
         ) : view === "overview" ? (
           <OverviewView
             season={currentSeason}
+            seasonPlayers={players}
             round={currentRound}
             roundMatches={roundMatches}
             standings={standings}
@@ -820,6 +821,7 @@ export function App() {
 
 function OverviewView({
   season,
+  seasonPlayers,
   round,
   roundMatches,
   standings,
@@ -838,6 +840,7 @@ function OverviewView({
   showMatches,
 }: {
   season: Season;
+  seasonPlayers: SeasonPlayer[];
   round?: Round;
   roundMatches: Match[];
   standings: Club[];
@@ -845,7 +848,7 @@ function OverviewView({
   metrics: LeaderboardMetricOption[];
   metricCode: string;
   setMetricCode: (metric: string) => void;
-  qualification: LeaderboardQualification;
+  qualification: LeaderboardQualification | null;
   minimum: number;
   setMinimum: (value: number) => void;
   loading: boolean;
@@ -858,6 +861,7 @@ function OverviewView({
   const selectedMetric = metrics.find((metric) => metric.code === metricCode);
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
+  const minutesByPlayer = new Map(seasonPlayers.map((player) => [player.player_id, Number(player.minutes)]));
   return (
     <>
       <PageHeading eyebrow={`${competitionLabel(season.competition_name)} · ${season.season_name}`} title="Season overview" description="The current shape of the league, from the latest results to the players setting the pace." />
@@ -904,15 +908,15 @@ function OverviewView({
               </select>
             </label>
           </div>
-          <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} />
+          {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} />}
           <div className="leader-list">
             {loading ? <InlineLoading /> : error ? <EmptyState text="Leaderboard data could not be loaded." /> : leaders.length ? leaders.map((player, index) => (
               <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
                 <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
                 <span className="leader-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "")}</small></span>
-                <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{player.aggregation} · {player.sample_size} matches</small></span>
+                <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{leaderboardSampleLabel(player, qualification, minutesByPlayer)}</small></span>
               </button>
-            )) : <EmptyState text="No players meet the current minimum sample." />}
+            )) : <EmptyState text={qualification ? "No players meet the current minimum sample." : "No leaderboard data is available for this metric."} />}
           </div>
         </section>
       </div>
@@ -1035,7 +1039,7 @@ function ClubsView({
   metrics: LeaderboardMetricOption[];
   metricCode: string;
   setMetricCode: (code: string) => void;
-  qualification: LeaderboardQualification;
+  qualification: LeaderboardQualification | null;
   minimum: number;
   setMinimum: (value: number) => void;
   leaderboardLoading: boolean;
@@ -1094,7 +1098,7 @@ function ClubsView({
                       </select>
                     </label>
                   </div>
-                  <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} />
+                  {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} />}
                   <div className="squad-list">
                     {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text="Squad leaderboard data could not be loaded." /> : squadLeaders.length ? squadLeaders.map((leader, index) => {
                       const player = squadByPlayerId.get(leader.player_id);
@@ -1106,7 +1110,7 @@ function ClubsView({
                           <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
                         </button>
                       );
-                    }) : <EmptyState text="No squad players meet the current minimum sample." />}
+                    }) : <EmptyState text={qualification ? "No squad players meet the current minimum sample." : "No squad data is available for this metric."} />}
                   </div>
                 </section>
               </div>
@@ -1590,7 +1594,7 @@ function compareLeaderboardRows(a: PlayerLeaderboardRow, b: PlayerLeaderboardRow
   return bValue - aValue || bSecondary - aSecondary || a.display_name.localeCompare(b.display_name);
 }
 
-function getLeaderboardQualification(metric?: LeaderboardMetricOption): LeaderboardQualification {
+function getLeaderboardQualification(metric?: LeaderboardMetricOption): LeaderboardQualification | null {
   if (metric?.code.endsWith("::per90")) {
     return { source: "minutes", unit: "minutes", defaultValue: 450, step: 90 };
   }
@@ -1605,7 +1609,7 @@ function getLeaderboardQualification(metric?: LeaderboardMetricOption): Leaderbo
   if (metric && ["rating", "average", "ratio"].includes(metric.value_type)) {
     return { source: "matches", unit: "matches", defaultValue: 5, step: 1 };
   }
-  return { source: "matches", unit: "matches", defaultValue: 1, step: 1 };
+  return null;
 }
 
 function defaultPercentageQualification(denominatorCode: string | null) {
@@ -1622,9 +1626,11 @@ function percentageQualificationUnit(denominatorCode: string | null) {
 function filterLeaderboardRows(
   rows: PlayerLeaderboardRow[],
   players: SeasonPlayer[],
-  qualification: LeaderboardQualification,
+  qualification: LeaderboardQualification | null,
   minimum: number,
 ) {
+  if (!qualification) return rows;
+
   const minutesByPlayer = new Map(players.map((player) => [player.player_id, Number(player.minutes)]));
   return rows.filter((row) => {
     const sample = qualification.source === "minutes"
@@ -1634,6 +1640,16 @@ function filterLeaderboardRows(
         : Number(row.sample_size);
     return sample >= minimum;
   });
+}
+
+function leaderboardSampleLabel(
+  row: PlayerLeaderboardRow,
+  qualification: LeaderboardQualification | null,
+  minutesByPlayer: Map<string, number>,
+) {
+  return qualification?.source === "minutes"
+    ? `${row.aggregation} · ${numberFormatter.format(minutesByPlayer.get(row.player_id) ?? 0)} minutes`
+    : `${row.aggregation} · ${row.sample_size} matches`;
 }
 
 function leaderboardSourceMetricCode(metricCode: string) {
