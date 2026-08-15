@@ -535,6 +535,21 @@ export function App() {
     () => metrics.filter((metric) => metric.subject_type === "player_match"),
     [metrics],
   );
+  const playerChartMetrics = useMemo(() => {
+    const ratioComponentCodes = new Set(playerMetrics.flatMap((metric) => [
+      metric.numerator_metric_code,
+      metric.denominator_metric_code,
+    ].filter((code): code is string => Boolean(code))));
+    return playerMetrics
+      .filter((metric) => !ratioComponentCodes.has(metric.code))
+      .map((metric) => metric.value_type === "percentage"
+        ? { ...metric, name: percentageMetricGroupName(metric) }
+        : metric);
+  }, [playerMetrics]);
+  useEffect(() => {
+    if (playerChartMetrics.some((metric) => metric.code === metricCode)) return;
+    setMetricCode(preferredMetric(playerChartMetrics));
+  }, [metricCode, playerChartMetrics]);
   const leaderboardMetrics = useMemo<LeaderboardMetricOption[]>(
     () => [
       ...seasonLeaderboardMetrics,
@@ -572,7 +587,7 @@ export function App() {
     const squadPlayerIds = new Set(clubSquad.map((player) => player.player_id));
     return squadLeaderboardRows.filter((player) => squadPlayerIds.has(player.player_id));
   }, [clubSquad, squadLeaderboardRows]);
-  const selectedPlayerMetric = playerMetrics.find((metric) => metric.code === metricCode);
+  const selectedPlayerMetric = playerChartMetrics.find((metric) => metric.code === metricCode);
   const playerChartData = useMemo(
     () => aggregatePlayerHistory(playerHistory, selectedPlayerMetric),
     [playerHistory, selectedPlayerMetric],
@@ -724,7 +739,7 @@ export function App() {
             setClubFilter={setClubFilter}
             query={playerQuery}
             setQuery={setPlayerQuery}
-            metrics={playerMetrics}
+            metrics={playerChartMetrics}
             metricCode={metricCode}
             setMetricCode={setMetricCode}
             chartData={playerChartData}
@@ -1069,6 +1084,11 @@ function PlayersView({
   detailLoading: boolean;
 }) {
   const metric = metrics.find((item) => item.code === metricCode);
+  const isPairedMetric = metric?.value_type === "percentage"
+    && Boolean(metric.numerator_metric_code)
+    && Boolean(metric.denominator_metric_code);
+  const numeratorLabel = ratioComponentLabel(metric?.numerator_metric_code);
+  const denominatorLabel = ratioComponentLabel(metric?.denominator_metric_code);
   return (
     <>
       <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} players`} title="Player explorer" description="Filter the league by role or club, then track an individual metric from match to match." />
@@ -1108,7 +1128,17 @@ function PlayersView({
                 <Stat label="Goals + assists" value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} goals · ${formatNumber(selectedPlayer.assists)} assists`} />
                 <Stat label={metric?.name ?? "Average"} value={average === null ? "-" : formatMetricWithRatio(average, metric?.value_type, averageNumerator, averageDenominator)} note={`${chartData.length} matches sampled`} accent />
               </section>
-              <div className="trend-heading"><div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div><span className="trend-key"><i /> Season trend</span></div>
+              <div className="trend-heading">
+                <div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div>
+                <div className="trend-keys">
+                  {isPairedMetric ? (
+                    <>
+                      <span className="trend-key completed"><i /> {numeratorLabel}</span>
+                      <span className="trend-key attempted"><i /> {denominatorLabel}</span>
+                    </>
+                  ) : <span className="trend-key completed"><i /> Season trend</span>}
+                </div>
+              </div>
               <div className="chart-frame">
                 {detailLoading ? <InlineLoading /> : chartData.length ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -1116,11 +1146,25 @@ function PlayersView({
                       <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
                       <XAxis dataKey="date" axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} minTickGap={28} />
                       <YAxis axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} width={54} />
-                      <Tooltip contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }} itemStyle={{ color: "#35C9B6" }} labelStyle={{ color: "#F4F7FA", fontWeight: 700 }} formatter={(value, _name, item) => {
+                      <Tooltip contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }} labelStyle={{ color: "#F4F7FA", fontWeight: 700 }} formatter={(value, name, item) => {
                         const point = item.payload as PlayerChartPoint;
-                        return [formatMetricWithRatio(Number(value), metric?.value_type, point.numerator, point.denominator), metric?.name ?? "Value"];
-                      }} labelFormatter={(_, payload) => payload?.[0]?.payload?.opponent ?? "Match"} />
-                      <Area type="monotone" dataKey="value" stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
+                        return isPairedMetric
+                          ? [formatMetric(Number(value)), String(name)]
+                          : [formatMetric(Number(value), metric?.value_type), metric?.name ?? "Value"];
+                      }} labelFormatter={(_, payload) => {
+                        const point = payload?.[0]?.payload as PlayerChartPoint | undefined;
+                        if (!point) return "Match";
+                        const ratio = isPairedMetric
+                          ? ` · ${formatMetricWithRatio(point.value, "percentage", point.numerator, point.denominator)}`
+                          : "";
+                        return `${point.opponent}${ratio}`;
+                      }} />
+                      {isPairedMetric ? (
+                        <>
+                          <Area type="monotone" dataKey="denominator" name={denominatorLabel} connectNulls stroke="#F0B35A" strokeWidth={2.5} fill="rgba(240, 179, 90, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#F0B35A", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#F0B35A", stroke: "#080D14", strokeWidth: 3 }} />
+                          <Area type="monotone" dataKey="numerator" name={numeratorLabel} connectNulls stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.11)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
+                        </>
+                      ) : <Area type="monotone" dataKey="value" stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />}
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : <EmptyState text="No match data is available for this player and metric." />}
@@ -1363,6 +1407,24 @@ function preferredMetric(metrics: Metric[]) {
     ?? "";
 }
 
+function percentageMetricGroupName(metric: Metric) {
+  const baseCode = metric.denominator_metric_code?.replace(/_attempted$/, "");
+  return baseCode ? humanizeMetricCode(baseCode) : metric.name.replace(/\s+(Pct|Percentage)$/i, "");
+}
+
+function ratioComponentLabel(code?: string | null) {
+  if (!code) return "Value";
+  if (code.endsWith("_completed")) return "Completed";
+  if (code.endsWith("_attempted")) return "Attempted";
+  if (code.endsWith("_won")) return "Won";
+  if (code.startsWith("successful_")) return "Successful";
+  return humanizeMetricCode(code);
+}
+
+function humanizeMetricCode(code: string) {
+  return code.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
 function competitionLabel(name?: string) {
   return name?.toLowerCase().includes("israeli premier") ? "Ligat Ha'Al" : name ?? "Competition";
 }
@@ -1374,7 +1436,9 @@ function roleLabel(role: RoleFilter) {
 function compareLeaderboardRows(a: PlayerLeaderboardRow, b: PlayerLeaderboardRow) {
   const aValue = a.leaderboard_value === null ? Number.NEGATIVE_INFINITY : Number(a.leaderboard_value);
   const bValue = b.leaderboard_value === null ? Number.NEGATIVE_INFINITY : Number(b.leaderboard_value);
-  return bValue - aValue || Number(b.sample_size) - Number(a.sample_size) || a.display_name.localeCompare(b.display_name);
+  const aSecondary = a.value_type === "percentage" ? Number(a.denominator_value ?? 0) : Number(a.sample_size);
+  const bSecondary = b.value_type === "percentage" ? Number(b.denominator_value ?? 0) : Number(b.sample_size);
+  return bValue - aValue || bSecondary - aSecondary || a.display_name.localeCompare(b.display_name);
 }
 
 function makeSeasonSummaryLeaderboard(players: SeasonPlayer[], seasonId: string, metricCode: string) {

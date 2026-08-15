@@ -19,6 +19,7 @@
   --green: #0e8f63;
   --green-deep: #0b6f50;
   --teal: #35c9b6;
+  --amber: #f0b35a;
   --coral: #ff765f;
   --shadow: 0 18px 46px rgba(0, 0, 0, 0.22);
 }
@@ -1690,12 +1691,22 @@ tr:last-child td {
   text-transform: none !important;
 }
 
+.trend-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .trend-key i {
   display: inline-block;
   width: 18px;
   height: 3px;
   border-radius: 2px;
   background: var(--teal);
+}
+
+.trend-key.attempted i {
+  background: var(--amber);
 }
 
 .chart-frame {
@@ -2149,7 +2160,9 @@ tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .trend-key {
-    display: none !important;
+  .trend-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 }
