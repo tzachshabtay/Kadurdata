@@ -229,6 +229,14 @@ const demoMetrics: Metric[] = [
   { metric_id: "shots", code: "total_shots", name: "Total shots", subject_type: "player_match", value_type: "count", numerator_metric_code: null, denominator_metric_code: null },
 ];
 
+function isSchemaCacheMiss(error: { code?: string; message?: string } | null) {
+  return error?.code === "PGRST202" || error?.message?.toLowerCase().includes("schema cache") === true;
+}
+
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 export function App() {
   const [view, setView] = useState<View>(readViewFromHash);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -339,7 +347,8 @@ export function App() {
       setSeasonLoading(true);
       setError(null);
 
-      if (!hasSupabaseConfig || !supabase) {
+      const client = supabase;
+      if (!hasSupabaseConfig || !client) {
         setRounds(demoRounds);
         setMatches(demoMatches);
         setClubs(demoClubs);
@@ -350,13 +359,32 @@ export function App() {
         setSeasonLoading(false);
         return;
       }
+      const liveClient = client;
+
+      async function loadSeasonPlayers() {
+        let result = await liveClient
+          .rpc("api_season_players_for_season", { p_season_id: seasonId })
+          .order("minutes", { ascending: false })
+          .limit(1000);
+
+        for (const delayMs of [500, 1500, 3000]) {
+          if (!isSchemaCacheMiss(result.error)) break;
+          await delay(delayMs);
+          result = await liveClient
+            .rpc("api_season_players_for_season", { p_season_id: seasonId })
+            .order("minutes", { ascending: false })
+            .limit(1000);
+        }
+
+        return result;
+      }
 
       const [roundResult, matchResult, clubResult, playerResult, teamAssetResult] = await Promise.all([
-        supabase.from("api_rounds").select("*").eq("season_id", seasonId).order("stage_number").order("round_number"),
-        supabase.from("api_matches").select("*").eq("season_id", seasonId).order("scheduled_at"),
-        supabase.from("api_clubs").select("*").eq("season_id", seasonId).order("points", { ascending: false }),
-        supabase.rpc("api_season_players_for_season", { p_season_id: seasonId }).order("minutes", { ascending: false }).limit(1000),
-        supabase.from("api_team_assets").select("*"),
+        liveClient.from("api_rounds").select("*").eq("season_id", seasonId).order("stage_number").order("round_number"),
+        liveClient.from("api_matches").select("*").eq("season_id", seasonId).order("scheduled_at"),
+        liveClient.from("api_clubs").select("*").eq("season_id", seasonId).order("points", { ascending: false }),
+        loadSeasonPlayers(),
+        liveClient.from("api_team_assets").select("*"),
       ]);
       const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error ?? teamAssetResult.error;
       if (firstError) setError(firstError.message);

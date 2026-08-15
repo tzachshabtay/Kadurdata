@@ -55,7 +55,9 @@ def main() -> int:
                     """,
                     (migration_file.name, checksum),
                 )
+            cur.execute("notify pgrst, 'reload schema'")
         conn.commit()
+        print("requested PostgREST schema cache reload")
 
     return 0
 
