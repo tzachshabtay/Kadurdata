@@ -300,7 +300,7 @@ export function App() {
     setCompetitionId((current) => current || defaultCompetition?.competition_id || "");
     setSeasonId((current) => current || defaultSeason?.season_id || "");
     setMetricCode((current) => current || preferredMetric(nextMetrics));
-    setLeaderMetricCode((current) => nextMetrics.some((metric) => metric.code === current) ? current : preferredMetric(nextMetrics));
+    setLeaderMetricCode((current) => nextMetrics.some((metric) => metric.code === leaderboardSourceMetricCode(current)) ? current : preferredMetric(nextMetrics));
     setLoading(false);
   }
 
@@ -479,14 +479,14 @@ export function App() {
 
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
-        p_metric_code: leaderMetricCode,
+        p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
       });
       if (cancelled) return;
       if (result.error) {
         setLeaderboardError(result.error.message);
         setLeaderboardRows([]);
       } else {
-        setLeaderboardRows(((result.data ?? []) as PlayerLeaderboardRow[]).sort(compareLeaderboardRows));
+        setLeaderboardRows(prepareLeaderboardRows((result.data ?? []) as PlayerLeaderboardRow[], players, leaderMetricCode));
       }
       setLeaderboardLoading(false);
     }
@@ -518,14 +518,14 @@ export function App() {
 
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
-        p_metric_code: squadMetricCode,
+        p_metric_code: leaderboardSourceMetricCode(squadMetricCode),
       });
       if (cancelled) return;
       if (result.error) {
         setSquadLeaderboardError(result.error.message);
         setSquadLeaderboardRows([]);
       } else {
-        setSquadLeaderboardRows(((result.data ?? []) as PlayerLeaderboardRow[]).sort(compareLeaderboardRows));
+        setSquadLeaderboardRows(prepareLeaderboardRows((result.data ?? []) as PlayerLeaderboardRow[], players, squadMetricCode));
       }
       setSquadLeaderboardLoading(false);
     }
@@ -581,7 +581,17 @@ export function App() {
   const leaderboardMetrics = useMemo<LeaderboardMetricOption[]>(
     () => [
       ...seasonLeaderboardMetrics,
-      ...playerMetrics.map((metric) => ({ code: metric.code, name: metric.name, value_type: metric.value_type, kind: "match" as const })),
+      ...playerMetrics.flatMap((metric): LeaderboardMetricOption[] => {
+        const rawMetric: LeaderboardMetricOption = {
+          code: metric.code,
+          name: metric.name,
+          value_type: metric.value_type,
+          kind: "match",
+        };
+        return metric.value_type === "count" && metric.code !== "minutes"
+          ? [rawMetric, { ...rawMetric, code: `${metric.code}::per90`, name: `${metric.name} (90 min)`, value_type: "rate" }]
+          : [rawMetric];
+      }),
     ],
     [playerMetrics],
   );
@@ -1508,6 +1518,30 @@ function compareLeaderboardRows(a: PlayerLeaderboardRow, b: PlayerLeaderboardRow
   return bValue - aValue || bSecondary - aSecondary || a.display_name.localeCompare(b.display_name);
 }
 
+function leaderboardSourceMetricCode(metricCode: string) {
+  return metricCode.replace(/::per90$/, "");
+}
+
+function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPlayer[], metricCode: string) {
+  if (!metricCode.endsWith("::per90")) return [...rows].sort(compareLeaderboardRows);
+
+  const minutesByPlayer = new Map(players.map((player) => [player.player_id, Number(player.minutes)]));
+  return rows.map((row): PlayerLeaderboardRow => {
+    const minutes = minutesByPlayer.get(row.player_id) ?? 0;
+    const total = row.total_value === null ? Number(row.leaderboard_value) : Number(row.total_value);
+    const value = minutes > 0 && Number.isFinite(total) ? total * 90 / minutes : null;
+    return {
+      ...row,
+      metric_code: metricCode,
+      metric_name: `${row.metric_name} (90 min)`,
+      value_type: "rate",
+      aggregation: "weighted",
+      leaderboard_value: value,
+      average_value: value,
+    };
+  }).sort(compareLeaderboardRows);
+}
+
 function makeSeasonSummaryLeaderboard(players: SeasonPlayer[], seasonId: string, metricCode: string) {
   const metric = seasonLeaderboardMetrics.find((item) => item.code === metricCode) ?? seasonLeaderboardMetrics[0];
   return players.map((player): PlayerLeaderboardRow => {
@@ -1536,9 +1570,10 @@ function makeSeasonSummaryLeaderboard(players: SeasonPlayer[], seasonId: string,
 }
 
 function makeDemoLeaderboard(players: SeasonPlayer[], seasonId: string, metricCode: string) {
-  const metric = demoMetrics.find((item) => item.code === metricCode) ?? demoMetrics[0];
+  const sourceMetricCode = leaderboardSourceMetricCode(metricCode);
+  const metric = demoMetrics.find((item) => item.code === sourceMetricCode) ?? demoMetrics[0];
   const averages = [88.4, 84.9, 86.1, 82.7, 79.8];
-  return players.map((player, index): PlayerLeaderboardRow => {
+  const rows = players.map((player, index): PlayerLeaderboardRow => {
     const value = metric.code === "goals" ? Number(player.goals)
       : metric.code === "assists" ? Number(player.assists)
         : metric.code === "rating_365" ? Number(player.average_rating)
@@ -1565,7 +1600,8 @@ function makeDemoLeaderboard(players: SeasonPlayer[], seasonId: string, metricCo
       numerator_value: numerator,
       denominator_value: denominator,
     };
-  }).sort(compareLeaderboardRows);
+  });
+  return prepareLeaderboardRows(rows, players, metricCode);
 }
 
 function cleanTeamName(name: string) {
