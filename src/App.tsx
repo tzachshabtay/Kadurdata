@@ -355,7 +355,7 @@ export function App() {
         supabase.from("api_rounds").select("*").eq("season_id", seasonId).order("stage_number").order("round_number"),
         supabase.from("api_matches").select("*").eq("season_id", seasonId).order("scheduled_at"),
         supabase.from("api_clubs").select("*").eq("season_id", seasonId).order("points", { ascending: false }),
-        supabase.from("api_season_players").select("*").eq("season_id", seasonId).order("minutes", { ascending: false }).limit(1000),
+        supabase.rpc("api_season_players_for_season", { p_season_id: seasonId }).order("minutes", { ascending: false }).limit(1000),
         supabase.from("api_team_assets").select("*"),
       ]);
       const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error ?? teamAssetResult.error;

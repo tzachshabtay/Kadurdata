@@ -1,0 +1,36 @@
+name: Deploy Database Migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify required secret
+        run: test -n "$SUPABASE_DB_URL" || (echo "SUPABASE_DB_URL secret is required" && exit 1)
+
+      - name: Validate Supabase DB URL
+        run: python scripts/validate_supabase_db_url.py
+
+      - name: Apply database migrations
+        run: python scripts/apply_migrations.py
