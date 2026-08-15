@@ -107,13 +107,16 @@ Use:
 
 ### 3. FotMob public/app endpoints
 
-Status: Rich football data source, but current direct endpoint tests returned website HTML/404 from this environment. Community tools still document useful endpoints and historic access patterns.
+Status: Rich football data source. Its rendered league pages expose structured
+Next.js data, and the current match-id endpoint returns direct JSON.
 
 Known/community endpoints:
 
 - `https://www.fotmob.com/api/matches?date=YYYYMMDD`
 - `https://www.fotmob.com/api/matchDetails?matchId={matchId}`
 - league page: `https://www.fotmob.com/leagues/127/stats/ligat-haal/players`
+- current match details: `https://www.fotmob.com/api/data/matchDetails?matchId={matchId}`
+- historical league page: `https://www.fotmob.com/leagues/127/overview/ligat-haal?season=2024%2F2025`
 
 Relevant tooling:
 
@@ -122,6 +125,11 @@ Relevant tooling:
 - `fotmob_get_season_stats()` lists player stat names such as accurate passes per 90, accurate long balls per 90, xG, xA, xGOT, FotMob rating, shots, successful tackles, interceptions, possession won final third, saves, clean sheets, cards.
 
 Pros:
+
+- League pages currently advertise Ligat Ha'Al seasons from 2010/11 onward and
+  include full fixture/result lists for a selected historical season.
+- Match details are addressable by stable match id; player stats are available
+  when that match's coverage level includes ratings/lineups.
 
 - Public UI has many seasons for Ligat Ha'Al.
 - Season aggregate stat coverage is broad.

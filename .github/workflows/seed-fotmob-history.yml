@@ -1,0 +1,67 @@
+name: Seed FotMob History
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed_mode:
+        description: "Historical fixtures only or fixtures plus available player stats."
+        required: false
+        default: "fixtures"
+        type: choice
+        options:
+          - fixtures
+          - full
+      seasons:
+        description: "Optional comma-separated seasons, such as 2024/2025,2023/2024. Blank means all historical seasons."
+        required: false
+        default: ""
+      match_limit:
+        description: "Matches per season. Use 0 for every match."
+        required: false
+        default: "0"
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SEED_MODE: ${{ inputs.seed_mode }}
+      SEASONS: ${{ inputs.seasons }}
+      MATCH_LIMIT: ${{ inputs.match_limit }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify required secrets
+        run: test -n "$SUPABASE_DB_URL" || (echo "SUPABASE_DB_URL secret is required" && exit 1)
+
+      - name: Apply database migrations
+        run: python scripts/apply_migrations.py
+
+      - name: Fetch FotMob history
+        run: |
+          args=(--allow-fetch-failures --workers 8 --retries 3)
+          if [ "$SEED_MODE" = "fixtures" ]; then
+            args+=(--fixtures-only)
+          fi
+          if [ -n "$SEASONS" ]; then
+            args+=(--seasons "$SEASONS")
+          fi
+          if [ "${MATCH_LIMIT:-0}" != "0" ]; then
+            args+=(--limit "$MATCH_LIMIT")
+          fi
+          python scripts/ingest_fotmob.py "${args[@]}"
+
+      - name: Load Supabase
+        run: python scripts/load_fotmob_to_supabase.py

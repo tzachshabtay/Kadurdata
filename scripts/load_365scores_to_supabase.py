@@ -983,8 +983,8 @@ def ensure_players(cur: psycopg.Cursor, source_id: str, rows: list[dict[str, Any
             name,
             position_name,
             jsonb_build_object(
-              '365_country_id', country_id,
-              '365_source_player_id', source_player_id
+              'source_country_id', country_id,
+              'source_player_id', source_player_id
             )
           from new_players
           returning id, display_name, metadata
@@ -996,7 +996,7 @@ def ensure_players(cur: psycopg.Cursor, source_id: str, rows: list[dict[str, Any
         select
           %s,
           'player',
-          metadata->>'365_source_player_id',
+          metadata->>'source_player_id',
           'core.players',
           id,
           display_name,

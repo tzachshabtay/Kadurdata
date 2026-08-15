@@ -6,6 +6,7 @@ Israeli soccer data pipeline and schema exploration.
 
 - React + TypeScript frontend: `src/`
 - 365Scores Israeli competition ingestion: `scripts/ingest_365scores.py`
+- FotMob historical Ligat Ha'Al ingestion: `scripts/ingest_fotmob.py`
 - Supabase/Postgres migration runner: `scripts/apply_migrations.py`
 - Supabase loader: `scripts/load_365scores_to_supabase.py`
 - Database schema and public API views: `db/migrations/`
@@ -28,7 +29,10 @@ Use the Supabase Postgres connection string for `SUPABASE_DB_URL`. The seed GitH
 Scheduled runs use a recent rolling window across every competition. Manual
 runs default to a full backfill of every result season and current fixture
 season still exposed by 365Scores. Older winner/standings-only history is not
-loaded as an empty season because it has no match or player-stat payloads.
+loaded from 365Scores because it has no match payloads. The separate
+`Seed FotMob History` workflow fills Ligat Ha'Al seasons from 2010/11 through
+2024/25 with fixtures and results, plus player-match stats wherever FotMob's
+historical match pages expose them.
 
 Use the public Supabase anon key for `SUPABASE_ANON_KEY`. The GitHub Pages frontend uses it to query read-only public views:
 
@@ -48,6 +52,17 @@ python3 scripts/apply_migrations.py
 python3 scripts/ingest_365scores.py --all-israeli-competitions
 python3 scripts/load_365scores_to_supabase.py
 ```
+
+For historical Ligat Ha'Al seasons:
+
+```bash
+python3 scripts/ingest_fotmob.py --fixtures-only
+python3 scripts/load_fotmob_to_supabase.py
+```
+
+Omit `--fixtures-only` to also request historical match pages and import the
+player metrics available for those matches. The FotMob loader uses a separate
+source identity and maps rows into the same canonical competition and seasons.
 
 For a quick catalog refresh without player and team payloads:
 
