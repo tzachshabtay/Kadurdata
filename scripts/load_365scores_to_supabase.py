@@ -851,7 +851,7 @@ def collect_player_stat_metric_specs(rows: list[dict[str, str]]) -> dict[str, tu
         specs["rating_365"] = ("player_match", "rating")
     for row in rows:
         for base in {metric_from_stat_column(column) for column in row.keys() if metric_from_stat_column(column)}:
-            raw_value = row.get(f"stat_{base}_raw")
+            raw_value = empty_to_none(row.get(f"stat_{base}_raw"))
             if to_float(row.get(f"stat_{base}_value")) is not None or raw_value:
                 specs.setdefault(base, ("player_match", "count"))
             if to_float(row.get(f"stat_{base}_attempted")) is not None:
@@ -1326,6 +1326,8 @@ def load_player_rows(
             value = to_float(row.get(f"stat_{base}_value"))
             attempted = to_float(row.get(f"stat_{base}_attempted"))
             percentage = to_float(row.get(f"stat_{base}_percentage"))
+            if raw_value is None and value is None and attempted is None and percentage is None:
+                continue
 
             params = stat_observation_params(
                 source_id,
