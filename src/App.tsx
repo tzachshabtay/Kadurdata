@@ -41,7 +41,13 @@ import type {
 type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
-type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type"> & { kind: "season" | "match" };
+type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type" | "denominator_metric_code"> & { kind: "season" | "match" };
+type LeaderboardQualification = {
+  source: "minutes" | "denominator" | "matches";
+  unit: string;
+  defaultValue: number;
+  step: number;
+};
 type PlayerChartMetric = Metric & {
   chartKey: string;
   chartMode: "single" | "paired";
@@ -61,9 +67,9 @@ type PlayerChartPoint = {
 const numberFormatter = new Intl.NumberFormat("en-US");
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
 const seasonLeaderboardMetrics: LeaderboardMetricOption[] = [
-  { code: "season_appearances", name: "Appearances", value_type: "count", kind: "season" },
-  { code: "season_starts", name: "Starts", value_type: "count", kind: "season" },
-  { code: "season_minutes", name: "Minutes played", value_type: "count", kind: "season" },
+  { code: "season_appearances", name: "Appearances", value_type: "count", denominator_metric_code: null, kind: "season" },
+  { code: "season_starts", name: "Starts", value_type: "count", denominator_metric_code: null, kind: "season" },
+  { code: "season_minutes", name: "Minutes played", value_type: "count", denominator_metric_code: null, kind: "season" },
 ];
 const comparisonMetrics = [
   "team_possession",
@@ -246,6 +252,8 @@ export function App() {
   const [metricCode, setMetricCode] = useState("");
   const [leaderMetricCode, setLeaderMetricCode] = useState("goals");
   const [squadMetricCode, setSquadMetricCode] = useState("season_minutes");
+  const [leaderMinimums, setLeaderMinimums] = useState<Record<string, number>>({});
+  const [squadMinimums, setSquadMinimums] = useState<Record<string, number>>({});
   const [matchSide, setMatchSide] = useState<"home" | "away">("home");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
   const [clubFilter, setClubFilter] = useState("all");
@@ -586,6 +594,7 @@ export function App() {
           code: metric.code,
           name: metric.name,
           value_type: metric.value_type,
+          denominator_metric_code: metric.denominator_metric_code,
           kind: "match",
         };
         return metric.value_type === "count" && metric.code !== "minutes"
@@ -595,6 +604,11 @@ export function App() {
     ],
     [playerMetrics],
   );
+  const leaderQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === leaderMetricCode));
+  const squadQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === squadMetricCode));
+  const leaderMinimum = leaderMinimums[leaderMetricCode] ?? leaderQualification.defaultValue;
+  const squadMinimum = squadMinimums[squadMetricCode] ?? squadQualification.defaultValue;
+  const qualifiedLeaderboardRows = filterLeaderboardRows(leaderboardRows, players, leaderQualification, leaderMinimum);
 
   const standings = useMemo(
     () => [...clubs].sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference),
@@ -621,10 +635,11 @@ export function App() {
     () => players.filter((player) => player.team_id === clubId),
     [clubId, players],
   );
-  const clubSquadLeaders = useMemo(() => {
+  const clubSquadLeaderboardRows = useMemo(() => {
     const squadPlayerIds = new Set(clubSquad.map((player) => player.player_id));
     return squadLeaderboardRows.filter((player) => squadPlayerIds.has(player.player_id));
   }, [clubSquad, squadLeaderboardRows]);
+  const clubSquadLeaders = filterLeaderboardRows(clubSquadLeaderboardRows, players, squadQualification, squadMinimum);
   const selectedPlayerMetric = playerChartMetrics.find((metric) => metric.chartKey === metricCode);
   const playerChartData = useMemo(
     () => aggregatePlayerHistory(playerHistory, selectedPlayerMetric),
@@ -725,10 +740,13 @@ export function App() {
             round={currentRound}
             roundMatches={roundMatches}
             standings={standings}
-            leaders={leaderboardRows}
+            leaders={qualifiedLeaderboardRows}
             metrics={leaderboardMetrics}
             metricCode={leaderMetricCode}
             setMetricCode={setLeaderMetricCode}
+            qualification={leaderQualification}
+            minimum={leaderMinimum}
+            setMinimum={(value) => setLeaderMinimums((current) => ({ ...current, [leaderMetricCode]: value }))}
             loading={leaderboardLoading}
             error={leaderboardError}
             openMatch={openMatch}
@@ -763,6 +781,9 @@ export function App() {
             metrics={leaderboardMetrics}
             metricCode={squadMetricCode}
             setMetricCode={setSquadMetricCode}
+            qualification={squadQualification}
+            minimum={squadMinimum}
+            setMinimum={(value) => setSquadMinimums((current) => ({ ...current, [squadMetricCode]: value }))}
             leaderboardLoading={squadLeaderboardLoading}
             leaderboardError={squadLeaderboardError}
             openMatch={openMatch}
@@ -806,6 +827,9 @@ function OverviewView({
   metrics,
   metricCode,
   setMetricCode,
+  qualification,
+  minimum,
+  setMinimum,
   loading,
   error,
   openMatch,
@@ -821,6 +845,9 @@ function OverviewView({
   metrics: LeaderboardMetricOption[];
   metricCode: string;
   setMetricCode: (metric: string) => void;
+  qualification: LeaderboardQualification;
+  minimum: number;
+  setMinimum: (value: number) => void;
   loading: boolean;
   error: string | null;
   openMatch: (match: Match) => void;
@@ -877,6 +904,7 @@ function OverviewView({
               </select>
             </label>
           </div>
+          <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} />
           <div className="leader-list">
             {loading ? <InlineLoading /> : error ? <EmptyState text="Leaderboard data could not be loaded." /> : leaders.length ? leaders.map((player, index) => (
               <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
@@ -884,7 +912,7 @@ function OverviewView({
                 <span className="leader-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "")}</small></span>
                 <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{player.aggregation} · {player.sample_size} matches</small></span>
               </button>
-            )) : <EmptyState text="No leaderboard data is available for this metric." />}
+            )) : <EmptyState text="No players meet the current minimum sample." />}
           </div>
         </section>
       </div>
@@ -990,6 +1018,9 @@ function ClubsView({
   metrics,
   metricCode,
   setMetricCode,
+  qualification,
+  minimum,
+  setMinimum,
   leaderboardLoading,
   leaderboardError,
   openMatch,
@@ -1004,6 +1035,9 @@ function ClubsView({
   metrics: LeaderboardMetricOption[];
   metricCode: string;
   setMetricCode: (code: string) => void;
+  qualification: LeaderboardQualification;
+  minimum: number;
+  setMinimum: (value: number) => void;
   leaderboardLoading: boolean;
   leaderboardError: string | null;
   openMatch: (match: Match) => void;
@@ -1060,6 +1094,7 @@ function ClubsView({
                       </select>
                     </label>
                   </div>
+                  <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} />
                   <div className="squad-list">
                     {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text="Squad leaderboard data could not be loaded." /> : squadLeaders.length ? squadLeaders.map((leader, index) => {
                       const player = squadByPlayerId.get(leader.player_id);
@@ -1071,7 +1106,7 @@ function ClubsView({
                           <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
                         </button>
                       );
-                    }) : <EmptyState text="No squad data is available for this metric." />}
+                    }) : <EmptyState text="No squad players meet the current minimum sample." />}
                   </div>
                 </section>
               </div>
@@ -1080,6 +1115,43 @@ function ClubsView({
         </section>
       </div>
     </>
+  );
+}
+
+function LeaderboardQualificationFilter({
+  qualification,
+  minimum,
+  setMinimum,
+  qualifiedCount,
+  loading,
+}: {
+  qualification: LeaderboardQualification;
+  minimum: number;
+  setMinimum: (value: number) => void;
+  qualifiedCount: number;
+  loading: boolean;
+}) {
+  return (
+    <label className="qualification-filter">
+      <span className="qualification-copy">
+        <strong>Minimum sample</strong>
+        <small>{loading ? "Updating ranking" : `${qualifiedCount} ${qualifiedCount === 1 ? "player qualifies" : "players qualify"}`}</small>
+      </span>
+      <span className="qualification-input">
+        <input
+          type="number"
+          min="0"
+          step={qualification.step}
+          value={minimum}
+          onChange={(event) => {
+            if (Number.isNaN(event.currentTarget.valueAsNumber)) return;
+            setMinimum(Math.max(0, event.currentTarget.valueAsNumber));
+          }}
+          aria-label={`Minimum ${qualification.unit}`}
+        />
+        <small>{qualification.unit}</small>
+      </span>
+    </label>
   );
 }
 
@@ -1516,6 +1588,52 @@ function compareLeaderboardRows(a: PlayerLeaderboardRow, b: PlayerLeaderboardRow
   const aSecondary = a.value_type === "percentage" ? Number(a.denominator_value ?? 0) : Number(a.sample_size);
   const bSecondary = b.value_type === "percentage" ? Number(b.denominator_value ?? 0) : Number(b.sample_size);
   return bValue - aValue || bSecondary - aSecondary || a.display_name.localeCompare(b.display_name);
+}
+
+function getLeaderboardQualification(metric?: LeaderboardMetricOption): LeaderboardQualification {
+  if (metric?.code.endsWith("::per90")) {
+    return { source: "minutes", unit: "minutes", defaultValue: 450, step: 90 };
+  }
+  if (metric?.value_type === "percentage") {
+    return {
+      source: "denominator",
+      unit: percentageQualificationUnit(metric.denominator_metric_code),
+      defaultValue: defaultPercentageQualification(metric.denominator_metric_code),
+      step: 1,
+    };
+  }
+  if (metric && ["rating", "average", "ratio"].includes(metric.value_type)) {
+    return { source: "matches", unit: "matches", defaultValue: 5, step: 1 };
+  }
+  return { source: "matches", unit: "matches", defaultValue: 1, step: 1 };
+}
+
+function defaultPercentageQualification(denominatorCode: string | null) {
+  if (denominatorCode === "passes_attempted") return 100;
+  if (denominatorCode === "long_passes_attempted") return 25;
+  if (denominatorCode === "ground_duels_attempted" || denominatorCode === "aerial_duels_attempted") return 20;
+  return 10;
+}
+
+function percentageQualificationUnit(denominatorCode: string | null) {
+  return denominatorCode ? denominatorCode.replace(/_attempted$/, "").replace(/_/g, " ") : "attempts";
+}
+
+function filterLeaderboardRows(
+  rows: PlayerLeaderboardRow[],
+  players: SeasonPlayer[],
+  qualification: LeaderboardQualification,
+  minimum: number,
+) {
+  const minutesByPlayer = new Map(players.map((player) => [player.player_id, Number(player.minutes)]));
+  return rows.filter((row) => {
+    const sample = qualification.source === "minutes"
+      ? minutesByPlayer.get(row.player_id) ?? 0
+      : qualification.source === "denominator"
+        ? Number(row.denominator_value ?? 0)
+        : Number(row.sample_size);
+    return sample >= minimum;
+  });
 }
 
 function leaderboardSourceMetricCode(metricCode: string) {
