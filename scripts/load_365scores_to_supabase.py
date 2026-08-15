@@ -353,7 +353,7 @@ def get_or_create_team(
                 primary_color = coalesce(%s, primary_color),
                 secondary_color = coalesce(%s, secondary_color),
                 logo_url = coalesce(%s, logo_url),
-                logo_source_id = case when %s is not null then %s else logo_source_id end
+                logo_source_id = case when %s::text is not null then %s::uuid else logo_source_id end
             where id = %s
             """,
             (name, primary_color, secondary_color, logo_url, logo_url, source_id, mapped),
