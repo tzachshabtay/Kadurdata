@@ -30,6 +30,7 @@ Use the public Supabase anon key for `SUPABASE_ANON_KEY`. The GitHub Pages front
 - `public.api_overview`
 - `public.api_players`
 - `public.api_metrics`
+- `public.api_player_leaderboard(season, metric)`
 - `public.api_player_match_stats`
 - `public.api_team_match_stats`
 

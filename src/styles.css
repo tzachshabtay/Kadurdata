@@ -698,7 +698,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .leader-metric-select select {
-  width: 154px;
+  width: 182px;
   height: 34px;
   padding: 0 28px 0 9px;
   color: var(--text);

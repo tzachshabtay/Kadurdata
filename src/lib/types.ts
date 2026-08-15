@@ -119,6 +119,23 @@ export type SeasonPlayer = {
   average_rating: number | null;
 };
 
+export type PlayerLeaderboardRow = {
+  season_id: string;
+  player_id: string;
+  display_name: string;
+  team_id: string | null;
+  team_name: string | null;
+  metric_id: string;
+  metric_code: string;
+  metric_name: string;
+  value_type: string;
+  aggregation: "total" | "average";
+  sample_size: number;
+  leaderboard_value: number | null;
+  total_value: number | null;
+  average_value: number | null;
+};
+
 export type Metric = {
   metric_id: string;
   code: string;
