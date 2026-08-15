@@ -12,7 +12,6 @@ import {
   RefreshCcw,
   Search,
   Shield,
-  Trophy,
   Users,
 } from "lucide-react";
 import {
@@ -482,8 +481,8 @@ export function App() {
       <header className="site-header">
         <div className="header-main">
           <button className="brand" type="button" onClick={() => navigate("overview")}>
-            <span className="brand-mark"><Trophy size={19} aria-hidden="true" /></span>
-            <span><strong>Kadurdata</strong><small>Israeli football intelligence</small></span>
+            <span className="brand-mark" aria-hidden="true">KD</span>
+            <span><strong>KADURDATA</strong><small>Israeli football intelligence</small></span>
           </button>
 
           <nav className="primary-nav" aria-label="Primary navigation">
@@ -870,7 +869,7 @@ function PlayersView({
       <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} players`} title="Player explorer" description="Filter the league by role or club, then track an individual metric from match to match." />
       <div className="player-filters">
         <div className="segmented role-segments">
-          {roles.map((role) => <button className={roleFilter === role ? "active" : ""} key={role} type="button" onClick={() => setRoleFilter(role)}>{role}</button>)}
+          {roles.map((role) => <button aria-label={role} className={roleFilter === role ? "active" : ""} key={role} title={role} type="button" onClick={() => setRoleFilter(role)}>{roleLabel(role)}</button>)}
         </div>
         <label className="filter-select"><ListFilter size={16} /><select value={clubFilter} onChange={(event) => setClubFilter(event.target.value)}><option value="all">All clubs</option>{clubs.map((club) => <option key={club.team_id} value={club.team_id}>{cleanTeamName(club.team_name)}</option>)}</select></label>
         <label className="search-field"><Search size={17} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search players" /></label>
@@ -909,12 +908,11 @@ function PlayersView({
                 {detailLoading ? <InlineLoading /> : chartData.length ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 18, right: 12, bottom: 4, left: -12 }}>
-                      <defs><linearGradient id="performanceFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#137a55" stopOpacity={0.28} /><stop offset="100%" stopColor="#137a55" stopOpacity={0.02} /></linearGradient></defs>
-                      <CartesianGrid vertical={false} stroke="#dfe6e2" strokeDasharray="3 5" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} minTickGap={28} />
-                      <YAxis axisLine={false} tickLine={false} width={54} />
-                      <Tooltip contentStyle={{ border: "1px solid #cfd9d3", borderRadius: 6, boxShadow: "0 12px 30px rgba(20, 35, 29, .12)" }} formatter={(value) => [formatMetric(Number(value), metric?.value_type), metric?.name ?? "Value"]} labelFormatter={(_, payload) => payload?.[0]?.payload?.opponent ?? "Match"} />
-                      <Area type="monotone" dataKey="value" stroke="#137a55" strokeWidth={3} fill="url(#performanceFill)" dot={{ r: 3, fill: "#f8faf8", strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
+                      <XAxis dataKey="date" axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} minTickGap={28} />
+                      <YAxis axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} width={54} />
+                      <Tooltip contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }} itemStyle={{ color: "#35C9B6" }} labelStyle={{ color: "#F4F7FA", fontWeight: 700 }} formatter={(value) => [formatMetric(Number(value), metric?.value_type), metric?.name ?? "Value"]} labelFormatter={(_, payload) => payload?.[0]?.payload?.opponent ?? "Match"} />
+                      <Area type="monotone" dataKey="value" stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : <EmptyState text="No observations were recorded for this player and metric." />}
@@ -1078,6 +1076,10 @@ function preferredMetric(metrics: Metric[]) {
 
 function competitionLabel(name?: string) {
   return name?.toLowerCase().includes("israeli premier") ? "Ligat Ha'Al" : name ?? "Competition";
+}
+
+function roleLabel(role: RoleFilter) {
+  return ({ All: "All", Goalkeepers: "GK", Defenders: "DEF", Midfielders: "MID", Attackers: "FWD", Other: "Other" } as Record<RoleFilter, string>)[role];
 }
 
 function cleanTeamName(name: string) {
