@@ -5,7 +5,6 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  CircleDot,
   LayoutDashboard,
   ListFilter,
   Loader2,
@@ -31,7 +30,6 @@ import type {
   MatchPlayerStat,
   MatchTeamStat,
   Metric,
-  Overview,
   PlayerHistory,
   Round,
   Season,
@@ -40,11 +38,20 @@ import type {
 
 type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
+type LeaderMetric = "goals" | "assists" | "contributions" | "average_rating" | "minutes" | "appearances" | "starts";
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
-const compactFormatter = new Intl.NumberFormat("en-US", { notation: "compact" });
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
+const leaderMetricOptions: Array<{ value: LeaderMetric; label: string; unit: string }> = [
+  { value: "goals", label: "Goals", unit: "goals" },
+  { value: "assists", label: "Assists", unit: "assists" },
+  { value: "contributions", label: "Goal contributions", unit: "G+A" },
+  { value: "average_rating", label: "Average rating", unit: "rating" },
+  { value: "minutes", label: "Minutes played", unit: "minutes" },
+  { value: "appearances", label: "Appearances", unit: "apps" },
+  { value: "starts", label: "Starts", unit: "starts" },
+];
 const comparisonMetrics = [
   "team_possession",
   "team_total_shots",
@@ -200,7 +207,6 @@ const demoMetrics: Metric[] = [
 
 export function App() {
   const [view, setView] = useState<View>(readViewFromHash);
-  const [overview, setOverview] = useState<Overview | null>(null);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
@@ -220,6 +226,7 @@ export function App() {
   const [metricCode, setMetricCode] = useState("");
   const [matchSide, setMatchSide] = useState<"home" | "away">("home");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
+  const [leaderMetric, setLeaderMetric] = useState<LeaderMetric>("goals");
   const [clubFilter, setClubFilter] = useState("all");
   const [playerQuery, setPlayerQuery] = useState("");
   const [refreshToken, setRefreshToken] = useState(0);
@@ -233,7 +240,6 @@ export function App() {
     setError(null);
 
     if (!hasSupabaseConfig || !supabase) {
-      setOverview({ match_count: 240, player_count: 525, team_count: 14, stat_observation_count: 622000, latest_observed_at: null });
       setCompetitions([demoCompetition]);
       setSeasons([demoSeason]);
       setMetrics(demoMetrics);
@@ -269,19 +275,6 @@ export function App() {
     setSeasonId((current) => current || defaultSeason?.season_id || "");
     setMetricCode((current) => current || preferredMetric(nextMetrics));
     setLoading(false);
-
-    const overviewResult = await supabase.from("api_overview").select("*").single();
-    if (!overviewResult.error) {
-      setOverview(overviewResult.data as Overview);
-    } else {
-      setOverview({
-        match_count: nextSeasons.reduce((total, season) => total + Number(season.match_count), 0),
-        player_count: defaultSeason?.player_count ?? 0,
-        team_count: defaultSeason?.team_count ?? 0,
-        stat_observation_count: 0,
-        latest_observed_at: null,
-      });
-    }
   }
 
   useEffect(() => {
@@ -426,9 +419,9 @@ export function App() {
     () => [...clubs].sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference),
     [clubs],
   );
-  const topScorers = useMemo(
-    () => [...players].sort((a, b) => Number(b.goals) - Number(a.goals) || Number(b.minutes) - Number(a.minutes)).slice(0, 5),
-    [players],
+  const seasonLeaders = useMemo(
+    () => [...players].sort((a, b) => leaderMetricValue(b, leaderMetric) - leaderMetricValue(a, leaderMetric) || Number(b.minutes) - Number(a.minutes)),
+    [leaderMetric, players],
   );
   const filteredPlayers = useMemo(() => {
     const query = playerQuery.trim().toLowerCase();
@@ -523,7 +516,6 @@ export function App() {
               ))}
             </select>
           </label>
-          <span className="data-status"><CircleDot size={15} aria-hidden="true" /> {compactFormatter.format(overview?.stat_observation_count ?? 0)} observations</span>
         </div>
       </header>
 
@@ -539,7 +531,9 @@ export function App() {
             round={currentRound}
             roundMatches={roundMatches}
             standings={standings}
-            scorers={topScorers}
+            leaders={seasonLeaders}
+            leaderMetric={leaderMetric}
+            setLeaderMetric={setLeaderMetric}
             openMatch={openMatch}
             openClub={(id) => { setClubId(id); navigate("clubs"); }}
             openPlayer={openPlayer}
@@ -603,7 +597,9 @@ function OverviewView({
   round,
   roundMatches,
   standings,
-  scorers,
+  leaders,
+  leaderMetric,
+  setLeaderMetric,
   openMatch,
   openClub,
   openPlayer,
@@ -613,7 +609,9 @@ function OverviewView({
   round?: Round;
   roundMatches: Match[];
   standings: Club[];
-  scorers: SeasonPlayer[];
+  leaders: SeasonPlayer[];
+  leaderMetric: LeaderMetric;
+  setLeaderMetric: (metric: LeaderMetric) => void;
   openMatch: (match: Match) => void;
   openClub: (id: string) => void;
   openPlayer: (id: string) => void;
@@ -639,27 +637,32 @@ function OverviewView({
 
         <section className="surface standings-surface">
           <SectionHeading eyebrow="League table" title="The leading pack" action="All clubs" onAction={() => openClub(standings[0]?.team_id ?? "")} />
-          <div className="mini-table" role="table" aria-label="League standings">
-            <div className="mini-table-head" role="row"><span>#</span><span>Club</span><span>GD</span><span>Pts</span></div>
-            {standings.slice(0, 7).map((club, index) => (
-              <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
-                <span className="rank">{index + 1}</span>
-                <span className="club-cell"><ClubBadge name={club.team_name} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
-                <span>{signed(club.goal_difference)}</span>
-                <strong>{club.points}</strong>
-              </button>
-            ))}
+          <div className="mini-table" aria-label="League standings">
+            <div className="mini-table-head"><span>#</span><span>Club</span><span>GD</span><span>Pts</span></div>
+            <div className="mini-table-body">
+              {standings.map((club, index) => (
+                <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
+                  <span className="rank">{index + 1}</span>
+                  <span className="club-cell"><ClubBadge name={club.team_name} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
+                  <span>{signed(club.goal_difference)}</span>
+                  <strong>{club.points}</strong>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="surface leaders-surface">
-          <SectionHeading eyebrow="Player leaders" title="Top scorers" action="All players" onAction={() => openPlayer(scorers[0]?.player_id ?? "")} />
+          <div className="leaderboard-heading">
+            <div><span>Player leaderboard</span><h2>{leaderMetricOptions.find((option) => option.value === leaderMetric)?.label}</h2></div>
+            <label className="leader-metric-select"><span>Sort by</span><select value={leaderMetric} onChange={(event) => setLeaderMetric(event.target.value as LeaderMetric)}>{leaderMetricOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          </div>
           <div className="leader-list">
-            {scorers.map((player, index) => (
+            {leaders.map((player, index) => (
               <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
                 <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
                 <span className="leader-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "")}</small></span>
-                <span className="leader-value"><strong>{formatNumber(player.goals)}</strong><small>goals</small></span>
+                <span className="leader-value"><strong>{formatLeaderMetric(player, leaderMetric)}</strong><small>{leaderMetricOptions.find((option) => option.value === leaderMetric)?.unit}</small></span>
               </button>
             ))}
           </div>
@@ -806,7 +809,7 @@ function ClubsView({ clubs, selectedClub, setClubId, matches, squad, openMatch, 
                 <section className="surface squad-panel">
                   <SectionHeading eyebrow={`${squad.length} players`} title="Season squad" />
                   <div className="squad-list">
-                    {[...squad].sort((a, b) => Number(b.minutes) - Number(a.minutes)).slice(0, 14).map((player) => (
+                    {[...squad].sort((a, b) => Number(b.minutes) - Number(a.minutes)).map((player) => (
                       <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
                         <span className="avatar">{initials(player.display_name)}</span>
                         <span><strong>{player.display_name}</strong><small>{player.primary_position ?? player.role_group}</small></span>
@@ -879,7 +882,7 @@ function PlayersView({
         <aside className="surface player-directory">
           <div className="rail-heading"><strong>{numberFormatter.format(players.length)} results</strong><span>Min · G · A</span></div>
           <div className="player-list">
-            {players.slice(0, 140).map((player) => (
+            {players.map((player) => (
               <button className={player.player_id === selectedPlayer?.player_id ? "active" : ""} key={player.player_id} type="button" onClick={() => selectPlayer(player.player_id)}>
                 <span className="avatar">{initials(player.display_name)}</span>
                 <span className="player-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "Free agent")} · {player.primary_position ?? player.role_group}</small></span>
@@ -915,7 +918,7 @@ function PlayersView({
                       <Area type="monotone" dataKey="value" stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
                     </AreaChart>
                   </ResponsiveContainer>
-                ) : <EmptyState text="No observations were recorded for this player and metric." />}
+                ) : <EmptyState text="No match data is available for this player and metric." />}
               </div>
               <div className="history-strip">
                 {chartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatMetric(item.value, metric?.value_type)}</strong><small>{item.score}</small></div>)}
@@ -1080,6 +1083,17 @@ function competitionLabel(name?: string) {
 
 function roleLabel(role: RoleFilter) {
   return ({ All: "All", Goalkeepers: "GK", Defenders: "DEF", Midfielders: "MID", Attackers: "FWD", Other: "Other" } as Record<RoleFilter, string>)[role];
+}
+
+function leaderMetricValue(player: SeasonPlayer, metric: LeaderMetric) {
+  if (metric === "contributions") return Number(player.goals) + Number(player.assists);
+  return Number(player[metric] ?? 0);
+}
+
+function formatLeaderMetric(player: SeasonPlayer, metric: LeaderMetric) {
+  const value = metric === "average_rating" ? player.average_rating : leaderMetricValue(player, metric);
+  if (value === null || !Number.isFinite(Number(value))) return "-";
+  return metric === "average_rating" ? Number(value).toFixed(2) : numberFormatter.format(Math.round(Number(value)));
 }
 
 function cleanTeamName(name: string) {
