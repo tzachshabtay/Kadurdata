@@ -244,13 +244,12 @@ export function App() {
       return;
     }
 
-    const [competitionResult, seasonResult, metricResult, overviewResult] = await Promise.all([
+    const [competitionResult, seasonResult, metricResult] = await Promise.all([
       supabase.from("api_competitions").select("*").order("name"),
       supabase.from("api_seasons").select("*").order("start_date", { ascending: false }),
       supabase.from("api_metrics").select("*").eq("subject_type", "player_match").order("name"),
-      supabase.from("api_overview").select("*").single(),
     ]);
-    const firstError = competitionResult.error ?? seasonResult.error ?? metricResult.error ?? overviewResult.error;
+    const firstError = competitionResult.error ?? seasonResult.error ?? metricResult.error;
     if (firstError) {
       setError(firstError.message);
       setLoading(false);
@@ -264,7 +263,6 @@ export function App() {
     const defaultSeason = nextSeasons.find((item) => item.competition_id === defaultCompetition?.competition_id && item.is_latest)
       ?? nextSeasons.find((item) => item.competition_id === defaultCompetition?.competition_id);
 
-    setOverview(overviewResult.data as Overview);
     setCompetitions(nextCompetitions);
     setSeasons(nextSeasons);
     setMetrics(nextMetrics);
@@ -272,6 +270,19 @@ export function App() {
     setSeasonId((current) => current || defaultSeason?.season_id || "");
     setMetricCode((current) => current || preferredMetric(nextMetrics));
     setLoading(false);
+
+    const overviewResult = await supabase.from("api_overview").select("*").single();
+    if (!overviewResult.error) {
+      setOverview(overviewResult.data as Overview);
+    } else {
+      setOverview({
+        match_count: nextSeasons.reduce((total, season) => total + Number(season.match_count), 0),
+        player_count: defaultSeason?.player_count ?? 0,
+        team_count: defaultSeason?.team_count ?? 0,
+        stat_observation_count: 0,
+        latest_observed_at: null,
+      });
+    }
   }
 
   useEffect(() => {
@@ -320,16 +331,12 @@ export function App() {
         supabase.from("api_season_players").select("*").eq("season_id", seasonId).order("minutes", { ascending: false }).limit(1000),
       ]);
       const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error;
-      if (firstError) {
-        setError(firstError.message);
-        setSeasonLoading(false);
-        return;
-      }
+      if (firstError) setError(firstError.message);
 
-      const nextRounds = (roundResult.data ?? []) as Round[];
-      const nextMatches = (matchResult.data ?? []) as Match[];
-      const nextClubs = (clubResult.data ?? []) as Club[];
-      const nextPlayers = (playerResult.data ?? []) as SeasonPlayer[];
+      const nextRounds = (roundResult.error ? [] : roundResult.data ?? []) as Round[];
+      const nextMatches = (matchResult.error ? [] : matchResult.data ?? []) as Match[];
+      const nextClubs = (clubResult.error ? [] : clubResult.data ?? []) as Club[];
+      const nextPlayers = (playerResult.error ? [] : playerResult.data ?? []) as SeasonPlayer[];
       const latestPlayedRound = [...nextRounds].reverse().find((round) => round.completed_match_count > 0) ?? nextRounds[nextRounds.length - 1];
 
       setRounds(nextRounds);
@@ -522,7 +529,7 @@ export function App() {
       </header>
 
       <main className="page-shell">
-        {error && <div className="error-banner"><strong>Data could not be loaded.</strong><span>{error}</span></div>}
+        {error && <div className="error-banner"><strong>Some data could not be loaded.</strong><span>{error}</span></div>}
         {!hasSupabaseConfig && <div className="demo-banner">Previewing the interface with sample data.</div>}
 
         {loading || seasonLoading ? (
