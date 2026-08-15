@@ -42,6 +42,15 @@ type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
 type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type"> & { kind: "season" | "match" };
+type PlayerChartPoint = {
+  match: number;
+  date: string;
+  value: number;
+  opponent: string;
+  score: string;
+  numerator: number | null;
+  denominator: number | null;
+};
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
@@ -64,6 +73,8 @@ const matchPlayerMetrics = [
   "goals",
   "assists",
   "pass_completion_pct",
+  "passes_completed",
+  "passes_attempted",
   "total_shots",
   "tackles_won",
   "minutes",
@@ -200,10 +211,10 @@ const demoPlayers: SeasonPlayer[] = [
 }));
 
 const demoMetrics: Metric[] = [
-  { metric_id: "rating", code: "rating_365", name: "Rating", subject_type: "player_match", value_type: "rating" },
-  { metric_id: "passes", code: "pass_completion_pct", name: "Pass completion", subject_type: "player_match", value_type: "percentage" },
-  { metric_id: "goals", code: "goals", name: "Goals", subject_type: "player_match", value_type: "count" },
-  { metric_id: "shots", code: "total_shots", name: "Total shots", subject_type: "player_match", value_type: "count" },
+  { metric_id: "rating", code: "rating_365", name: "Rating", subject_type: "player_match", value_type: "rating", numerator_metric_code: null, denominator_metric_code: null },
+  { metric_id: "passes", code: "pass_completion_pct", name: "Pass completion", subject_type: "player_match", value_type: "percentage", numerator_metric_code: "passes_completed", denominator_metric_code: "passes_attempted" },
+  { metric_id: "goals", code: "goals", name: "Goals", subject_type: "player_match", value_type: "count", numerator_metric_code: null, denominator_metric_code: null },
+  { metric_id: "shots", code: "total_shots", name: "Total shots", subject_type: "player_match", value_type: "count", numerator_metric_code: null, denominator_metric_code: null },
 ];
 
 export function App() {
@@ -219,6 +230,7 @@ export function App() {
   const [matchPlayerStats, setMatchPlayerStats] = useState<MatchPlayerStat[]>([]);
   const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
+  const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [competitionId, setCompetitionId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [roundId, setRoundId] = useState("");
@@ -227,6 +239,7 @@ export function App() {
   const [playerId, setPlayerId] = useState("");
   const [metricCode, setMetricCode] = useState("");
   const [leaderMetricCode, setLeaderMetricCode] = useState("goals");
+  const [squadMetricCode, setSquadMetricCode] = useState("season_minutes");
   const [matchSide, setMatchSide] = useState<"home" | "away">("home");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
   const [clubFilter, setClubFilter] = useState("all");
@@ -237,6 +250,8 @@ export function App() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [squadLeaderboardLoading, setSquadLeaderboardLoading] = useState(false);
+  const [squadLeaderboardError, setSquadLeaderboardError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function loadReferenceData() {
@@ -403,8 +418,14 @@ export function App() {
         setPlayerHistory([]);
         return;
       }
+      const selectedMetric = metrics.find((metric) => metric.code === metricCode);
+      const metricCodes = [...new Set([
+        metricCode,
+        selectedMetric?.numerator_metric_code,
+        selectedMetric?.denominator_metric_code,
+      ].filter((code): code is string => Boolean(code)))];
       if (!hasSupabaseConfig || !supabase) {
-        setPlayerHistory(makeDemoHistory(playerId, metricCode));
+        setPlayerHistory(makeDemoHistory(playerId, selectedMetric));
         return;
       }
       setDetailLoading(true);
@@ -413,16 +434,16 @@ export function App() {
         .select("*")
         .eq("season_id", seasonId)
         .eq("player_id", playerId)
-        .eq("metric_code", metricCode)
+        .in("metric_code", metricCodes)
         .order("scheduled_at")
-        .limit(250);
+        .limit(750);
       if (result.error) setError(result.error.message);
       setPlayerHistory((result.data ?? []) as PlayerHistory[]);
       setDetailLoading(false);
     }
 
     void loadPlayerDetail();
-  }, [metricCode, playerId, seasonId]);
+  }, [metricCode, metrics, playerId, seasonId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -466,6 +487,45 @@ export function App() {
     return () => { cancelled = true; };
   }, [leaderMetricCode, players, seasonId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSquadLeaderboard() {
+      if (view !== "clubs" || !seasonId || !squadMetricCode) return;
+
+      setSquadLeaderboardLoading(true);
+      setSquadLeaderboardError(null);
+
+      if (squadMetricCode.startsWith("season_")) {
+        setSquadLeaderboardRows(makeSeasonSummaryLeaderboard(players, seasonId, squadMetricCode));
+        setSquadLeaderboardLoading(false);
+        return;
+      }
+
+      if (!hasSupabaseConfig || !supabase) {
+        setSquadLeaderboardRows(makeDemoLeaderboard(players, seasonId, squadMetricCode));
+        setSquadLeaderboardLoading(false);
+        return;
+      }
+
+      const result = await supabase.rpc("api_player_leaderboard", {
+        p_season_id: seasonId,
+        p_metric_code: squadMetricCode,
+      });
+      if (cancelled) return;
+      if (result.error) {
+        setSquadLeaderboardError(result.error.message);
+        setSquadLeaderboardRows([]);
+      } else {
+        setSquadLeaderboardRows(((result.data ?? []) as PlayerLeaderboardRow[]).sort(compareLeaderboardRows));
+      }
+      setSquadLeaderboardLoading(false);
+    }
+
+    void loadSquadLeaderboard();
+    return () => { cancelled = true; };
+  }, [players, seasonId, squadMetricCode, view]);
+
   const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
   const currentRound = rounds.find((round) => round.round_id === roundId);
   const selectedMatch = matches.find((match) => match.match_id === matchId);
@@ -508,9 +568,21 @@ export function App() {
     () => players.filter((player) => player.team_id === clubId),
     [clubId, players],
   );
-  const playerChartData = useMemo(() => aggregatePlayerHistory(playerHistory), [playerHistory]);
+  const clubSquadLeaders = useMemo(() => {
+    const squadPlayerIds = new Set(clubSquad.map((player) => player.player_id));
+    return squadLeaderboardRows.filter((player) => squadPlayerIds.has(player.player_id));
+  }, [clubSquad, squadLeaderboardRows]);
+  const selectedPlayerMetric = playerMetrics.find((metric) => metric.code === metricCode);
+  const playerChartData = useMemo(
+    () => aggregatePlayerHistory(playerHistory, selectedPlayerMetric),
+    [playerHistory, selectedPlayerMetric],
+  );
+  const playerRatioNumerator = playerChartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0);
+  const playerRatioDenominator = playerChartData.reduce((total, point) => total + Number(point.denominator ?? 0), 0);
   const playerAverage = playerChartData.length
-    ? playerChartData.reduce((total, point) => total + point.value, 0) / playerChartData.length
+    ? selectedPlayerMetric?.value_type === "percentage" && playerRatioDenominator > 0
+      ? playerRatioNumerator * 100 / playerRatioDenominator
+      : playerChartData.reduce((total, point) => total + point.value, 0) / playerChartData.length
     : null;
   const matchPlayers = useMemo(() => pivotMatchPlayers(matchPlayerStats), [matchPlayerStats]);
   const visibleMatchPlayers = matchPlayers.filter((player) => player.side === matchSide);
@@ -629,6 +701,12 @@ export function App() {
             setClubId={setClubId}
             matches={clubMatches}
             squad={clubSquad}
+            squadLeaders={clubSquadLeaders}
+            metrics={leaderboardMetrics}
+            metricCode={squadMetricCode}
+            setMetricCode={setSquadMetricCode}
+            leaderboardLoading={squadLeaderboardLoading}
+            leaderboardError={squadLeaderboardError}
             openMatch={openMatch}
             openPlayer={openPlayer}
           />
@@ -651,6 +729,8 @@ export function App() {
             setMetricCode={setMetricCode}
             chartData={playerChartData}
             average={playerAverage}
+            averageNumerator={playerRatioDenominator > 0 ? playerRatioNumerator : null}
+            averageDenominator={playerRatioDenominator > 0 ? playerRatioDenominator : null}
             detailLoading={detailLoading}
           />
         )}
@@ -744,7 +824,7 @@ function OverviewView({
               <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
                 <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
                 <span className="leader-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "")}</small></span>
-                <span className="leader-value"><strong>{formatMetric(player.leaderboard_value, player.value_type)}</strong><small>{player.aggregation} · {player.sample_size} matches</small></span>
+                <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{player.aggregation} · {player.sample_size} matches</small></span>
               </button>
             )) : <EmptyState text="No leaderboard data is available for this metric." />}
           </div>
@@ -842,16 +922,39 @@ function MatchesView({
   );
 }
 
-function ClubsView({ clubs, selectedClub, setClubId, matches, squad, openMatch, openPlayer }: {
+function ClubsView({
+  clubs,
+  selectedClub,
+  setClubId,
+  matches,
+  squad,
+  squadLeaders,
+  metrics,
+  metricCode,
+  setMetricCode,
+  leaderboardLoading,
+  leaderboardError,
+  openMatch,
+  openPlayer,
+}: {
   clubs: Club[];
   selectedClub?: Club;
   setClubId: (id: string) => void;
   matches: Match[];
   squad: SeasonPlayer[];
+  squadLeaders: PlayerLeaderboardRow[];
+  metrics: LeaderboardMetricOption[];
+  metricCode: string;
+  setMetricCode: (code: string) => void;
+  leaderboardLoading: boolean;
+  leaderboardError: string | null;
   openMatch: (match: Match) => void;
   openPlayer: (id: string) => void;
 }) {
   const recent = matches.filter(isCompletedMatch).slice(0, 5);
+  const squadByPlayerId = new Map(squad.map((player) => [player.player_id, player]));
+  const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
+  const matchMetrics = metrics.filter((metric) => metric.kind === "match");
   return (
     <>
       <PageHeading eyebrow="Season directory" title="Clubs" description="Compare league position, form, results, and the players carrying each team through the season." />
@@ -889,15 +992,28 @@ function ClubsView({ clubs, selectedClub, setClubId, matches, squad, openMatch, 
                   {matches.slice(0, 8).map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />)}
                 </section>
                 <section className="surface squad-panel">
-                  <SectionHeading eyebrow={`${squad.length} players`} title="Season squad" />
+                  <div className="squad-leaderboard-heading">
+                    <div><span>{squad.length} players</span><h2>Season squad</h2></div>
+                    <label className="leader-metric-select squad-metric-select">
+                      <span>Rank by</span>
+                      <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
+                        <optgroup label="Season summary">{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                        <optgroup label="Match metrics">{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                      </select>
+                    </label>
+                  </div>
                   <div className="squad-list">
-                    {[...squad].sort((a, b) => Number(b.minutes) - Number(a.minutes)).map((player) => (
-                      <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
-                        <span className="avatar">{initials(player.display_name)}</span>
-                        <span><strong>{player.display_name}</strong><small>{player.primary_position ?? player.role_group}</small></span>
-                        <em>{numberFormatter.format(Math.round(Number(player.minutes)))}'</em>
-                      </button>
-                    ))}
+                    {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text="Squad leaderboard data could not be loaded." /> : squadLeaders.length ? squadLeaders.map((leader, index) => {
+                      const player = squadByPlayerId.get(leader.player_id);
+                      return (
+                        <button key={leader.player_id} type="button" onClick={() => openPlayer(leader.player_id)}>
+                          <span className="squad-rank">{String(index + 1).padStart(2, "0")}</span>
+                          <span className="avatar">{initials(leader.display_name)}</span>
+                          <span><strong>{leader.display_name}</strong><small>{player?.primary_position ?? player?.role_group ?? "Player"}</small></span>
+                          <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
+                        </button>
+                      );
+                    }) : <EmptyState text="No squad data is available for this metric." />}
                   </div>
                 </section>
               </div>
@@ -927,6 +1043,8 @@ function PlayersView({
   setMetricCode,
   chartData,
   average,
+  averageNumerator,
+  averageDenominator,
   detailLoading,
 }: {
   players: SeasonPlayer[];
@@ -944,8 +1062,10 @@ function PlayersView({
   metrics: Metric[];
   metricCode: string;
   setMetricCode: (code: string) => void;
-  chartData: Array<{ match: number; date: string; value: number; opponent: string; score: string }>;
+  chartData: PlayerChartPoint[];
   average: number | null;
+  averageNumerator: number | null;
+  averageDenominator: number | null;
   detailLoading: boolean;
 }) {
   const metric = metrics.find((item) => item.code === metricCode);
@@ -986,7 +1106,7 @@ function PlayersView({
                 <Stat label="Appearances" value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} starts`} />
                 <Stat label="Minutes" value={numberFormatter.format(Math.round(Number(selectedPlayer.minutes)))} note="Season total" />
                 <Stat label="Goals + assists" value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} goals · ${formatNumber(selectedPlayer.assists)} assists`} />
-                <Stat label={metric?.name ?? "Average"} value={average === null ? "-" : formatMetric(average, metric?.value_type)} note={`${chartData.length} matches sampled`} accent />
+                <Stat label={metric?.name ?? "Average"} value={average === null ? "-" : formatMetricWithRatio(average, metric?.value_type, averageNumerator, averageDenominator)} note={`${chartData.length} matches sampled`} accent />
               </section>
               <div className="trend-heading"><div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div><span className="trend-key"><i /> Season trend</span></div>
               <div className="chart-frame">
@@ -996,14 +1116,17 @@ function PlayersView({
                       <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
                       <XAxis dataKey="date" axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} minTickGap={28} />
                       <YAxis axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} width={54} />
-                      <Tooltip contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }} itemStyle={{ color: "#35C9B6" }} labelStyle={{ color: "#F4F7FA", fontWeight: 700 }} formatter={(value) => [formatMetric(Number(value), metric?.value_type), metric?.name ?? "Value"]} labelFormatter={(_, payload) => payload?.[0]?.payload?.opponent ?? "Match"} />
+                      <Tooltip contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }} itemStyle={{ color: "#35C9B6" }} labelStyle={{ color: "#F4F7FA", fontWeight: 700 }} formatter={(value, _name, item) => {
+                        const point = item.payload as PlayerChartPoint;
+                        return [formatMetricWithRatio(Number(value), metric?.value_type, point.numerator, point.denominator), metric?.name ?? "Value"];
+                      }} labelFormatter={(_, payload) => payload?.[0]?.payload?.opponent ?? "Match"} />
                       <Area type="monotone" dataKey="value" stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : <EmptyState text="No match data is available for this player and metric." />}
               </div>
               <div className="history-strip">
-                {chartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatMetric(item.value, metric?.value_type)}</strong><small>{item.score}</small></div>)}
+                {chartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatMetricWithRatio(item.value, metric?.value_type, item.numerator, item.denominator)}</strong><small>{item.score}</small></div>)}
               </div>
             </>
           ) : <EmptyState text="Select a player to explore their season." />}
@@ -1072,7 +1195,7 @@ function PlayerMatchTable({ players, openPlayer }: { players: PlayerPivot[]; ope
         <tbody>{players.map((player) => (
           <tr key={player.appearance_id}>
             <td><button type="button" onClick={() => openPlayer(player.player_id)}><span>{player.shirt_number ?? "-"}</span><span><strong>{player.display_name}</strong><small>{player.position_name ?? player.lineup_status ?? "Player"}</small></span></button></td>
-            <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetric(player.values.pass_completion_pct, "percentage")}</td><td>{formatMetric(player.values.total_shots)}</td>
+            <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td><td>{formatMetric(player.values.total_shots)}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -1146,25 +1269,86 @@ function buildTeamComparisons(rows: MatchTeamStat[]) {
   });
 }
 
-function aggregatePlayerHistory(rows: PlayerHistory[]) {
+function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric): PlayerChartPoint[] {
   const grouped = new Map<string, PlayerHistory[]>();
   rows.forEach((row) => grouped.set(row.match_id, [...(grouped.get(row.match_id) ?? []), row]));
-  return [...grouped.values()].map((matchRows, index) => {
+  return [...grouped.values()].map((matchRows, index): PlayerChartPoint | null => {
     const row = matchRows[0];
+    const metricValue = (code?: string | null) => {
+      if (!code) return null;
+      const values = matchRows
+        .filter((item) => item.metric_code === code && item.value_numeric !== null)
+        .map((item) => Number(item.value_numeric))
+        .filter(Number.isFinite);
+      return values.length ? average(values) : null;
+    };
+    const numerator = metricValue(metric?.numerator_metric_code);
+    const denominator = metricValue(metric?.denominator_metric_code);
+    const observedValue = metricValue(metric?.code ?? row.metric_code);
+    const value = metric?.value_type === "percentage" && numerator !== null && denominator !== null && denominator > 0
+      ? numerator * 100 / denominator
+      : observedValue;
+    if (value === null || !Number.isFinite(value)) return null;
     return {
       match: index + 1,
       date: formatShortDate(row.scheduled_at),
-      value: average(matchRows.map((item) => Number(item.value_numeric)).filter(Number.isFinite)),
+      value,
       opponent: cleanTeamName(row.opponent_team_name ?? "Opponent"),
       score: formatScore(row.home_score, row.away_score),
+      numerator,
+      denominator,
     };
-  }).filter((item) => Number.isFinite(item.value));
+  }).filter((item): item is PlayerChartPoint => item !== null);
 }
 
-function makeDemoHistory(playerId: string, metricCode: string): PlayerHistory[] {
-  return Array.from({ length: 16 }, (_, index) => ({
-    player_id: playerId, display_name: "Demo Player", season_id: "demo-season", competition_id: "demo-competition", stage_id: null, round_id: null, round_number: index + 1, appearance_id: `appearance-${index}`, team_id: "demo-team-0", team_name: demoClubNames[0], opponent_team_id: "demo-team-1", opponent_team_name: demoClubNames[(index + 1) % 4], match_id: `history-${index}`, scheduled_at: `2025-${String(8 + Math.floor(index / 4)).padStart(2, "0")}-${String(5 + (index % 4) * 6).padStart(2, "0")}T17:00:00Z`, home_score: index % 3, away_score: (index + 1) % 3, side: "home", minutes_played: 90, metric_id: metricCode, metric_code: metricCode, metric_name: metricCode, value_type: metricCode.includes("pct") ? "percentage" : "number", source_id: "demo-source", source_code: "demo", source_name: "Demo", value_numeric: metricCode === "rating_365" ? 6.7 + Math.sin(index / 2) * .5 + index * .025 : 70 + Math.sin(index / 2) * 8 + index * .6, raw_value: null,
-  }));
+function makeDemoHistory(playerId: string, metric?: Metric): PlayerHistory[] {
+  const metricCode = metric?.code ?? "rating_365";
+  return Array.from({ length: 16 }, (_, index) => {
+    const denominator = 38 + index * 2;
+    const percentage = 76 + Math.sin(index / 2) * 8 + index * .35;
+    const numerator = Math.round(denominator * percentage / 100);
+    const value = metricCode === "rating_365" ? 6.7 + Math.sin(index / 2) * .5 + index * .025
+      : metric?.value_type === "percentage" ? numerator * 100 / denominator
+        : 5 + Math.sin(index / 2) * 3 + index * .2;
+    const base = {
+      player_id: playerId,
+      display_name: "Demo Player",
+      season_id: "demo-season",
+      competition_id: "demo-competition",
+      stage_id: null,
+      round_id: null,
+      round_number: index + 1,
+      appearance_id: `appearance-${index}`,
+      team_id: "demo-team-0",
+      team_name: demoClubNames[0],
+      opponent_team_id: "demo-team-1",
+      opponent_team_name: demoClubNames[(index + 1) % 4],
+      match_id: `history-${index}`,
+      scheduled_at: `2025-${String(8 + Math.floor(index / 4)).padStart(2, "0")}-${String(5 + (index % 4) * 6).padStart(2, "0")}T17:00:00Z`,
+      home_score: index % 3,
+      away_score: (index + 1) % 3,
+      side: "home" as const,
+      minutes_played: 90,
+      source_id: "demo-source",
+      source_code: "demo",
+      source_name: "Demo",
+    };
+    const selected: PlayerHistory = {
+      ...base,
+      metric_id: metric?.metric_id ?? metricCode,
+      metric_code: metricCode,
+      metric_name: metric?.name ?? metricCode,
+      value_type: metric?.value_type ?? "number",
+      value_numeric: value,
+      raw_value: metric?.value_type === "percentage" ? `${numerator}/${denominator}` : null,
+    };
+    if (!metric?.numerator_metric_code || !metric.denominator_metric_code) return [selected];
+    return [
+      selected,
+      { ...selected, metric_id: metric.numerator_metric_code, metric_code: metric.numerator_metric_code, metric_name: metric.numerator_metric_code, value_type: "count", value_numeric: numerator },
+      { ...selected, metric_id: metric.denominator_metric_code, metric_code: metric.denominator_metric_code, metric_name: metric.denominator_metric_code, value_type: "count", value_numeric: denominator },
+    ];
+  }).flat();
 }
 
 function readViewFromHash(): View {
@@ -1214,6 +1398,8 @@ function makeSeasonSummaryLeaderboard(players: SeasonPlayer[], seasonId: string,
       leaderboard_value: value,
       total_value: value,
       average_value: null,
+      numerator_value: null,
+      denominator_value: null,
     };
   }).sort(compareLeaderboardRows);
 }
@@ -1227,7 +1413,9 @@ function makeDemoLeaderboard(players: SeasonPlayer[], seasonId: string, metricCo
         : metric.code === "rating_365" ? Number(player.average_rating)
           : metric.code === "pass_completion_pct" ? averages[index % averages.length]
             : Number(player.goals) * 3 + 18 - index;
-    const aggregation = ["percentage", "rating", "average", "ratio"].includes(metric.value_type) ? "average" : "total";
+    const denominator = metric.value_type === "percentage" ? 300 + index * 24 : null;
+    const numerator = denominator === null ? null : Math.round(denominator * value / 100);
+    const aggregation = metric.value_type === "percentage" ? "weighted" : ["rating", "average", "ratio"].includes(metric.value_type) ? "average" : "total";
     return {
       season_id: seasonId,
       player_id: player.player_id,
@@ -1243,6 +1431,8 @@ function makeDemoLeaderboard(players: SeasonPlayer[], seasonId: string, metricCo
       leaderboard_value: value,
       total_value: aggregation === "total" ? value : null,
       average_value: aggregation === "average" ? value : null,
+      numerator_value: numerator,
+      denominator_value: denominator,
     };
   }).sort(compareLeaderboardRows);
 }
@@ -1280,6 +1470,25 @@ function formatMetric(value: number | null | undefined, valueType?: string) {
   const numeric = Number(value);
   const formatted = Number.isInteger(numeric) ? numberFormatter.format(numeric) : numeric.toFixed(numeric < 10 ? 2 : 1);
   return valueType === "percentage" ? `${formatted}%` : formatted;
+}
+
+function formatMetricWithRatio(
+  value: number | null | undefined,
+  valueType?: string,
+  numerator?: number | null,
+  denominator?: number | null,
+) {
+  const formatted = formatMetric(value, valueType);
+  if (
+    valueType !== "percentage"
+    || numerator === null
+    || numerator === undefined
+    || denominator === null
+    || denominator === undefined
+    || !Number.isFinite(Number(numerator))
+    || !Number.isFinite(Number(denominator))
+  ) return formatted;
+  return `${formatted} (${formatMetric(Number(numerator))}/${formatMetric(Number(denominator))})`;
 }
 
 function formatShortDate(value: string | null) {

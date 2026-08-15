@@ -782,6 +782,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .leaderboard-heading > div > span,
+.squad-leaderboard-heading > div > span,
 .leader-metric-select > span {
   display: block;
   color: var(--muted);
@@ -795,6 +796,25 @@ input[type="search"]::-webkit-search-cancel-button {
   color: var(--text);
   font-size: 18px;
   line-height: 1.1;
+}
+
+.squad-leaderboard-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.squad-leaderboard-heading h2 {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.squad-metric-select select {
+  width: 154px;
 }
 
 .leader-metric-select {
@@ -1411,7 +1431,7 @@ tr:last-child td {
 
 .squad-list > button {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 24px 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   width: 100%;
@@ -1422,6 +1442,13 @@ tr:last-child td {
   border-bottom: 1px solid var(--line);
   background: transparent;
   text-align: left;
+}
+
+.squad-rank {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 850;
+  text-align: center;
 }
 
 .squad-list {
@@ -1454,6 +1481,8 @@ tr:last-child td {
   font-size: 9px;
   font-style: normal;
   font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .avatar {
@@ -2068,7 +2097,8 @@ tr:last-child td {
     padding: 9px;
   }
 
-  .leaderboard-heading {
+  .leaderboard-heading,
+  .squad-leaderboard-heading {
     align-items: stretch;
     flex-direction: column;
   }

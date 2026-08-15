@@ -140,11 +140,13 @@ export type PlayerLeaderboardRow = {
   metric_code: string;
   metric_name: string;
   value_type: string;
-  aggregation: "total" | "average";
+  aggregation: "total" | "average" | "weighted";
   sample_size: number;
   leaderboard_value: number | null;
   total_value: number | null;
   average_value: number | null;
+  numerator_value: number | null;
+  denominator_value: number | null;
 };
 
 export type Metric = {
@@ -153,6 +155,8 @@ export type Metric = {
   name: string;
   subject_type: "player_match" | "team_match";
   value_type: string;
+  numerator_metric_code: string | null;
+  denominator_metric_code: string | null;
 };
 
 export type PlayerHistory = {
