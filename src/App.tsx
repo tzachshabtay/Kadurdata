@@ -42,6 +42,7 @@ type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
 type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type"> & { kind: "season" | "match" };
+type PlayerChartMetric = Metric & { chartKey: string; chartMode: "single" | "paired" };
 type PlayerChartPoint = {
   match: number;
   date: string;
@@ -418,9 +419,10 @@ export function App() {
         setPlayerHistory([]);
         return;
       }
-      const selectedMetric = metrics.find((metric) => metric.code === metricCode);
+      const sourceMetricCode = metricCode.replace(/::paired$/, "");
+      const selectedMetric = metrics.find((metric) => metric.code === sourceMetricCode);
       const metricCodes = [...new Set([
-        metricCode,
+        sourceMetricCode,
         selectedMetric?.numerator_metric_code,
         selectedMetric?.denominator_metric_code,
       ].filter((code): code is string => Boolean(code)))];
@@ -542,14 +544,22 @@ export function App() {
     ].filter((code): code is string => Boolean(code))));
     return playerMetrics
       .filter((metric) => !ratioComponentCodes.has(metric.code))
-      .map((metric) => metric.value_type === "percentage"
-        ? { ...metric, name: percentageMetricGroupName(metric) }
-        : metric);
+      .flatMap((metric): PlayerChartMetric[] => {
+        if (metric.value_type !== "percentage") {
+          return [{ ...metric, chartKey: metric.code, chartMode: "single" }];
+        }
+        const groupName = percentageMetricGroupName(metric);
+        return [
+          { ...metric, name: groupName, chartKey: `${metric.code}::paired`, chartMode: "paired" },
+          { ...metric, name: `${groupName} (%)`, chartKey: metric.code, chartMode: "single" },
+        ];
+      });
   }, [playerMetrics]);
   useEffect(() => {
-    if (playerChartMetrics.some((metric) => metric.code === metricCode)) return;
-    setMetricCode(preferredMetric(playerChartMetrics));
-  }, [metricCode, playerChartMetrics]);
+    if (playerChartMetrics.some((metric) => metric.chartKey === metricCode)) return;
+    const preferred = playerChartMetrics.find((metric) => metric.code === preferredMetric(playerMetrics));
+    setMetricCode(preferred?.chartKey ?? playerChartMetrics[0]?.chartKey ?? "");
+  }, [metricCode, playerChartMetrics, playerMetrics]);
   const leaderboardMetrics = useMemo<LeaderboardMetricOption[]>(
     () => [
       ...seasonLeaderboardMetrics,
@@ -587,7 +597,7 @@ export function App() {
     const squadPlayerIds = new Set(clubSquad.map((player) => player.player_id));
     return squadLeaderboardRows.filter((player) => squadPlayerIds.has(player.player_id));
   }, [clubSquad, squadLeaderboardRows]);
-  const selectedPlayerMetric = playerChartMetrics.find((metric) => metric.code === metricCode);
+  const selectedPlayerMetric = playerChartMetrics.find((metric) => metric.chartKey === metricCode);
   const playerChartData = useMemo(
     () => aggregatePlayerHistory(playerHistory, selectedPlayerMetric),
     [playerHistory, selectedPlayerMetric],
@@ -1074,7 +1084,7 @@ function PlayersView({
   setClubFilter: (id: string) => void;
   query: string;
   setQuery: (value: string) => void;
-  metrics: Metric[];
+  metrics: PlayerChartMetric[];
   metricCode: string;
   setMetricCode: (code: string) => void;
   chartData: PlayerChartPoint[];
@@ -1083,8 +1093,8 @@ function PlayersView({
   averageDenominator: number | null;
   detailLoading: boolean;
 }) {
-  const metric = metrics.find((item) => item.code === metricCode);
-  const isPairedMetric = metric?.value_type === "percentage"
+  const metric = metrics.find((item) => item.chartKey === metricCode);
+  const isPairedMetric = metric?.chartMode === "paired"
     && Boolean(metric.numerator_metric_code)
     && Boolean(metric.denominator_metric_code);
   const numeratorLabel = ratioComponentLabel(metric?.numerator_metric_code);
@@ -1120,7 +1130,7 @@ function PlayersView({
               <div className="player-profile-head">
                 <span className="avatar large">{initials(selectedPlayer.display_name)}</span>
                 <div><span>{selectedPlayer.role_group} · {cleanTeamName(selectedPlayer.team_name ?? "")}</span><h2>{selectedPlayer.display_name}</h2></div>
-                <label className="metric-select"><span>Metric</span><select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>{metrics.map((item) => <option key={item.metric_id} value={item.code}>{item.name}</option>)}</select></label>
+                <label className="metric-select"><span>Metric</span><select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>{metrics.map((item) => <option key={item.chartKey} value={item.chartKey}>{item.name}</option>)}</select></label>
               </div>
               <section className="stat-band player-stats">
                 <Stat label="Appearances" value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} starts`} />
@@ -1150,7 +1160,7 @@ function PlayersView({
                         const point = item.payload as PlayerChartPoint;
                         return isPairedMetric
                           ? [formatMetric(Number(value)), String(name)]
-                          : [formatMetric(Number(value), metric?.value_type), metric?.name ?? "Value"];
+                          : [formatMetricWithRatio(Number(value), metric?.value_type, point.numerator, point.denominator), metric?.name ?? "Value"];
                       }} labelFormatter={(_, payload) => {
                         const point = payload?.[0]?.payload as PlayerChartPoint | undefined;
                         if (!point) return "Match";
