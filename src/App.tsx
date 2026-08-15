@@ -50,7 +50,7 @@ type PlayerChartMetric = Metric & {
 type PlayerChartPoint = {
   match: number;
   date: string;
-  value: number;
+  value: number | null;
   opponent: string;
   score: string;
   minutes: number | null;
@@ -430,6 +430,7 @@ export function App() {
         sourceMetricCode,
         selectedMetric?.numerator_metric_code,
         selectedMetric?.denominator_metric_code,
+        "minutes",
       ].filter((code): code is string => Boolean(code)))];
       if (!hasSupabaseConfig || !supabase) {
         setPlayerHistory(makeDemoHistory(playerId, selectedMetric));
@@ -621,10 +622,15 @@ export function App() {
   );
   const playerRatioNumerator = playerChartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0);
   const playerRatioDenominator = playerChartData.reduce((total, point) => total + Number(point.denominator ?? 0), 0);
+  const observedPlayerValues = playerChartData
+    .map((point) => point.value)
+    .filter((value): value is number => value !== null && Number.isFinite(value));
   const playerAverage = playerChartData.length
     ? selectedPlayerMetric?.value_type === "percentage" && playerRatioDenominator > 0
       ? playerRatioNumerator * 100 / playerRatioDenominator
-      : playerChartData.reduce((total, point) => total + point.value, 0) / playerChartData.length
+      : observedPlayerValues.length
+        ? observedPlayerValues.reduce((total, value) => total + value, 0) / observedPlayerValues.length
+        : null
     : null;
   const matchPlayers = useMemo(() => pivotMatchPlayers(matchPlayerStats), [matchPlayerStats]);
   const visibleMatchPlayers = matchPlayers.filter((player) => player.side === matchSide);
@@ -1122,14 +1128,14 @@ function PlayersView({
     const factor = 90 / point.minutes;
     return [{
       ...point,
-      value: isPairedMetric ? point.value : point.value * factor,
+      value: point.value === null ? null : isPairedMetric ? point.value : point.value * factor,
       numerator: point.numerator === null ? null : point.numerator * factor,
       denominator: point.denominator === null ? null : point.denominator * factor,
     }];
   }) : chartData;
   const totalSampleMinutes = chartData.reduce((total, point) => total + Number(point.minutes ?? 0), 0);
   const per90Value = totalSampleMinutes > 0
-    ? chartData.reduce((total, point) => total + point.value, 0) * 90 / totalSampleMinutes
+    ? chartData.reduce((total, point) => total + Number(point.value ?? 0), 0) * 90 / totalSampleMinutes
     : null;
   const per90Numerator = totalSampleMinutes > 0
     ? chartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0) * 90 / totalSampleMinutes
@@ -1372,7 +1378,7 @@ function buildTeamComparisons(rows: MatchTeamStat[]) {
 function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric): PlayerChartPoint[] {
   const grouped = new Map<string, PlayerHistory[]>();
   rows.forEach((row) => grouped.set(row.match_id, [...(grouped.get(row.match_id) ?? []), row]));
-  return [...grouped.values()].map((matchRows, index): PlayerChartPoint | null => {
+  return [...grouped.values()].map((matchRows, index): PlayerChartPoint => {
     const row = matchRows[0];
     const metricValue = (code?: string | null) => {
       if (!code) return null;
@@ -1382,13 +1388,17 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric): PlayerC
         .filter(Number.isFinite);
       return values.length ? average(values) : null;
     };
-    const numerator = metricValue(metric?.numerator_metric_code);
-    const denominator = metricValue(metric?.denominator_metric_code);
+    const isRatioMetric = metric?.value_type === "percentage"
+      && Boolean(metric.numerator_metric_code)
+      && Boolean(metric.denominator_metric_code);
+    const observedNumerator = metricValue(metric?.numerator_metric_code);
+    const observedDenominator = metricValue(metric?.denominator_metric_code);
+    const numerator = isRatioMetric ? observedNumerator ?? 0 : observedNumerator;
+    const denominator = isRatioMetric ? observedDenominator ?? 0 : observedDenominator;
     const observedValue = metricValue(metric?.code ?? row.metric_code);
-    const value = metric?.value_type === "percentage" && numerator !== null && denominator !== null && denominator > 0
-      ? numerator * 100 / denominator
-      : observedValue;
-    if (value === null || !Number.isFinite(value)) return null;
+    const value = isRatioMetric
+      ? denominator !== null && denominator > 0 ? Number(numerator) * 100 / denominator : null
+      : metric?.value_type === "count" ? observedValue ?? 0 : observedValue;
     return {
       match: index + 1,
       date: formatShortDate(row.scheduled_at),
@@ -1399,7 +1409,7 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric): PlayerC
       numerator,
       denominator,
     };
-  }).filter((item): item is PlayerChartPoint => item !== null);
+  });
 }
 
 function makeDemoHistory(playerId: string, metric?: Metric): PlayerHistory[] {
