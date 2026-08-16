@@ -1767,6 +1767,17 @@ tr:last-child td {
   gap: 14px;
 }
 
+.trend-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.history-range button {
+  min-width: 88px;
+}
+
 .trend-key i {
   display: inline-block;
   width: 18px;
@@ -2234,5 +2245,18 @@ tr:last-child td {
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .trend-actions {
+    width: 100%;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .history-range {
+    max-width: 100%;
+    overflow-x: auto;
   }
 }

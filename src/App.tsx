@@ -40,6 +40,7 @@ import type {
 
 type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
+type PlayerHistoryRange = "latest" | "all";
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
 type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type" | "denominator_metric_code"> & { kind: "season" | "match" };
 type LeaderboardQualification = {
@@ -258,6 +259,7 @@ export function App() {
   const [clubId, setClubId] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [metricCode, setMetricCode] = useState("");
+  const [playerHistoryRange, setPlayerHistoryRange] = useState<PlayerHistoryRange>("latest");
   const [leaderMetricCode, setLeaderMetricCode] = useState("goals");
   const [squadMetricCode, setSquadMetricCode] = useState("season_minutes");
   const [leaderMinimums, setLeaderMinimums] = useState<Record<string, number>>({});
@@ -455,9 +457,12 @@ export function App() {
   }, [matchId]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadPlayerDetail() {
-      if (!playerId || !metricCode) {
+      if (!competitionId || !playerId || !metricCode) {
         setPlayerHistory([]);
+        setDetailLoading(false);
         return;
       }
       const sourceMetricCode = metricCode.replace(/::(paired|per90)$/, "");
@@ -468,26 +473,52 @@ export function App() {
         selectedMetric?.denominator_metric_code,
         "minutes",
       ].filter((code): code is string => Boolean(code)))];
-      if (!hasSupabaseConfig || !supabase) {
+      const client = supabase;
+      if (!hasSupabaseConfig || !client) {
         setPlayerHistory(makeDemoHistory(playerId, selectedMetric));
         return;
       }
       setDetailLoading(true);
-      const result = await supabase
-        .from("api_player_history")
-        .select("*")
-        .eq("season_id", seasonId)
-        .eq("player_id", playerId)
-        .in("metric_code", metricCodes)
-        .order("scheduled_at")
-        .limit(750);
-      if (result.error) setError(result.error.message);
-      setPlayerHistory((result.data ?? []) as PlayerHistory[]);
+      const historyRows: PlayerHistory[] = [];
+      const pageSize = 1000;
+      let page = 0;
+
+      while (true) {
+        const result = await client
+          .from("api_player_history")
+          .select("*")
+          .eq("competition_id", competitionId)
+          .eq("player_id", playerId)
+          .in("metric_code", metricCodes)
+          .order("scheduled_at")
+          .order("match_id")
+          .order("metric_code")
+          .order("source_id")
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (cancelled) return;
+        if (result.error) {
+          setError(result.error.message);
+          setPlayerHistory([]);
+          setDetailLoading(false);
+          return;
+        }
+        const pageRows = (result.data ?? []) as PlayerHistory[];
+        historyRows.push(...pageRows);
+        if (pageRows.length < pageSize) break;
+        page += 1;
+      }
+
+      setPlayerHistory(historyRows);
       setDetailLoading(false);
     }
 
     void loadPlayerDetail();
-  }, [metricCode, metrics, playerId, seasonId]);
+    return () => { cancelled = true; };
+  }, [competitionId, metricCode, metrics, playerId]);
+
+  useEffect(() => {
+    setPlayerHistoryRange("latest");
+  }, [competitionId, playerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -669,9 +700,28 @@ export function App() {
   }, [clubSquad, squadLeaderboardRows]);
   const clubSquadLeaders = filterLeaderboardRows(clubSquadLeaderboardRows, players, squadQualification, squadMinimum);
   const selectedPlayerMetric = playerChartMetrics.find((metric) => metric.chartKey === metricCode);
+  const latestPlayerHistorySeasonId = useMemo(() => {
+    const latestMatchBySeason = new Map<string, number>();
+    playerHistory.forEach((row) => latestMatchBySeason.set(
+      row.season_id,
+      Math.max(latestMatchBySeason.get(row.season_id) ?? 0, dateValue(row.scheduled_at)),
+    ));
+    return [...latestMatchBySeason].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  }, [playerHistory]);
+  const latestPlayerHistorySeason = seasons.find((season) => season.season_id === latestPlayerHistorySeasonId);
+  const visiblePlayerHistory = useMemo(
+    () => playerHistoryRange === "all"
+      ? playerHistory
+      : playerHistory.filter((row) => row.season_id === latestPlayerHistorySeasonId),
+    [latestPlayerHistorySeasonId, playerHistory, playerHistoryRange],
+  );
+  const playerHistorySeasonCount = useMemo(
+    () => new Set(playerHistory.map((row) => row.season_id)).size,
+    [playerHistory],
+  );
   const playerChartData = useMemo(
-    () => aggregatePlayerHistory(playerHistory, selectedPlayerMetric),
-    [playerHistory, selectedPlayerMetric],
+    () => aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all"),
+    [playerHistoryRange, selectedPlayerMetric, visiblePlayerHistory],
   );
   const playerRatioNumerator = playerChartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0);
   const playerRatioDenominator = playerChartData.reduce((total, point) => total + Number(point.denominator ?? 0), 0);
@@ -835,6 +885,10 @@ export function App() {
             metrics={playerChartMetrics}
             metricCode={metricCode}
             setMetricCode={setMetricCode}
+            historyRange={playerHistoryRange}
+            setHistoryRange={setPlayerHistoryRange}
+            latestHistorySeasonLabel={latestPlayerHistorySeason?.season_name ?? "Latest season"}
+            historySeasonCount={playerHistorySeasonCount}
             chartData={playerChartData}
             average={playerAverage}
             averageNumerator={playerRatioDenominator > 0 ? playerRatioNumerator : null}
@@ -1203,6 +1257,10 @@ function PlayersView({
   metrics,
   metricCode,
   setMetricCode,
+  historyRange,
+  setHistoryRange,
+  latestHistorySeasonLabel,
+  historySeasonCount,
   chartData,
   average,
   averageNumerator,
@@ -1224,6 +1282,10 @@ function PlayersView({
   metrics: PlayerChartMetric[];
   metricCode: string;
   setMetricCode: (code: string) => void;
+  historyRange: PlayerHistoryRange;
+  setHistoryRange: (range: PlayerHistoryRange) => void;
+  latestHistorySeasonLabel: string;
+  historySeasonCount: number;
   chartData: PlayerChartPoint[];
   average: number | null;
   averageNumerator: number | null;
@@ -1264,7 +1326,9 @@ function PlayersView({
     : average === null ? "-" : formatMetricWithRatio(average, metric?.value_type, averageNumerator, averageDenominator);
   const summaryNote = isPer90Metric
     ? isPairedMetric ? `${numeratorLabel} / ${denominatorLabel} per 90` : "Minutes-weighted rate per 90"
-    : `${chartData.length} matches sampled`;
+    : historyRange === "all"
+      ? `${chartData.length} matches · ${historySeasonCount} ${historySeasonCount === 1 ? "season" : "seasons"}`
+      : `${chartData.length} matches sampled`;
   return (
     <>
       <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} players`} title="Player explorer" description="Filter the league by role or club, then track an individual metric from match to match." />
@@ -1306,13 +1370,19 @@ function PlayersView({
               </section>
               <div className="trend-heading">
                 <div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div>
-                <div className="trend-keys">
-                  {isPairedMetric ? (
-                    <>
-                      <span className="trend-key completed"><i /> {numeratorLabel}</span>
-                      <span className="trend-key attempted"><i /> {denominatorLabel}</span>
-                    </>
-                  ) : <span className="trend-key completed"><i /> Season trend</span>}
+                <div className="trend-actions">
+                  <div className="segmented compact-segmented history-range" aria-label="Match history range">
+                    <button className={historyRange === "latest" ? "active" : ""} title="Latest season with data" type="button" onClick={() => setHistoryRange("latest")}>{latestHistorySeasonLabel}</button>
+                    <button className={historyRange === "all" ? "active" : ""} type="button" onClick={() => setHistoryRange("all")}>All seasons</button>
+                  </div>
+                  <div className="trend-keys">
+                    {isPairedMetric ? (
+                      <>
+                        <span className="trend-key completed"><i /> {numeratorLabel}</span>
+                        <span className="trend-key attempted"><i /> {denominatorLabel}</span>
+                      </>
+                    ) : <span className="trend-key completed"><i /> Trend</span>}
+                  </div>
                 </div>
               </div>
               <div className="chart-frame">
@@ -1333,7 +1403,7 @@ function PlayersView({
                         const ratio = isPairedMetric
                           ? ` · ${formatMetricWithRatio(point.value, "percentage", point.numerator, point.denominator)}`
                           : "";
-                        return `${point.opponent}${ratio}`;
+                        return `${point.date} · ${point.opponent}${ratio}`;
                       }} />
                       {isPairedMetric ? (
                         <>
@@ -1489,7 +1559,7 @@ function buildTeamComparisons(rows: MatchTeamStat[]) {
   });
 }
 
-function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric): PlayerChartPoint[] {
+function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeYear = false): PlayerChartPoint[] {
   const grouped = new Map<string, PlayerHistory[]>();
   rows.forEach((row) => grouped.set(row.match_id, [...(grouped.get(row.match_id) ?? []), row]));
   return [...grouped.values()].map((matchRows, index): PlayerChartPoint => {
@@ -1515,7 +1585,7 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric): PlayerC
       : metric?.value_type === "count" ? observedValue ?? 0 : observedValue;
     return {
       match: index + 1,
-      date: formatShortDate(row.scheduled_at),
+      date: formatPlayerHistoryDate(row.scheduled_at, includeYear),
       value,
       opponent: cleanTeamName(row.opponent_team_name ?? "Opponent"),
       score: formatScore(row.home_score, row.away_score),
@@ -1822,6 +1892,12 @@ function formatMetricWithRatio(
 
 function formatShortDate(value: string | null) {
   return value ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(value)) : "-";
+}
+
+function formatPlayerHistoryDate(value: string | null, includeYear: boolean) {
+  return value
+    ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: includeYear ? "2-digit" : undefined }).format(new Date(value))
+    : "-";
 }
 
 function formatFixtureDate(value: string | null) {
