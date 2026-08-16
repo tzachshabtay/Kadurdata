@@ -1275,11 +1275,18 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .comparison-track .home {
   margin-inline-start: auto;
+}
+
+.comparison-track .higher {
   background: var(--teal);
 }
 
-.comparison-track .away {
+.comparison-track .lower {
   background: var(--coral);
+}
+
+.comparison-track .tie {
+  background: var(--amber);
 }
 
 .lineup-heading,

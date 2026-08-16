@@ -2070,10 +2070,13 @@ function ComparisonBar({ label, home, away, valueType }: { label: string; home: 
   const total = Math.max(home + away, 1);
   const homeWidth = `${Math.max((home / total) * 100, 4)}%`;
   const awayWidth = `${Math.max((away / total) * 100, 4)}%`;
+  const isTie = formatMetric(home, valueType) === formatMetric(away, valueType);
+  const homeTone = isTie ? "tie" : home > away ? "higher" : "lower";
+  const awayTone = isTie ? "tie" : away > home ? "higher" : "lower";
   return (
     <div className="comparison-row">
       <div><strong>{formatMetric(home, valueType)}</strong><span>{label}</span><strong>{formatMetric(away, valueType)}</strong></div>
-      <div className="comparison-track"><i className="home" style={{ width: homeWidth }} /><i className="away" style={{ width: awayWidth }} /></div>
+      <div className="comparison-track"><i className={`home ${homeTone}`} style={{ width: homeWidth }} /><i className={`away ${awayTone}`} style={{ width: awayWidth }} /></div>
     </div>
   );
 }
