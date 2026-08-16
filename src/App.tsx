@@ -668,7 +668,6 @@ export function App() {
     () => matches.filter((match) => match.round_id === roundId),
     [matches, roundId],
   );
-
   useEffect(() => {
     if (seasonLoading || !roundId || !matches.length) return;
     setMatchId((current) => roundMatches.some((match) => match.match_id === current) ? current : roundMatches[0]?.match_id ?? "");
@@ -876,8 +875,17 @@ export function App() {
     return () => { cancelled = true; };
   }, [explorerMetricCode, explorerRatingMinimumMinutes, players, seasonId, view]);
 
+  const currentCompetition = competitions.find((competition) => competition.competition_id === competitionId);
   const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
   const currentRound = rounds.find((round) => round.round_id === roundId);
+  const overviewMatches = useMemo(
+    () => currentRound
+      ? roundMatches
+      : [...matches]
+        .sort((a, b) => (b.scheduled_at ?? "").localeCompare(a.scheduled_at ?? ""))
+        .slice(0, 7),
+    [currentRound, matches, roundMatches],
+  );
   const selectedMatch = matches.find((match) => match.match_id === matchId);
   const selectedClub = clubs.find((club) => club.team_id === clubId);
   const selectedPlayer = players.find((player) => player.player_id === playerId);
@@ -1237,9 +1245,10 @@ export function App() {
         ) : view === "overview" ? (
           <OverviewView
             season={currentSeason}
+            hasLeagueTable={hasOfficialLeagueTable(currentCompetition)}
             seasonPlayers={players}
             round={currentRound}
-            roundMatches={roundMatches}
+            roundMatches={overviewMatches}
             standings={standings}
             leaders={qualifiedLeaderboardRows}
             metrics={leaderboardMetrics}
@@ -1351,6 +1360,7 @@ export function App() {
 
 function OverviewView({
   season,
+  hasLeagueTable,
   seasonPlayers,
   round,
   roundMatches,
@@ -1372,6 +1382,7 @@ function OverviewView({
   showMatches,
 }: {
   season: Season;
+  hasLeagueTable: boolean;
   seasonPlayers: SeasonPlayer[];
   round?: Round;
   roundMatches: Match[];
@@ -1398,39 +1409,61 @@ function OverviewView({
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
   const minutesByPlayer = new Map(seasonPlayers.map((player) => [player.player_id, Number(player.minutes)]));
   const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
+  const participantRows = [...standings].sort((a, b) => localizedClubName(a, language).localeCompare(localizedClubName(b, language), localeCode(language)));
   return (
     <>
-      <PageHeading eyebrow={`${localizedSeasonCompetition(season, language)} · ${season.season_name}`} title={text.seasonOverview} description={text.seasonOverviewDescription} />
+      <PageHeading eyebrow={`${localizedSeasonCompetition(season, language)} · ${season.season_name}`} title={text.seasonOverview} description={hasLeagueTable ? text.seasonOverviewDescription : text.competitionOverviewDescription} />
       <section className="stat-band" aria-label={text.seasonSummary}>
         <Stat label={text.matchesPlayed} value={`${numberFormatter.format(season.completed_match_count)} / ${numberFormatter.format(season.match_count)}`} note={`${Math.round((season.completed_match_count / Math.max(season.match_count, 1)) * 100)}% ${text.complete}`} />
-        <Stat label={text.clubs} value={numberFormatter.format(season.team_count)} note={text.leagueParticipants} />
-        <Stat label={text.playersUsed} value={numberFormatter.format(season.player_count)} note={text.acrossMatchdays} />
+        <Stat label={hasLeagueTable ? text.clubs : text.teams} value={numberFormatter.format(season.team_count)} note={hasLeagueTable ? text.leagueParticipants : text.competitionParticipants} />
+        <Stat label={text.playersUsed} value={numberFormatter.format(season.player_count)} note={hasLeagueTable ? text.acrossMatchdays : text.acrossCompetitionMatches} />
         <Stat label={text.goals} value={numberFormatter.format(season.goals_scored)} note={`${(season.goals_scored / Math.max(season.completed_match_count, 1)).toFixed(2)} ${text.perMatch}`} accent />
       </section>
 
       <div className="overview-grid">
         <section className="surface round-surface">
-          <SectionHeading eyebrow={round?.stage_name ? localizedStageName(round.stage_name, language) : text.latestMatchday} title={`${text.round} ${round?.round_number ?? "-"}`} action={text.allMatches} onAction={showMatches} />
+          <SectionHeading eyebrow={round?.stage_name ? localizedStageName(round.stage_name, language) : round ? text.latestMatchday : text.recentMatches} title={round ? `${text.round} ${round.round_number ?? round.round_name}` : text.fixturesResults} action={text.allMatches} onAction={showMatches} />
           <div className="score-list">
             {roundMatches.slice(0, 7).map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />)}
           </div>
         </section>
 
         <section className="surface standings-surface">
-          <SectionHeading eyebrow={text.leagueTable} title={text.leadingPack} action={text.allClubs} onAction={() => openClub(standings[0]?.team_id ?? "")} />
-          <div className="mini-table" aria-label={text.leagueStandings}>
-            <div className="mini-table-head"><span>#</span><span>{text.club}</span><span>{text.goalDifferenceShort}</span><span>{text.pointsShort}</span></div>
-            <div className="mini-table-body">
-              {standings.map((club, index) => (
-                <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
-                  <span className="rank">{index + 1}</span>
-                  <span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span>
-                  <span>{signed(club.goal_difference)}</span>
-                  <strong>{club.points}</strong>
-                </button>
-              ))}
-            </div>
-          </div>
+          {hasLeagueTable ? (
+            <>
+              <SectionHeading eyebrow={text.leagueTable} title={text.leadingPack} action={text.allClubs} onAction={() => openClub(standings[0]?.team_id ?? "")} />
+              <div className="mini-table" aria-label={text.leagueStandings}>
+                <div className="mini-table-head"><span>#</span><span>{text.club}</span><span>{text.goalDifferenceShort}</span><span>{text.pointsShort}</span></div>
+                <div className="mini-table-body">
+                  {standings.map((club, index) => (
+                    <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
+                      <span className="rank">{index + 1}</span>
+                      <span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span>
+                      <span>{signed(club.goal_difference)}</span>
+                      <strong>{club.points}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <SectionHeading eyebrow={text.participants} title={text.teamsInData} />
+              <div className="mini-table" aria-label={text.participantSummary}>
+                <div className="mini-table-head participant-table-row"><span>{text.team}</span><span>{text.playedShort}</span><span>{text.winsDrawsLosses}</span><span>{text.forAgainst}</span></div>
+                <div className="mini-table-body">
+                  {participantRows.map((team) => (
+                    <button className="mini-table-row participant-table-row" key={team.team_id} type="button" onClick={() => openClub(team.team_id)}>
+                      <span className="club-cell"><ClubBadge name={localizedClubName(team, language)} logoUrl={team.logo_url} size="small" /><strong>{localizedClubName(team, language)}</strong></span>
+                      <span>{team.played}</span>
+                      <span>{team.won}-{team.drawn}-{team.lost}</span>
+                      <strong>{team.goals_for}:{team.goals_against}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         <section className="surface leaders-surface">
@@ -2599,6 +2632,10 @@ function demoSpecificPosition(role: string, index: number) {
 
 function competitionLabel(name?: string) {
   return name?.toLowerCase().includes("israeli premier") ? "Ligat Ha'Al" : name ?? "Competition";
+}
+
+function hasOfficialLeagueTable(competition?: Competition) {
+  return Boolean(competition && (competition.scope || "domestic") === "domestic" && competition.competition_type === "league");
 }
 
 const hebrewCompetitionNames: Record<string, string> = {
