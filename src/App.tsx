@@ -361,8 +361,7 @@ export function App() {
     const nextSeasons = (seasonResult.data ?? []) as Season[];
     const nextMetrics = (metricResult.data ?? []) as Metric[];
     const defaultCompetition = nextCompetitions.find((item) => item.name.toLowerCase().includes("premier")) ?? nextCompetitions[0];
-    const defaultSeason = nextSeasons.find((item) => item.competition_id === defaultCompetition?.competition_id && item.is_latest)
-      ?? nextSeasons.find((item) => item.competition_id === defaultCompetition?.competition_id);
+    const defaultSeason = latestSeasonWithData(nextSeasons.filter((item) => item.competition_id === defaultCompetition?.competition_id));
 
     setCompetitions(nextCompetitions);
     setSeasons(nextSeasons);
@@ -388,12 +387,15 @@ export function App() {
     () => seasons.filter((season) => season.competition_id === competitionId),
     [competitionId, seasons],
   );
+  const latestDataSeason = useMemo(
+    () => latestSeasonWithData(availableSeasons),
+    [availableSeasons],
+  );
 
   useEffect(() => {
     if (!competitionId || availableSeasons.some((season) => season.season_id === seasonId)) return;
-    const nextSeason = availableSeasons.find((season) => season.is_latest) ?? availableSeasons[0];
-    setSeasonId(nextSeason?.season_id ?? "");
-  }, [availableSeasons, competitionId, seasonId]);
+    setSeasonId(latestDataSeason?.season_id ?? "");
+  }, [availableSeasons, competitionId, latestDataSeason, seasonId]);
 
   useEffect(() => {
     async function loadSeasonData() {
@@ -948,7 +950,7 @@ export function App() {
             <span>Season</span>
             <select value={seasonId} onChange={(event) => setSeasonId(event.target.value)}>
               {availableSeasons.map((season) => (
-                <option key={season.season_id} value={season.season_id}>{season.season_name}{season.is_latest ? " · Latest" : ""}</option>
+                <option key={season.season_id} value={season.season_id}>{season.season_name}{season.season_id === latestDataSeason?.season_id ? " · Latest" : ""}</option>
               ))}
             </select>
           </label>
@@ -2087,6 +2089,13 @@ function demoSpecificPosition(role: string, index: number) {
 
 function competitionLabel(name?: string) {
   return name?.toLowerCase().includes("israeli premier") ? "Ligat Ha'Al" : name ?? "Competition";
+}
+
+function latestSeasonWithData(seasons: Season[]) {
+  const orderedSeasons = [...seasons].sort((a, b) => dateValue(b.start_date) - dateValue(a.start_date));
+  return orderedSeasons.find((season) => Number(season.completed_match_count) > 0)
+    ?? orderedSeasons.find((season) => season.is_latest)
+    ?? orderedSeasons[0];
 }
 
 function roleLabel(role: RoleFilter) {
