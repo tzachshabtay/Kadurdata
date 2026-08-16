@@ -15,6 +15,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from team_stat_values import parse_team_stat_value, team_stat_value_type
+
 
 PROCESSED_DIR = Path("data/processed")
 SOURCE_CODE = "365scores"
@@ -1396,24 +1398,6 @@ def load_player_rows(
     print(f"processed {len(valid_rows)} player rows; wrote {written_stats} player stat observations", flush=True)
 
 
-def parse_team_stat_value(value: str, value_percentage: str) -> tuple[Optional[float], str]:
-    raw = value or value_percentage
-    if value_percentage:
-        try:
-            return float(value_percentage) * 100, raw
-        except ValueError:
-            pass
-    if not value:
-        return None, raw
-    text = value.replace("%", "").strip()
-    if "/" in text:
-        text = text.split("/", 1)[0].strip()
-    try:
-        return float(text), raw
-    except ValueError:
-        return None, raw
-
-
 def team_metric_code(source_stat_name: str) -> str:
     return f"team_{slugify(source_stat_name)}"
 
@@ -1424,7 +1408,7 @@ def collect_team_stat_metric_specs(rows: list[dict[str, str]]) -> dict[str, tupl
         if not row.get("stat_name"):
             continue
         code = team_metric_code(row["stat_name"])
-        value_type = "percentage" if row.get("value_percentage") or "%" in row.get("value", "") else "count"
+        value_type = team_stat_value_type(row.get("value", ""))
         specs.setdefault(code, ("team_match", value_type))
     return specs
 

@@ -1461,7 +1461,7 @@ function MatchesView({
   setMatchSide: (side: "home" | "away") => void;
   players: PlayerPivot[];
   seasonPlayers: SeasonPlayer[];
-  comparisons: Array<{ code: string; label: string; home: number; away: number }>;
+  comparisons: Array<{ code: string; label: string; home: number; away: number; valueType: string }>;
   detailLoading: boolean;
   openPlayer: (id: string) => void;
 }) {
@@ -2066,13 +2066,13 @@ function MatchScoreboard({ match }: { match: Match }) {
   );
 }
 
-function ComparisonBar({ label, home, away }: { label: string; home: number; away: number }) {
+function ComparisonBar({ label, home, away, valueType }: { label: string; home: number; away: number; valueType: string }) {
   const total = Math.max(home + away, 1);
   const homeWidth = `${Math.max((home / total) * 100, 4)}%`;
   const awayWidth = `${Math.max((away / total) * 100, 4)}%`;
   return (
     <div className="comparison-row">
-      <div><strong>{formatMetric(home)}</strong><span>{label}</span><strong>{formatMetric(away)}</strong></div>
+      <div><strong>{formatMetric(home, valueType)}</strong><span>{label}</span><strong>{formatMetric(away, valueType)}</strong></div>
       <div className="comparison-track"><i className="home" style={{ width: homeWidth }} /><i className="away" style={{ width: awayWidth }} /></div>
     </div>
   );
@@ -2153,15 +2153,15 @@ function pivotMatchPlayers(rows: MatchPlayerStat[]): PlayerPivot[] {
 }
 
 function buildTeamComparisons(rows: MatchTeamStat[], language: Language) {
-  const grouped = new Map<string, { label: string; home: number[]; away: number[] }>();
+  const grouped = new Map<string, { label: string; valueType: string; home: number[]; away: number[] }>();
   rows.filter((row) => comparisonMetrics.includes(row.metric_code) && row.value_numeric !== null).forEach((row) => {
-    const current = grouped.get(row.metric_code) ?? { label: metricName(row.metric_code, friendlyMetric(row.metric_name), language), home: [], away: [] };
+    const current = grouped.get(row.metric_code) ?? { label: metricName(row.metric_code, friendlyMetric(row.metric_name), language), valueType: row.value_type, home: [], away: [] };
     current[row.side].push(Number(row.value_numeric));
     grouped.set(row.metric_code, current);
   });
   return comparisonMetrics.flatMap((code) => {
     const values = grouped.get(code);
-    return values && values.home.length && values.away.length ? [{ code, label: values.label, home: average(values.home), away: average(values.away) }] : [];
+    return values && values.home.length && values.away.length ? [{ code, label: values.label, valueType: values.valueType, home: average(values.home), away: average(values.away) }] : [];
   });
 }
 
