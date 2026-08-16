@@ -1398,19 +1398,16 @@ tr:last-child td {
   border-bottom: 0;
 }
 
-.player-stat-table td:first-child button {
+.match-player-cell {
   display: flex;
   align-items: center;
   gap: 9px;
   min-width: 160px;
-  padding: 0;
   color: var(--text);
-  border: 0;
-  background: transparent;
   text-align: start;
 }
 
-.player-stat-table td:first-child button > span:first-child {
+.match-player-cell > span:first-child {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1424,6 +1421,25 @@ tr:last-child td {
   font-weight: 850;
 }
 
+.player-stat-table tbody tr {
+  cursor: pointer;
+}
+
+.player-stat-table tbody tr:focus-visible {
+  outline: none;
+}
+
+.player-stat-table tbody tr:focus-visible td {
+  color: var(--text);
+  background: var(--raised);
+  box-shadow: inset 0 1px var(--teal), inset 0 -1px var(--teal);
+}
+
+.player-stat-table tbody tr:hover .match-player-cell > span:first-child,
+.player-stat-table tbody tr:focus-visible .match-player-cell > span:first-child {
+  border-color: var(--teal);
+}
+
 .player-stat-table strong,
 .player-stat-table small {
   display: block;
@@ -1433,31 +1449,6 @@ tr:last-child td {
   margin-top: 2px;
   color: var(--muted);
   font-size: 8px;
-}
-
-.player-stat-table th:last-child,
-.player-stat-table td:last-child {
-  width: 42px;
-  padding-inline: 6px;
-  text-align: center;
-}
-
-.match-stat-open {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--muted-bright);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--panel-deep);
-}
-
-.match-stat-open:hover {
-  color: var(--teal);
-  border-color: var(--line-strong);
-  background: var(--raised);
 }
 
 .match-player-backdrop {

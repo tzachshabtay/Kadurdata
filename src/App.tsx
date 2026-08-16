@@ -1540,7 +1540,7 @@ function MatchesView({
                       <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => { setSelectedMatchPlayerId(""); setMatchSide("away"); }}>{text.away}</button>
                     </div>
                   </div>
-                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} openPlayer={openPlayer} inspectPlayer={setSelectedMatchPlayerId} />}
+                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} inspectPlayer={setSelectedMatchPlayerId} />}
                 </div>
               </div>
             </>
@@ -2118,12 +2118,10 @@ function ComparisonBar({ label, home, away, valueType }: { label: string; home: 
 function PlayerMatchTable({
   players,
   seasonPlayers,
-  openPlayer,
   inspectPlayer,
 }: {
   players: PlayerPivot[];
   seasonPlayers: SeasonPlayer[];
-  openPlayer: (id: string) => void;
   inspectPlayer: (id: string) => void;
 }) {
   const { language, text } = useLocale();
@@ -2132,14 +2130,29 @@ function PlayerMatchTable({
   return (
     <div className="data-table-wrap">
       <table className="player-stat-table">
-        <thead><tr><th>{text.player}</th><th>{text.minShort}</th><th>{text.rating}</th><th>{text.goalsShort}</th><th>{text.assistsShort}</th><th>{text.passPct}</th><th>{text.shots}</th><th aria-label={text.matchAttributes} /></tr></thead>
-        <tbody>{players.map((player) => (
-          <tr key={player.appearance_id}>
-            <td><button type="button" onClick={() => openPlayer(player.player_id)}><span>{player.shirt_number ?? "-"}</span><span><strong>{localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language)}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></button></td>
-            <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td><td>{formatMetric(player.values.total_shots)}</td>
-            <td><button className="match-stat-open" type="button" title={text.viewMatchAttributes} aria-label={`${text.viewMatchAttributes}: ${localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language)}`} onClick={() => inspectPlayer(player.player_id)}><ListFilter size={15} aria-hidden="true" /></button></td>
-          </tr>
-        ))}</tbody>
+        <thead><tr><th>{text.player}</th><th>{text.minShort}</th><th>{text.rating}</th><th>{text.goalsShort}</th><th>{text.assistsShort}</th><th>{text.passPct}</th><th>{text.shots}</th></tr></thead>
+        <tbody>{players.map((player) => {
+          const displayName = localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language);
+          const inspect = () => inspectPlayer(player.player_id);
+          return (
+            <tr
+              key={player.appearance_id}
+              role="button"
+              tabIndex={0}
+              title={`${text.viewMatchAttributes}: ${displayName}`}
+              aria-label={`${text.viewMatchAttributes}: ${displayName}`}
+              onClick={inspect}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                inspect();
+              }}
+            >
+              <td><span className="match-player-cell"><span>{player.shirt_number ?? "-"}</span><span><strong>{displayName}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></span></td>
+              <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td><td>{formatMetric(player.values.total_shots)}</td>
+            </tr>
+          );
+        })}</tbody>
       </table>
     </div>
   );
