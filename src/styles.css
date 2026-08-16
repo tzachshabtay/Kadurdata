@@ -1273,6 +1273,14 @@ input[type="search"]::-webkit-search-cancel-button {
   background: var(--green);
 }
 
+.segmented button:disabled,
+.segmented button:disabled:hover {
+  color: var(--muted);
+  background: transparent;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .compact-segmented button {
   height: 29px;
   padding: 0 11px;

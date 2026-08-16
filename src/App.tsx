@@ -719,6 +719,9 @@ export function App() {
     () => new Set(playerHistory.map((row) => row.season_id)).size,
     [playerHistory],
   );
+  useEffect(() => {
+    if (playerHistoryRange === "all" && playerHistorySeasonCount <= 1) setPlayerHistoryRange("latest");
+  }, [playerHistoryRange, playerHistorySeasonCount]);
   const playerChartData = useMemo(
     () => aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all"),
     [playerHistoryRange, selectedPlayerMetric, visiblePlayerHistory],
@@ -1373,7 +1376,15 @@ function PlayersView({
                 <div className="trend-actions">
                   <div className="segmented compact-segmented history-range" aria-label="Match history range">
                     <button className={historyRange === "latest" ? "active" : ""} title="Latest season with data" type="button" onClick={() => setHistoryRange("latest")}>{latestHistorySeasonLabel}</button>
-                    <button className={historyRange === "all" ? "active" : ""} type="button" onClick={() => setHistoryRange("all")}>All seasons</button>
+                    <button
+                      className={historyRange === "all" ? "active" : ""}
+                      disabled={historySeasonCount <= 1}
+                      title={historySeasonCount <= 1 ? "Only one season has player match data" : `Show all ${historySeasonCount} seasons`}
+                      type="button"
+                      onClick={() => setHistoryRange("all")}
+                    >
+                      All seasons ({historySeasonCount})
+                    </button>
                   </div>
                   <div className="trend-keys">
                     {isPairedMetric ? (
