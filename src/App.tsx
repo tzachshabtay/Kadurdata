@@ -57,6 +57,33 @@ import type {
 type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerHistoryRange = "latest" | "all";
+type DeepLinkState = {
+  language: Language | null;
+  view: View;
+  competitionId: string;
+  seasonId: string;
+  roundId: string;
+  matchId: string;
+  matchSide: "home" | "away";
+  clubId: string;
+  playerId: string;
+  metricCode: string;
+  playerHistoryRange: PlayerHistoryRange;
+  leaderMetricCode: string;
+  leaderMinimum: number | null;
+  leaderRatingMinimumMinutes: number;
+  squadMetricCode: string;
+  squadMinimum: number | null;
+  squadRatingMinimumMinutes: number;
+  explorerMetricCode: string;
+  explorerMinimum: number | null;
+  explorerRatingMinimumMinutes: number;
+  roleFilter: RoleFilter;
+  positionFilter: string;
+  clubFilter: string;
+  playerQuery: string;
+  attributeQuery: string;
+};
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
 type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type" | "denominator_metric_code"> & { kind: "season" | "match" };
 type LeaderboardQualification = {
@@ -298,10 +325,102 @@ function delay(milliseconds: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+function readDeepLinkState(): DeepLinkState {
+  const params = new URLSearchParams(window.location.search);
+  const language = params.get("lang");
+  const side = params.get("side");
+  const history = params.get("history");
+  const role = params.get("role") as RoleFilter | null;
+  const readNumber = (key: string, fallback: number | null) => {
+    const raw = params.get(key);
+    if (raw === null || raw.trim() === "") return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 ? value : fallback;
+  };
+
+  return {
+    language: language === "he" || language === "en" ? language : null,
+    view: readViewFromHash(),
+    competitionId: params.get("competition") ?? "",
+    seasonId: params.get("season") ?? "",
+    roundId: params.get("round") ?? "",
+    matchId: params.get("match") ?? "",
+    matchSide: side === "away" ? "away" : "home",
+    clubId: params.get("club") ?? "",
+    playerId: params.get("player") ?? "",
+    metricCode: params.get("metric") ?? "",
+    playerHistoryRange: history === "all" ? "all" : "latest",
+    leaderMetricCode: params.get("leaderMetric") ?? "goals",
+    leaderMinimum: readNumber("leaderMin", null),
+    leaderRatingMinimumMinutes: readNumber("leaderRatingMin", 60) ?? 60,
+    squadMetricCode: params.get("squadMetric") ?? "season_minutes",
+    squadMinimum: readNumber("squadMin", null),
+    squadRatingMinimumMinutes: readNumber("squadRatingMin", 60) ?? 60,
+    explorerMetricCode: params.get("rankingMetric") ?? "season_minutes",
+    explorerMinimum: readNumber("rankingMin", null),
+    explorerRatingMinimumMinutes: readNumber("rankingRatingMin", 60) ?? 60,
+    roleFilter: role && roleFilters.includes(role) ? role : "All",
+    positionFilter: params.get("position") ?? "All",
+    clubFilter: params.get("clubFilter") ?? "all",
+    playerQuery: params.get("playerSearch") ?? "",
+    attributeQuery: params.get("attributeSearch") ?? "",
+  };
+}
+
+function writeDeepLinkState(state: DeepLinkState) {
+  const params = new URLSearchParams();
+  const setString = (key: string, value: string) => {
+    if (value) params.set(key, value);
+  };
+  const setNumber = (key: string, value: number | null) => {
+    if (value !== null && Number.isFinite(value)) params.set(key, String(value));
+  };
+
+  setString("lang", state.language ?? "");
+  setString("competition", state.competitionId);
+  setString("season", state.seasonId);
+  setString("round", state.roundId);
+  setString("match", state.matchId);
+  setString("side", state.matchSide);
+  setString("club", state.clubId);
+  setString("player", state.playerId);
+  setString("metric", state.metricCode);
+  setString("history", state.playerHistoryRange);
+  setString("leaderMetric", state.leaderMetricCode);
+  setNumber("leaderMin", state.leaderMinimum);
+  setNumber("leaderRatingMin", state.leaderRatingMinimumMinutes);
+  setString("squadMetric", state.squadMetricCode);
+  setNumber("squadMin", state.squadMinimum);
+  setNumber("squadRatingMin", state.squadRatingMinimumMinutes);
+  setString("rankingMetric", state.explorerMetricCode);
+  setNumber("rankingMin", state.explorerMinimum);
+  setNumber("rankingRatingMin", state.explorerRatingMinimumMinutes);
+  setString("role", state.roleFilter);
+  setString("position", state.positionFilter);
+  setString("clubFilter", state.clubFilter);
+  setString("playerSearch", state.playerQuery);
+  setString("attributeSearch", state.attributeQuery);
+
+  const search = params.size ? `?${params.toString()}` : "";
+  window.history.replaceState(window.history.state, "", `${window.location.pathname}${search}#${state.view}`);
+}
+
+function minimumMap(metricCode: string, minimum: number | null) {
+  return minimum === null ? {} : { [metricCode]: minimum };
+}
+
+function applyMinimumToMap(current: Record<string, number>, metricCode: string, minimum: number | null) {
+  const next = { ...current };
+  if (minimum === null) delete next[metricCode];
+  else next[metricCode] = minimum;
+  return next;
+}
+
 export function App() {
-  const [language, setLanguage] = useState<Language>(readLanguage);
+  const [initialDeepLink] = useState(readDeepLinkState);
+  const [language, setLanguage] = useState<Language>(initialDeepLink.language ?? readLanguage);
   const text = textByLanguage[language];
-  const [view, setView] = useState<View>(readViewFromHash);
+  const [view, setView] = useState<View>(initialDeepLink.view);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
@@ -315,28 +434,29 @@ export function App() {
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [explorerLeaderboardRows, setExplorerLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
-  const [competitionId, setCompetitionId] = useState("");
-  const [seasonId, setSeasonId] = useState("");
-  const [roundId, setRoundId] = useState("");
-  const [matchId, setMatchId] = useState("");
-  const [clubId, setClubId] = useState("");
-  const [playerId, setPlayerId] = useState("");
-  const [metricCode, setMetricCode] = useState("");
-  const [playerHistoryRange, setPlayerHistoryRange] = useState<PlayerHistoryRange>("latest");
-  const [leaderMetricCode, setLeaderMetricCode] = useState("goals");
-  const [squadMetricCode, setSquadMetricCode] = useState("season_minutes");
-  const [explorerMetricCode, setExplorerMetricCode] = useState("season_minutes");
-  const [leaderMinimums, setLeaderMinimums] = useState<Record<string, number>>({});
-  const [squadMinimums, setSquadMinimums] = useState<Record<string, number>>({});
-  const [explorerMinimums, setExplorerMinimums] = useState<Record<string, number>>({});
-  const [leaderRatingMinimumMinutes, setLeaderRatingMinimumMinutes] = useState(60);
-  const [squadRatingMinimumMinutes, setSquadRatingMinimumMinutes] = useState(60);
-  const [explorerRatingMinimumMinutes, setExplorerRatingMinimumMinutes] = useState(60);
-  const [matchSide, setMatchSide] = useState<"home" | "away">("home");
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
-  const [positionFilter, setPositionFilter] = useState("All");
-  const [clubFilter, setClubFilter] = useState("all");
-  const [playerQuery, setPlayerQuery] = useState("");
+  const [competitionId, setCompetitionId] = useState(initialDeepLink.competitionId);
+  const [seasonId, setSeasonId] = useState(initialDeepLink.seasonId);
+  const [roundId, setRoundId] = useState(initialDeepLink.roundId);
+  const [matchId, setMatchId] = useState(initialDeepLink.matchId);
+  const [clubId, setClubId] = useState(initialDeepLink.clubId);
+  const [playerId, setPlayerId] = useState(initialDeepLink.playerId);
+  const [metricCode, setMetricCode] = useState(initialDeepLink.metricCode);
+  const [playerHistoryRange, setPlayerHistoryRange] = useState<PlayerHistoryRange>(initialDeepLink.playerHistoryRange);
+  const [leaderMetricCode, setLeaderMetricCode] = useState(initialDeepLink.leaderMetricCode);
+  const [squadMetricCode, setSquadMetricCode] = useState(initialDeepLink.squadMetricCode);
+  const [explorerMetricCode, setExplorerMetricCode] = useState(initialDeepLink.explorerMetricCode);
+  const [leaderMinimums, setLeaderMinimums] = useState<Record<string, number>>(() => minimumMap(initialDeepLink.leaderMetricCode, initialDeepLink.leaderMinimum));
+  const [squadMinimums, setSquadMinimums] = useState<Record<string, number>>(() => minimumMap(initialDeepLink.squadMetricCode, initialDeepLink.squadMinimum));
+  const [explorerMinimums, setExplorerMinimums] = useState<Record<string, number>>(() => minimumMap(initialDeepLink.explorerMetricCode, initialDeepLink.explorerMinimum));
+  const [leaderRatingMinimumMinutes, setLeaderRatingMinimumMinutes] = useState(initialDeepLink.leaderRatingMinimumMinutes);
+  const [squadRatingMinimumMinutes, setSquadRatingMinimumMinutes] = useState(initialDeepLink.squadRatingMinimumMinutes);
+  const [explorerRatingMinimumMinutes, setExplorerRatingMinimumMinutes] = useState(initialDeepLink.explorerRatingMinimumMinutes);
+  const [matchSide, setMatchSide] = useState<"home" | "away">(initialDeepLink.matchSide);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>(initialDeepLink.roleFilter);
+  const [positionFilter, setPositionFilter] = useState(initialDeepLink.positionFilter);
+  const [clubFilter, setClubFilter] = useState(initialDeepLink.clubFilter);
+  const [playerQuery, setPlayerQuery] = useState(initialDeepLink.playerQuery);
+  const [attributeQuery, setAttributeQuery] = useState(initialDeepLink.attributeQuery);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -357,8 +477,9 @@ export function App() {
       setCompetitions([demoCompetition]);
       setSeasons([demoSeason]);
       setMetrics(demoMetrics);
-      setCompetitionId(demoCompetition.competition_id);
-      setSeasonId(demoSeason.season_id);
+      setCompetitionId((current) => current === demoCompetition.competition_id ? current : demoCompetition.competition_id);
+      setSeasonId((current) => current === demoSeason.season_id ? current : demoSeason.season_id);
+      setMetricCode((current) => current || preferredMetric(demoMetrics));
       setLeaderMetricCode((current) => current || preferredMetric(demoMetrics));
       setLoading(false);
       return;
@@ -405,9 +526,41 @@ export function App() {
   }, [language, text]);
 
   useEffect(() => {
-    const onHashChange = () => setView(readViewFromHash());
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    const restoreDeepLink = () => {
+      const next = readDeepLinkState();
+      if (next.language) setLanguage(next.language);
+      setView(next.view);
+      if (next.competitionId) setCompetitionId(next.competitionId);
+      if (next.seasonId) setSeasonId(next.seasonId);
+      setRoundId(next.roundId);
+      setMatchId(next.matchId);
+      setMatchSide(next.matchSide);
+      setClubId(next.clubId);
+      setPlayerId(next.playerId);
+      if (next.metricCode) setMetricCode(next.metricCode);
+      setPlayerHistoryRange(next.playerHistoryRange);
+      setLeaderMetricCode(next.leaderMetricCode);
+      setLeaderMinimums((current) => applyMinimumToMap(current, next.leaderMetricCode, next.leaderMinimum));
+      setLeaderRatingMinimumMinutes(next.leaderRatingMinimumMinutes);
+      setSquadMetricCode(next.squadMetricCode);
+      setSquadMinimums((current) => applyMinimumToMap(current, next.squadMetricCode, next.squadMinimum));
+      setSquadRatingMinimumMinutes(next.squadRatingMinimumMinutes);
+      setExplorerMetricCode(next.explorerMetricCode);
+      setExplorerMinimums((current) => applyMinimumToMap(current, next.explorerMetricCode, next.explorerMinimum));
+      setExplorerRatingMinimumMinutes(next.explorerRatingMinimumMinutes);
+      setRoleFilter(next.roleFilter);
+      setPositionFilter(next.positionFilter);
+      setClubFilter(next.clubFilter);
+      setPlayerQuery(next.playerQuery);
+      setAttributeQuery(next.attributeQuery);
+    };
+
+    window.addEventListener("popstate", restoreDeepLink);
+    window.addEventListener("hashchange", restoreDeepLink);
+    return () => {
+      window.removeEventListener("popstate", restoreDeepLink);
+      window.removeEventListener("hashchange", restoreDeepLink);
+    };
   }, []);
 
   const availableSeasons = useMemo(
@@ -420,9 +573,9 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!competitionId || availableSeasons.some((season) => season.season_id === seasonId)) return;
+    if (loading || !competitionId || !availableSeasons.length || availableSeasons.some((season) => season.season_id === seasonId)) return;
     setSeasonId(latestDataSeason?.season_id ?? "");
-  }, [availableSeasons, competitionId, latestDataSeason, seasonId]);
+  }, [availableSeasons, competitionId, latestDataSeason, loading, seasonId]);
 
   useEffect(() => {
     async function loadSeasonData() {
@@ -436,9 +589,9 @@ export function App() {
         setMatches(demoMatches);
         setClubs(demoClubs);
         setPlayers(demoPlayers);
-        setRoundId(demoRounds[demoRounds.length - 1]?.round_id ?? "");
-        setClubId(demoClubs[0]?.team_id ?? "");
-        setPlayerId(demoPlayers[0]?.player_id ?? "");
+        setRoundId((current) => demoRounds.some((round) => round.round_id === current) ? current : demoRounds[demoRounds.length - 1]?.round_id ?? "");
+        setClubId((current) => demoClubs.some((club) => club.team_id === current) ? current : demoClubs[0]?.team_id ?? "");
+        setPlayerId((current) => demoPlayers.some((player) => player.player_id === current) ? current : demoPlayers[0]?.player_id ?? "");
         setSeasonLoading(false);
         return;
       }
@@ -506,8 +659,9 @@ export function App() {
   );
 
   useEffect(() => {
+    if (seasonLoading || !roundId || !matches.length) return;
     setMatchId((current) => roundMatches.some((match) => match.match_id === current) ? current : roundMatches[0]?.match_id ?? "");
-  }, [roundMatches]);
+  }, [matches.length, roundId, roundMatches, seasonLoading]);
 
   useEffect(() => {
     async function loadMatchDetail() {
@@ -586,10 +740,6 @@ export function App() {
 
     void loadPlayerDetail();
     return () => { cancelled = true; };
-  }, [competitionId, playerId]);
-
-  useEffect(() => {
-    setPlayerHistoryRange("latest");
   }, [competitionId, playerId]);
 
   useEffect(() => {
@@ -763,6 +913,7 @@ export function App() {
     [playerChartMetrics, selectedPlayer?.role_group],
   );
   useEffect(() => {
+    if (!playerViewMetrics.length) return;
     if (playerViewMetrics.some((metric) => metric.chartKey === metricCode)) return;
     const preferred = playerViewMetrics.find((metric) => metric.code === preferredMetric(playerMetrics));
     setMetricCode(preferred?.chartKey ?? playerViewMetrics[0]?.chartKey ?? "");
@@ -800,9 +951,10 @@ export function App() {
     return [...seasonMetrics, ...matchMetrics.filter((metric) => !isGoalkeepingMetricCode(metric.code))];
   }, [leaderboardMetrics, roleFilter]);
   useEffect(() => {
+    if (loading || !metrics.length) return;
     if (explorerLeaderboardMetrics.some((metric) => metric.code === explorerMetricCode)) return;
     setExplorerMetricCode("season_minutes");
-  }, [explorerLeaderboardMetrics, explorerMetricCode]);
+  }, [explorerLeaderboardMetrics, explorerMetricCode, loading, metrics.length]);
   const leaderQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === leaderMetricCode));
   const squadQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === squadMetricCode));
   const explorerQualification = getLeaderboardQualification(explorerLeaderboardMetrics.find((metric) => metric.code === explorerMetricCode));
@@ -815,9 +967,6 @@ export function App() {
     () => [...clubs].sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference),
     [clubs],
   );
-  useEffect(() => {
-    setPositionFilter("All");
-  }, [roleFilter]);
   const positionOptions = useMemo(() => {
     if (!["Defenders", "Midfielders", "Attackers"].includes(roleFilter)) return [];
     const options = new Map<string, PlayerPositionDetail>();
@@ -897,8 +1046,8 @@ export function App() {
     [playerHistory],
   );
   useEffect(() => {
-    if (playerHistoryRange === "all" && playerHistorySeasonCount <= 1) setPlayerHistoryRange("latest");
-  }, [playerHistoryRange, playerHistorySeasonCount]);
+    if (playerHistory.length && playerHistoryRange === "all" && playerHistorySeasonCount <= 1) setPlayerHistoryRange("latest");
+  }, [playerHistory.length, playerHistoryRange, playerHistorySeasonCount]);
   const playerChartData = useMemo(
     () => selectedPlayerMetric
       ? aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all", language)
@@ -920,6 +1069,64 @@ export function App() {
   const matchPlayers = useMemo(() => pivotMatchPlayers(matchPlayerStats), [matchPlayerStats]);
   const visibleMatchPlayers = matchPlayers.filter((player) => player.side === matchSide);
   const teamComparisons = useMemo(() => buildTeamComparisons(matchTeamStats, language), [language, matchTeamStats]);
+
+  useEffect(() => {
+    if (loading) return;
+    writeDeepLinkState({
+      language,
+      view,
+      competitionId,
+      seasonId,
+      roundId,
+      matchId,
+      matchSide,
+      clubId,
+      playerId,
+      metricCode,
+      playerHistoryRange,
+      leaderMetricCode,
+      leaderMinimum,
+      leaderRatingMinimumMinutes,
+      squadMetricCode,
+      squadMinimum,
+      squadRatingMinimumMinutes,
+      explorerMetricCode,
+      explorerMinimum,
+      explorerRatingMinimumMinutes,
+      roleFilter,
+      positionFilter,
+      clubFilter,
+      playerQuery,
+      attributeQuery,
+    });
+  }, [
+    attributeQuery,
+    clubFilter,
+    clubId,
+    competitionId,
+    explorerMetricCode,
+    explorerMinimum,
+    explorerRatingMinimumMinutes,
+    language,
+    leaderMetricCode,
+    leaderMinimum,
+    leaderRatingMinimumMinutes,
+    loading,
+    matchId,
+    matchSide,
+    metricCode,
+    playerHistoryRange,
+    playerId,
+    playerQuery,
+    positionFilter,
+    roleFilter,
+    roundId,
+    seasonId,
+    squadMetricCode,
+    squadMinimum,
+    squadRatingMinimumMinutes,
+    view,
+  ]);
 
   function navigate(nextView: View) {
     setView(nextView);
@@ -1081,7 +1288,7 @@ export function App() {
             selectPlayer={setPlayerId}
             roles={roleFilters}
             roleFilter={roleFilter}
-            setRoleFilter={setRoleFilter}
+            setRoleFilter={(role) => { setRoleFilter(role); setPositionFilter("All"); }}
             positions={positionOptions}
             positionFilter={positionFilter}
             setPositionFilter={setPositionFilter}
@@ -1090,6 +1297,8 @@ export function App() {
             setClubFilter={setClubFilter}
             query={playerQuery}
             setQuery={setPlayerQuery}
+            attributeQuery={attributeQuery}
+            setAttributeQuery={setAttributeQuery}
             metrics={playerViewMetrics}
             metricCode={metricCode}
             setMetricCode={setMetricCode}
@@ -1527,6 +1736,8 @@ function PlayersView({
   setClubFilter,
   query,
   setQuery,
+  attributeQuery,
+  setAttributeQuery,
   metrics,
   metricCode,
   setMetricCode,
@@ -1567,6 +1778,8 @@ function PlayersView({
   setClubFilter: (id: string) => void;
   query: string;
   setQuery: (value: string) => void;
+  attributeQuery: string;
+  setAttributeQuery: (value: string) => void;
   metrics: PlayerChartMetric[];
   metricCode: string;
   setMetricCode: (code: string) => void;
@@ -1582,7 +1795,6 @@ function PlayersView({
   detailLoading: boolean;
 }) {
   const { language, text } = useLocale();
-  const [attributeQuery, setAttributeQuery] = useState("");
   const metric = metrics.find((item) => item.chartKey === metricCode);
   const rankingByPlayerId = new Map(rankingRows.map((row) => [row.player_id, row]));
   const seasonRankingMetrics = rankingMetrics.filter((item) => item.kind === "season");
