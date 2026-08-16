@@ -1,9 +1,14 @@
 import unittest
+from argparse import Namespace
 
 from scripts.ingest_365scores import (
     competition_seasons,
+    game_has_country_participant,
+    game_season_num,
     inferred_season_name,
+    israel_related_competitions,
     normalize_competition,
+    page_params,
 )
 
 
@@ -23,6 +28,63 @@ class CompetitionCatalogTests(unittest.TestCase):
         self.assertEqual(competition["gender"], "women")
         self.assertEqual(competition["competition_type"], "league")
         self.assertEqual(competition["current_season_num"], 16)
+
+    def test_normalizes_national_youth_competition(self) -> None:
+        competition = normalize_competition(
+            {
+                "id": 322,
+                "name": "Euro U21 Qualification",
+                "countryId": 19,
+                "competitorsType": 2,
+            }
+        )
+
+        self.assertEqual(competition["age_group"], "under_21")
+        self.assertEqual(competition["participant_type"], "national_team")
+        self.assertEqual(competition["source_country_id"], 19)
+
+    def test_selects_only_curated_israel_related_competitions(self) -> None:
+        competitions = israel_related_competitions(
+            {
+                "competitions": [
+                    {"id": 572, "name": "UEFA Champions League", "competitorsType": 1},
+                    {"id": 7016, "name": "UEFA Nations League", "competitorsType": 2},
+                    {"id": 11, "name": "LaLiga", "competitorsType": 1},
+                ]
+            }
+        )
+
+        self.assertEqual([item["id"] for item in competitions], [572, 7016])
+        self.assertEqual(competitions[0]["scope"], "european_club")
+        self.assertEqual(competitions[1]["scope"], "national_team")
+        self.assertTrue(all(item["participant_country_filter"] == 6 for item in competitions))
+
+    def test_filters_external_games_to_israeli_participants(self) -> None:
+        israel_game = {
+            "homeCompetitor": {"name": "Maccabi Tel Aviv", "countryId": 6},
+            "awayCompetitor": {"name": "Basel", "countryId": 15},
+        }
+        unrelated_game = {
+            "homeCompetitor": {"name": "Basel", "countryId": 15},
+            "awayCompetitor": {"name": "Ajax", "countryId": 7},
+        }
+
+        self.assertTrue(game_has_country_participant(israel_game, 6))
+        self.assertFalse(game_has_country_participant(unrelated_game, 6))
+
+    def test_preserves_competitor_filter_when_paging(self) -> None:
+        params = page_params(
+            Namespace(app_type_id=5, lang_id=1, timezone="Asia/Jerusalem", user_country_id=6),
+            "/web/games/?competitors=5034&games=1&aftergame=4314041&direction=-1",
+        )
+
+        self.assertIsNotNone(params)
+        self.assertEqual(params["competitors"], "5034")
+        self.assertNotIn("competitions", params)
+
+    def test_infers_season_number_for_friendlies(self) -> None:
+        self.assertEqual(game_season_num({"startTime": "2025-11-13T19:00:00+02:00"}), 2025)
+        self.assertEqual(game_season_num({"startTime": "2026-06-03T21:00:00+03:00"}), 2025)
 
     def test_infers_cross_year_season(self) -> None:
         games = [

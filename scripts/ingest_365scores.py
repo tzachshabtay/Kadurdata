@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Fetch and flatten Israeli competition data from 365Scores.
+"""Fetch and flatten Israel-centric football data from 365Scores.
 
-The source exposes a live Israeli competition catalog. This command can ingest
-one competition or discover every Israeli football competition, then fetch
+The source exposes domestic competitions directly, while UEFA and national-team
+matches are discovered through Israeli participant feeds. The command fetches
 fixtures, match details, team stats, and per-player lineup stats.
 """
 
@@ -41,6 +41,88 @@ USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 )
+
+# 365Scores catalogs domestic competitions under Israel, but UEFA and FIFA
+# competitions under Europe/International. These are the external competitions
+# in which an Israeli club or national side can appear. Matches are filtered by
+# participant country before detail/stat payloads are requested.
+ISRAEL_RELATED_COMPETITIONS: Dict[int, Dict[str, str]] = {
+    # Senior, women, and youth club competitions.
+    332: {"name": "UEFA Champions League Qualifiers", "scope": "european_club", "age_group": "senior", "gender": "men"},
+    472: {"name": "UEFA Super Cup", "scope": "european_club", "age_group": "senior", "gender": "men"},
+    572: {"name": "UEFA Champions League", "scope": "european_club", "age_group": "senior", "gender": "men"},
+    573: {"name": "UEFA Europa League", "scope": "european_club", "age_group": "senior", "gender": "men"},
+    596: {"name": "UEFA Europa League Qualifiers", "scope": "european_club", "age_group": "senior", "gender": "men"},
+    6225: {"name": "UEFA Women's Champions League", "scope": "european_club", "age_group": "senior", "gender": "women"},
+    6297: {"name": "UEFA Youth League", "scope": "european_club", "age_group": "youth", "gender": "men"},
+    7685: {"name": "UEFA Conference League", "scope": "european_club", "age_group": "senior", "gender": "men"},
+    8833: {"name": "UEFA Women's Europa Cup", "scope": "european_club", "age_group": "senior", "gender": "women"},
+    # Senior and Olympic national teams.
+    570: {"name": "Friendly International", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    597: {"name": "Women's World Cup", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    5421: {"name": "UEFA WC Qualification", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    5549: {"name": "UEFA Women's EURO", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    5561: {"name": "Friendly Women", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    5788: {"name": "World Cup Playoff Tournament", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    5930: {"name": "FIFA World Cup", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    6071: {"name": "European Qualifiers", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    6307: {"name": "UEFA Women's EURO Qualification", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    6316: {"name": "Euro", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    6370: {"name": "Olympics Football - Men", "scope": "national_team", "age_group": "under_23", "gender": "men"},
+    6371: {"name": "Olympics Football - Women", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    7016: {"name": "UEFA Nations League", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    7756: {"name": "UEFA Women WC Qualifiers", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    7995: {"name": "UEFA Nations League Women", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    9034: {"name": "FIFA Series", "scope": "national_team", "age_group": "senior", "gender": "men"},
+    9042: {"name": "FIFA Series (W)", "scope": "national_team", "age_group": "senior", "gender": "women"},
+    # Youth national teams.
+    322: {"name": "Euro U21 Qualification", "scope": "national_youth", "age_group": "under_21", "gender": "men"},
+    323: {"name": "Euro U17 Qualification", "scope": "national_youth", "age_group": "under_17", "gender": "men"},
+    324: {"name": "Euro U19 Qualification", "scope": "national_youth", "age_group": "under_19", "gender": "men"},
+    328: {"name": "Euro U17", "scope": "national_youth", "age_group": "under_17", "gender": "men"},
+    467: {"name": "Euro U19", "scope": "national_youth", "age_group": "under_19", "gender": "men"},
+    571: {"name": "U21 Friendly International", "scope": "national_youth", "age_group": "under_21", "gender": "men"},
+    591: {"name": "Euro U21", "scope": "national_youth", "age_group": "under_21", "gender": "men"},
+    5422: {"name": "U19 Friendly International", "scope": "national_youth", "age_group": "under_19", "gender": "men"},
+    5509: {"name": "U17 Friendly International", "scope": "national_youth", "age_group": "under_17", "gender": "men"},
+    5525: {"name": "U20 World Cup", "scope": "national_youth", "age_group": "under_20", "gender": "men"},
+    5560: {"name": "U20 Friendly International", "scope": "national_youth", "age_group": "under_20", "gender": "men"},
+    5582: {"name": "U17 World Cup", "scope": "national_youth", "age_group": "under_17", "gender": "men"},
+    6085: {"name": "Women U17 World Cup", "scope": "national_youth", "age_group": "under_17", "gender": "women"},
+    6818: {"name": "World Cup Women U20", "scope": "national_youth", "age_group": "under_20", "gender": "women"},
+    7267: {"name": "U23 Friendly International", "scope": "national_youth", "age_group": "under_23", "gender": "men"},
+    7943: {"name": "U18 Friendly International", "scope": "national_youth", "age_group": "under_18", "gender": "men"},
+}
+
+ISRAEL_RELATED_PARTICIPANTS = {
+    # Senior clubs with European appearances in the covered era.
+    559,  # Beitar Jerusalem
+    560,  # Maccabi Netanya
+    562,  # Maccabi Haifa
+    563,  # Kiryat Shmona
+    566,  # Maccabi Tel Aviv
+    567,  # Hapoel Tel Aviv
+    569,  # SC Ashdod
+    570,  # Bnei Yehuda
+    579,  # Hapoel Beer Sheva
+    # Women's and youth clubs.
+    8175,  # Hapoel Tel Aviv U19
+    8181,  # Maccabi Haifa U19
+    8182,  # Maccabi Tel Aviv U19
+    8382,  # Hapoel Beer Sheva U19
+    26400,  # Maccabi ASA Tel Aviv Women
+    67612,  # SC Kiryat Gat Women
+    72175,  # Hapoel Katamon Jerusalem Women
+    # Israel national teams.
+    5034,
+    5121,
+    5226,
+    5309,
+    5471,
+    28316,
+    74072,
+    79577,
+}
 
 
 def default_date_window() -> Tuple[str, str]:
@@ -82,6 +164,18 @@ def build_url(path: str, params: Dict[str, Any]) -> str:
 def game_date(game: Dict[str, Any]) -> str:
     start_time = game.get("startTime") or ""
     return start_time[:10]
+
+
+def game_season_num(game: Dict[str, Any]) -> Optional[int]:
+    source_season_num = game.get("seasonNum")
+    if source_season_num is not None:
+        return int(source_season_num)
+    date = game_date(game)
+    if len(date) < 7:
+        return None
+    year = int(date[:4])
+    month = int(date[5:7])
+    return year if month >= 7 else year - 1
 
 
 def game_is_in_window(game: Dict[str, Any], start_date: str, end_date: str) -> bool:
@@ -136,7 +230,9 @@ def normalize_competition(source_competition: Dict[str, Any]) -> Dict[str, Any]:
         or source_competition.get("shortName")
         or source_name
     )
-    is_youth = "youth" in source_name.lower()
+    normalized_name = source_name.lower()
+    age_match = re.search(r"\bu(17|18|19|20|21|23)\b", normalized_name)
+    is_youth = "youth" in normalized_name or age_match is not None
     return {
         "id": source_competition.get("id"),
         "name": display_name,
@@ -144,8 +240,10 @@ def normalize_competition(source_competition: Dict[str, Any]) -> Dict[str, Any]:
         "short_name": source_competition.get("shortName"),
         "long_name": source_competition.get("longName"),
         "competition_type": competition_type(source_name),
-        "gender": "women" if "women" in source_name.lower() else "men",
-        "age_group": "youth" if is_youth else "senior",
+        "gender": "women" if "women" in normalized_name or "(w)" in normalized_name else "men",
+        "age_group": f"under_{age_match.group(1)}" if age_match else "youth" if is_youth else "senior",
+        "source_country_id": source_competition.get("countryId"),
+        "participant_type": "national_team" if source_competition.get("competitorsType") == 2 else "club",
         "current_season_num": source_competition.get("currentSeasonNum"),
         "has_stats": bool(source_competition.get("hasStats")),
         "has_history": bool(source_competition.get("hasHistory")),
@@ -172,8 +270,62 @@ def collect_competition_catalog(args: argparse.Namespace, raw_dir: Path) -> List
         sleep_seconds=args.sleep,
         refresh=args.refresh,
     )
-    competitions = [normalize_competition(item) for item in payload.get("competitions") or []]
+    competitions = [
+        {**normalize_competition(item), "scope": "domestic"}
+        for item in payload.get("competitions") or []
+    ]
     return sorted((item for item in competitions if item.get("id") is not None), key=lambda item: item["id"])
+
+
+def israel_related_competitions(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    source_by_id = {
+        int(item["id"]): item
+        for item in payload.get("competitions") or []
+        if item.get("id") is not None
+    }
+    competitions = []
+    for competition_id, specification in ISRAEL_RELATED_COMPETITIONS.items():
+        source_competition = source_by_id.get(competition_id)
+        if source_competition is None:
+            continue
+        competitions.append(
+            {
+                **normalize_competition(source_competition),
+                **specification,
+                "participant_country_filter": ISRAEL_COUNTRY_ID,
+            }
+        )
+    return sorted(competitions, key=lambda item: item["id"])
+
+
+def collect_israel_related_competition_catalog(
+    args: argparse.Namespace,
+    raw_dir: Path,
+) -> List[Dict[str, Any]]:
+    payload = cached_fetch(
+        build_url(
+            "/web/competitions/",
+            {
+                "appTypeId": args.app_type_id,
+                "langId": args.lang_id,
+                "timezoneName": args.timezone,
+                "userCountryId": args.user_country_id,
+                "sports": FOOTBALL_SPORT_ID,
+            },
+        ),
+        raw_dir / "global_competitions.json",
+        retries=args.retries,
+        sleep_seconds=args.sleep,
+        refresh=args.refresh,
+    )
+    return israel_related_competitions(payload)
+
+
+def game_has_country_participant(game: Dict[str, Any], country_id: int) -> bool:
+    return any(
+        (game.get(f"{side}Competitor") or {}).get("countryId") == country_id
+        for side in ("home", "away")
+    )
 
 
 def collect_competition_history(
@@ -231,7 +383,7 @@ def competition_seasons(
     history_by_num = {str(row["num"]): row for row in history}
     games_by_season: Dict[str, List[Dict[str, Any]]] = {}
     for game in games:
-        season_num = game.get("seasonNum")
+        season_num = game_season_num(game)
         if season_num is None:
             continue
         games_by_season.setdefault(str(season_num), []).append(game)
@@ -280,16 +432,21 @@ def parse_stat_value(value: Any) -> Tuple[Optional[float], Optional[float], Opti
     return None, None, None
 
 
-def fixture_params(args: argparse.Namespace) -> Dict[str, Any]:
-    return {
+def fixture_params(
+    args: argparse.Namespace,
+    filter_name: str = "competitions",
+    filter_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    params = {
         "appTypeId": args.app_type_id,
         "langId": args.lang_id,
         "timezoneName": args.timezone,
         "userCountryId": args.user_country_id,
-        "competitions": args.competition_id,
         "startDate": args.start_date,
         "endDate": args.end_date,
     }
+    params[filter_name] = filter_id if filter_id is not None else args.competition_id
+    return params
 
 
 def page_params(args: argparse.Namespace, page_url: str) -> Optional[Dict[str, Any]]:
@@ -299,12 +456,15 @@ def page_params(args: argparse.Namespace, page_url: str) -> Optional[Dict[str, A
     direction = query.get("direction", [None])[0]
     if not aftergame or not direction:
         return None
+    filter_name = next((name for name in ("competitions", "competitors") if query.get(name)), None)
+    if filter_name is None:
+        return None
     return {
         "appTypeId": args.app_type_id,
         "langId": args.lang_id,
         "timezoneName": args.timezone,
         "userCountryId": args.user_country_id,
-        "competitions": args.competition_id,
+        filter_name: query[filter_name][0],
         "games": 1,
         "aftergame": aftergame,
         "direction": direction,
@@ -317,8 +477,13 @@ def fixture_page_cache_path(raw_dir: Path, params: Dict[str, Any]) -> Path:
     return raw_dir / "fixture_pages" / f"{direction}_{aftergame}.json"
 
 
-def collect_fixtures(args: argparse.Namespace, raw_dir: Path) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    url = build_url("/web/games/results/", fixture_params(args))
+def collect_fixture_feed(
+    args: argparse.Namespace,
+    raw_dir: Path,
+    filter_name: str,
+    filter_id: int,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    url = build_url("/web/games/results/", fixture_params(args, filter_name, filter_id))
     payload = cached_fetch(
         url,
         raw_dir / "fixtures.json",
@@ -413,6 +578,54 @@ def collect_fixtures(args: argparse.Namespace, raw_dir: Path) -> Tuple[List[Dict
                 pending.append(next_page_url)
 
     return list(games_by_id.values()), {"initial": payload, "pages": pages}
+
+
+def collect_fixtures(args: argparse.Namespace, raw_dir: Path) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    return collect_fixture_feed(args, raw_dir, "competitions", args.competition_id)
+
+
+def collect_israel_related_games(
+    args: argparse.Namespace,
+    raw_dir: Path,
+    competition_ids: set[int],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    games_by_id: Dict[int, Dict[str, Any]] = {}
+    fixture_pages: List[Dict[str, Any]] = []
+    failures: List[Dict[str, Any]] = []
+
+    for participant_id in sorted(ISRAEL_RELATED_PARTICIPANTS):
+        try:
+            games, payload = collect_fixture_feed(
+                args,
+                raw_dir / "participants" / str(participant_id),
+                "competitors",
+                participant_id,
+            )
+        except RuntimeError as exc:
+            failures.append(
+                {"participant_id": participant_id, "kind": "participant_fixtures", "error": str(exc)}
+            )
+            continue
+
+        selected_games = [
+            game
+            for game in games
+            if game.get("competitionId") in competition_ids
+            and game_has_country_participant(game, ISRAEL_COUNTRY_ID)
+        ]
+        games_by_id.update(
+            {int(game["id"]): game for game in selected_games if game.get("id") is not None}
+        )
+        fixture_pages.append(
+            {
+                "participant_id": participant_id,
+                "page_count": len(payload.get("pages") or []),
+                "pages": payload.get("pages") or [],
+                "selected_game_count": len(selected_games),
+            }
+        )
+
+    return list(games_by_id.values()), fixture_pages, failures
 
 
 def collect_game_payload(
@@ -522,7 +735,7 @@ def base_game_row(game: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "game_id": game.get("id"),
         "competition_id": game.get("competitionId"),
-        "season_num": game.get("seasonNum"),
+        "season_num": game_season_num(game),
         "stage_num": game.get("stageNum"),
         "round_num": game.get("roundNum"),
         "round_name": game.get("roundName"),
@@ -666,7 +879,7 @@ def summarize(rows: List[Dict[str, Any]], key: str) -> List[Any]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fetch and flatten Israeli football data from 365Scores.")
+    parser = argparse.ArgumentParser(description="Fetch and flatten Israel-centric football data from 365Scores.")
     parser.add_argument("--competition-id", type=int, default=DEFAULT_COMPETITION_ID)
     parser.add_argument(
         "--all-israeli-competitions",
@@ -674,8 +887,13 @@ def parse_args() -> argparse.Namespace:
         help="Discover and ingest every Israeli football competition returned by the source.",
     )
     parser.add_argument(
+        "--israel-related-competitions",
+        action="store_true",
+        help="Ingest UEFA club and national-team competitions, keeping only matches involving Israel.",
+    )
+    parser.add_argument(
         "--competition-ids",
-        help="Optional comma-separated competition IDs to select when using --all-israeli-competitions.",
+        help="Optional comma-separated competition IDs to select in multi-competition mode.",
     )
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", default=DEFAULT_END_DATE)
@@ -722,8 +940,21 @@ def main() -> int:
     ensure_dir(args.processed_dir)
 
     catalog_failures: List[Dict[str, Any]] = []
-    if args.all_israeli_competitions:
-        competitions = collect_competition_catalog(args, args.raw_dir)
+    multi_competition_mode = args.all_israeli_competitions or args.israel_related_competitions
+    if multi_competition_mode:
+        competition_by_id: Dict[int, Dict[str, Any]] = {}
+        if args.all_israeli_competitions:
+            competition_by_id.update(
+                {int(item["id"]): item for item in collect_competition_catalog(args, args.raw_dir)}
+            )
+        if args.israel_related_competitions:
+            competition_by_id.update(
+                {
+                    int(item["id"]): item
+                    for item in collect_israel_related_competition_catalog(args, args.raw_dir)
+                }
+            )
+        competitions = sorted(competition_by_id.values(), key=lambda item: item["id"])
         if args.competition_ids:
             selected_ids = {int(value.strip()) for value in args.competition_ids.split(",") if value.strip()}
             competitions = [competition for competition in competitions if competition["id"] in selected_ids]
@@ -736,6 +967,7 @@ def main() -> int:
                 "competition_type": "league",
                 "gender": "men",
                 "age_group": "senior",
+                "scope": "domestic",
                 "current_season_num": None,
                 "has_stats": True,
                 "has_history": args.competition_id == 42,
@@ -754,29 +986,61 @@ def main() -> int:
     fixture_pages: List[Dict[str, Any]] = []
     competition_manifests: List[Dict[str, Any]] = []
 
+    related_competition_ids = {
+        int(competition["id"])
+        for competition in competitions
+        if competition.get("scope") != "domestic"
+    }
+    related_games_by_competition: Dict[int, List[Dict[str, Any]]] = {}
+    if related_competition_ids:
+        related_games, participant_pages, participant_failures = collect_israel_related_games(
+            args,
+            args.raw_dir,
+            related_competition_ids,
+        )
+        if participant_failures and not args.allow_fetch_failures:
+            raise RuntimeError(participant_failures[0]["error"])
+        failures.extend(participant_failures)
+        fixture_pages.extend(participant_pages)
+        for game in related_games:
+            competition_id = game.get("competitionId")
+            if competition_id is not None:
+                related_games_by_competition.setdefault(int(competition_id), []).append(game)
+
     for competition in competitions:
         competition_id = int(competition["id"])
         competition_args = argparse.Namespace(**{**vars(args), "competition_id": competition_id})
         competition_raw_dir = (
             args.raw_dir / "competitions" / str(competition_id)
-            if args.all_israeli_competitions
+            if multi_competition_mode
             else args.raw_dir
         )
         print(f"discovering {competition['name']} ({competition_id})", flush=True)
-        try:
-            games, fixture_payload = collect_fixtures(competition_args, competition_raw_dir)
-        except RuntimeError as exc:
-            failure = {"competition_id": competition_id, "kind": "fixtures", "error": str(exc)}
-            if not args.allow_fetch_failures:
-                raise
-            failures.append(failure)
-            games = []
+        if competition.get("scope") != "domestic":
+            games = related_games_by_competition.get(competition_id, [])
             fixture_payload = {"pages": []}
+        else:
+            try:
+                games, fixture_payload = collect_fixtures(competition_args, competition_raw_dir)
+            except RuntimeError as exc:
+                failure = {"competition_id": competition_id, "kind": "fixtures", "error": str(exc)}
+                if not args.allow_fetch_failures:
+                    raise
+                failures.append(failure)
+                games = []
+                fixture_payload = {"pages": []}
 
         games = sorted(
             {int(game["id"]): game for game in games if game.get("id") is not None}.values(),
             key=lambda game: game.get("startTime") or "",
         )
+        participant_country_filter = competition.get("participant_country_filter")
+        if participant_country_filter is not None:
+            games = [
+                game
+                for game in games
+                if game_has_country_participant(game, int(participant_country_filter))
+            ]
         if args.limit:
             games = games[: args.limit]
         all_games.update({int(game["id"]): game for game in games})
@@ -845,8 +1109,9 @@ def main() -> int:
 
     manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "competition_id": args.competition_id if not args.all_israeli_competitions else None,
+        "competition_id": args.competition_id if not multi_competition_mode else None,
         "all_israeli_competitions": args.all_israeli_competitions,
+        "israel_related_competitions": args.israel_related_competitions,
         "competitions": competition_manifests,
         "start_date": args.start_date,
         "end_date": args.end_date,

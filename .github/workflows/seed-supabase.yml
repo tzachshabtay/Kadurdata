@@ -17,7 +17,7 @@ on:
         required: false
         default: "0"
       competition_ids:
-        description: "Optional comma-separated 365Scores competition IDs. Blank means all Israeli competitions."
+        description: "Optional comma-separated 365Scores competition IDs. Blank means domestic, UEFA, and national-team competitions."
         required: false
         default: ""
   schedule:
@@ -61,6 +61,7 @@ jobs:
         run: |
           args=(
             --all-israeli-competitions
+            --israel-related-competitions
             --allow-fetch-failures
             --retries 4
             --page-retries 1
@@ -77,6 +78,8 @@ jobs:
               --start-date "$(date -u -d '14 days ago' +%F)"
               --end-date "$(date -u -d '370 days' +%F)"
             )
+          else
+            args+=(--start-date "2010-07-01")
           fi
           if [ "${SEED_LIMIT:-0}" != "0" ]; then
             args+=(--limit "$SEED_LIMIT" --max-fixture-pages 5)

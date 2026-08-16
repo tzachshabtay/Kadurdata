@@ -15,6 +15,10 @@ export type Competition = {
   season_count: number;
   latest_season_id: string | null;
   latest_season_name: string | null;
+  scope: "domestic" | "european_club" | "national_team" | "national_youth";
+  gender: string;
+  age_group: string;
+  participant_type: string;
 };
 
 export type Season = {

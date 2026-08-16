@@ -198,6 +198,10 @@ const demoCompetition: Competition = {
   season_count: 1,
   latest_season_id: "demo-season",
   latest_season_name: "2025/26",
+  scope: "domestic",
+  gender: "men",
+  age_group: "senior",
+  participant_type: "club",
 };
 
 const demoSeason: Season = {
@@ -1196,9 +1200,21 @@ export function App() {
           <label className="context-select">
             <span>{text.competition}</span>
             <select value={competitionId} onChange={(event) => setCompetitionId(event.target.value)}>
-              {competitions.map((competition) => (
-                <option key={competition.competition_id} value={competition.competition_id}>{localizedCompetition(competition, language)}</option>
-              ))}
+              {([
+                ["domestic", text.domesticCompetitions],
+                ["european_club", text.europeanClubCompetitions],
+                ["national_team", text.nationalTeamCompetitions],
+                ["national_youth", text.nationalYouthCompetitions],
+              ] as const).map(([scope, label]) => {
+                const scopedCompetitions = competitions.filter((competition) => (competition.scope || "domestic") === scope);
+                return scopedCompetitions.length ? (
+                  <optgroup key={scope} label={label}>
+                    {scopedCompetitions.map((competition) => (
+                      <option key={competition.competition_id} value={competition.competition_id}>{localizedCompetition(competition, language)}</option>
+                    ))}
+                  </optgroup>
+                ) : null;
+              })}
             </select>
           </label>
           <label className="context-select">
@@ -2597,6 +2613,48 @@ const hebrewCompetitionNames: Record<string, string> = {
   "toto league cup": "גביע הטוטו",
   "youth cup": "גביע המדינה לנוער",
   "youth league": "ליגת העל לנוער",
+  "euro": "אליפות אירופה",
+  "euro u17": "אליפות אירופה עד גיל 17",
+  "euro u17 qualification": "מוקדמות אליפות אירופה עד גיל 17",
+  "euro u19": "אליפות אירופה עד גיל 19",
+  "euro u19 qualification": "מוקדמות אליפות אירופה עד גיל 19",
+  "euro u21": "אליפות אירופה עד גיל 21",
+  "euro u21 qualification": "מוקדמות אליפות אירופה עד גיל 21",
+  "european qualifiers": "מוקדמות אליפות אירופה",
+  "fifa series": "סדרת פיפ״א",
+  "fifa series (w)": "סדרת פיפ״א לנשים",
+  "fifa world cup": "גביע העולם",
+  "friendly international": "משחקי ידידות בינלאומיים",
+  "friendly women": "משחקי ידידות בינלאומיים לנשים",
+  "olympics football - men": "הטורניר האולימפי לגברים",
+  "olympics football - women": "הטורניר האולימפי לנשים",
+  "u17 friendly international": "משחקי ידידות עד גיל 17",
+  "u17 world cup": "גביע העולם עד גיל 17",
+  "u18 friendly international": "משחקי ידידות עד גיל 18",
+  "u19 friendly international": "משחקי ידידות עד גיל 19",
+  "u20 friendly international": "משחקי ידידות עד גיל 20",
+  "u20 world cup": "גביע העולם עד גיל 20",
+  "u21 friendly international": "משחקי ידידות עד גיל 21",
+  "u23 friendly international": "משחקי ידידות עד גיל 23",
+  "uefa champions league": "ליגת האלופות",
+  "uefa champions league qualifiers": "מוקדמות ליגת האלופות",
+  "uefa conference league": "הקונפרנס ליג",
+  "uefa europa league": "הליגה האירופית",
+  "uefa europa league qualifiers": "מוקדמות הליגה האירופית",
+  "uefa nations league": "ליגת האומות",
+  "uefa nations league women": "ליגת האומות לנשים",
+  "uefa super cup": "הסופר קאפ האירופי",
+  "uefa wc qualification": "מוקדמות גביע העולם באירופה",
+  "uefa women wc qualifiers": "מוקדמות גביע העולם לנשים באירופה",
+  "uefa women's champions league": "ליגת האלופות לנשים",
+  "uefa women's euro": "אליפות אירופה לנשים",
+  "uefa women's euro qualification": "מוקדמות אליפות אירופה לנשים",
+  "uefa women's europa cup": "גביע אירופה לנשים",
+  "uefa youth league": "ליגת האלופות לנוער",
+  "women u17 world cup": "גביע העולם לנשים עד גיל 17",
+  "women's world cup": "גביע העולם לנשים",
+  "world cup playoff tournament": "פלייאוף גביע העולם",
+  "world cup women u20": "גביע העולם לנשים עד גיל 20",
 };
 
 const hebrewTeamNames: Record<string, string> = {
@@ -2627,6 +2685,15 @@ const hebrewTeamNames: Record<string, string> = {
   "sc ashdod": "מ.ס. אשדוד",
   "sektzia ness ziona": "סקציה נס ציונה",
   "bnei yehuda tel aviv": "בני יהודה תל אביב",
+  "israel": "ישראל",
+  "israel (w)": "נבחרת ישראל נשים",
+  "israel u17": "נבחרת ישראל עד גיל 17",
+  "israel u18": "נבחרת ישראל עד גיל 18",
+  "israel u19": "נבחרת ישראל עד גיל 19",
+  "israel u20": "נבחרת ישראל עד גיל 20",
+  "israel u21": "נבחרת ישראל עד גיל 21",
+  "israel u23": "הנבחרת האולימפית של ישראל",
+  "israel women": "נבחרת ישראל נשים",
 };
 
 function hebrewCompetitionName(name: string) {

@@ -5,7 +5,7 @@ Israeli soccer data pipeline and schema exploration.
 ## Current Pieces
 
 - React + TypeScript frontend: `src/`
-- 365Scores Israeli competition ingestion: `scripts/ingest_365scores.py`
+- 365Scores domestic, UEFA club, and Israel national-team ingestion: `scripts/ingest_365scores.py`
 - FotMob historical Ligat Ha'Al ingestion: `scripts/ingest_fotmob.py`
 - Supabase/Postgres migration runner: `scripts/apply_migrations.py`
 - Supabase loader: `scripts/load_365scores_to_supabase.py`
@@ -23,11 +23,12 @@ Create a Supabase project, then add this GitHub repository secret:
 Use the Supabase Postgres connection string for `SUPABASE_DB_URL`. The seed GitHub Action uses it to:
 
 1. apply migrations
-2. discover Israeli competitions and fetch every match-bearing source season
-3. load the processed rows into Supabase
+2. discover domestic competitions plus Israel-related UEFA and national-team competitions
+3. keep UEFA/international fixtures involving an Israeli club or Israel national side
+4. fetch every match-bearing source season and load match, team, and player stats
 
 Scheduled runs use a recent rolling window across every competition. Manual
-runs default to a full backfill of every result season and current fixture
+runs use 2010/11 as the lower bound and load every result page and current fixture
 season still exposed by 365Scores. Older winner/standings-only history is not
 loaded from 365Scores because it has no match payloads. The separate
 `Seed FotMob History` workflow fills Ligat Ha'Al seasons from 2010/11 through
@@ -50,7 +51,7 @@ Use the public Supabase anon key for `SUPABASE_ANON_KEY`. The GitHub Pages front
 python3 -m pip install -r requirements.txt
 export SUPABASE_DB_URL="postgresql://..."
 python3 scripts/apply_migrations.py
-python3 scripts/ingest_365scores.py --all-israeli-competitions
+python3 scripts/ingest_365scores.py --all-israeli-competitions --israel-related-competitions --start-date 2010-07-01
 python3 scripts/load_365scores_to_supabase.py
 ```
 
@@ -68,11 +69,16 @@ source identity and maps rows into the same canonical competition and seasons.
 For a quick catalog refresh without player and team payloads:
 
 ```bash
-python3 scripts/ingest_365scores.py --all-israeli-competitions --fixtures-only
+python3 scripts/ingest_365scores.py --all-israeli-competitions --israel-related-competitions --fixtures-only
 python3 scripts/load_365scores_to_supabase.py
 ```
 
 Generated data under `data/` is ignored by git.
+
+External competitions are discovered through a curated set of UEFA/FIFA
+competition IDs and Israeli participant IDs. Only matches containing an Israeli
+club or Israel national side are retained, which keeps the database small while
+preserving player and team detail for every relevant match the source exposes.
 
 ## Frontend
 

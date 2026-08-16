@@ -255,7 +255,7 @@ def upsert_mapping(
 def get_or_create_competition(
     cur: psycopg.Cursor,
     source_id: str,
-    country_id: str,
+    country_id: Optional[str],
     competition: dict[str, Any],
 ) -> str:
     competition_source_id = str(competition["id"])
@@ -274,12 +274,13 @@ def get_or_create_competition(
             """
             update core.competitions
             set name = %s,
+                country_id = %s,
                 competition_type = %s,
                 gender = %s,
                 metadata = metadata || %s
             where id = %s
             """,
-            (name, competition_kind, gender, Jsonb(metadata), mapped),
+            (name, country_id, competition_kind, gender, Jsonb(metadata), mapped),
         )
         upsert_mapping(
             cur,
@@ -316,6 +317,10 @@ def get_or_create_competition(
         metadata,
     )
     return competition_id
+
+
+def competition_country_id(israel_country_id: str, competition: dict[str, Any]) -> Optional[str]:
+    return israel_country_id if competition.get("scope", "domestic") == "domestic" else None
 
 
 def get_or_create_season(
@@ -1475,6 +1480,7 @@ def manifest_competitions(
                 "competition_type": "league",
                 "gender": "men",
                 "age_group": "senior",
+                "scope": "domestic",
                 "seasons": [],
             },
         )
@@ -1544,7 +1550,12 @@ def main() -> int:
                 competition = competitions[competition_source_id]
                 competition_id = canonical_competitions.get(competition_source_id)
                 if competition_id is None:
-                    competition_id = get_or_create_competition(cur, source_id, country_id, competition)
+                    competition_id = get_or_create_competition(
+                        cur,
+                        source_id,
+                        competition_country_id(country_id, competition),
+                        competition,
+                    )
                     canonical_competitions[competition_source_id] = competition_id
 
                 season_id = get_or_create_season(
