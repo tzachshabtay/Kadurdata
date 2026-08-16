@@ -15,6 +15,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from player_stat_values import rating_value
 from team_stat_values import parse_team_stat_value, team_stat_value_type
 
 
@@ -849,7 +850,7 @@ def flush_stat_batch(cur: psycopg.Cursor, batch: list[tuple[Any, ...]]) -> int:
 
 def collect_player_stat_metric_specs(rows: list[dict[str, str]]) -> dict[str, tuple[str, str]]:
     specs: dict[str, tuple[str, str]] = {}
-    if any(row.get("rating") for row in rows):
+    if any(rating_value(row.get("rating")) is not None for row in rows):
         specs["rating_365"] = ("player_match", "rating")
     for row in rows:
         for base in {metric_from_stat_column(column) for column in row.keys() if metric_from_stat_column(column)}:
@@ -1083,7 +1084,7 @@ def ensure_appearances(
                     row.get("position_name"),
                     row.get("formation_name"),
                     to_float(row.get("stat_minutes_value")),
-                    to_float(row.get("rating")),
+                    rating_value(row.get("rating")),
                     row.get("heatmap_url"),
                 )
             )
@@ -1304,7 +1305,8 @@ def load_player_rows(
             continue
 
         source_subject_id = f"{row['game_id']}:{player_source_id}:{row['team_id']}"
-        if row.get("rating"):
+        normalized_rating = rating_value(row.get("rating"))
+        if normalized_rating is not None:
             params = stat_observation_params(
                 source_id,
                 metric_ids["rating_365"],
@@ -1312,7 +1314,7 @@ def load_player_rows(
                 appearance_id,
                 source_subject_id,
                 "365 rating",
-                to_float(row.get("rating")),
+                normalized_rating,
                 row.get("rating"),
                 item["match_id"],
                 item["team_id"],

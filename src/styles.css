@@ -1435,6 +1435,189 @@ tr:last-child td {
   font-size: 8px;
 }
 
+.player-stat-table th:last-child,
+.player-stat-table td:last-child {
+  width: 42px;
+  padding-inline: 6px;
+  text-align: center;
+}
+
+.match-stat-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted-bright);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-deep);
+}
+
+.match-stat-open:hover {
+  color: var(--teal);
+  border-color: var(--line-strong);
+  background: var(--raised);
+}
+
+.match-player-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 8, 13, 0.82);
+  backdrop-filter: blur(5px);
+}
+
+.match-player-dialog {
+  display: flex;
+  width: min(900px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+}
+
+.match-player-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-deep);
+}
+
+.match-player-dialog-header > div:first-child > span,
+.match-attribute-group h3,
+.match-player-summary small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.match-player-dialog-header h2 {
+  margin: 5px 0 4px;
+  font-size: 22px;
+}
+
+.match-player-dialog-header p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10px;
+}
+
+.match-player-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-command {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  gap: 7px;
+  padding: 0 13px;
+  color: var(--muted-bright);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.profile-command:hover {
+  color: var(--teal);
+  border-color: var(--line-strong);
+  background: var(--raised);
+}
+
+.match-player-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.match-player-summary > span {
+  min-width: 0;
+  padding: 13px 18px;
+  border-inline-end: 1px solid var(--line);
+}
+
+.match-player-summary > span:last-child {
+  border-inline-end: 0;
+}
+
+.match-player-summary small,
+.match-player-summary strong {
+  display: block;
+}
+
+.match-player-summary strong {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-player-dialog-body {
+  min-height: 220px;
+  padding: 20px 22px 24px;
+  overflow-y: auto;
+}
+
+.match-attribute-group + .match-attribute-group {
+  margin-top: 22px;
+}
+
+.match-attribute-group h3 {
+  margin: 0 0 9px;
+}
+
+.match-attribute-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.match-attribute-grid > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 44px;
+  gap: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-deep);
+}
+
+.match-attribute-grid span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-bright);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-attribute-grid strong {
+  flex: 0 0 auto;
+  color: var(--teal);
+  font-size: 11px;
+}
+
 .club-workspace {
   display: grid;
   grid-template-columns: 350px minmax(0, 1fr);
@@ -2589,5 +2772,50 @@ html[dir="rtl"] .attribute-grid button.active {
   .history-range {
     max-width: 100%;
     overflow-x: auto;
+  }
+
+  .match-player-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .match-player-dialog {
+    width: 100%;
+    max-height: calc(100vh - 18px);
+    border-radius: 8px 8px 0 0;
+  }
+
+  .match-player-dialog-header {
+    padding: 16px;
+  }
+
+  .match-player-dialog-actions {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+  }
+
+  .profile-command {
+    height: 34px;
+    padding-inline: 9px;
+  }
+
+  .match-player-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .match-player-summary > span:nth-child(2) {
+    border-inline-end: 0;
+  }
+
+  .match-player-summary > span:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .match-player-dialog-body {
+    padding: 16px;
+  }
+
+  .match-attribute-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

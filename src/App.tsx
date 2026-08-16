@@ -12,6 +12,7 @@ import {
   Search,
   Shield,
   Users,
+  X,
 } from "lucide-react";
 import {
   Area,
@@ -64,6 +65,7 @@ type DeepLinkState = {
   seasonId: string;
   roundId: string;
   matchId: string;
+  matchPlayerId: string;
   matchSide: "home" | "away";
   clubId: string;
   playerId: string;
@@ -116,6 +118,7 @@ type PlayerAttributeSummary = {
 };
 type PlayerAttributeCategory = (typeof playerAttributeCategories)[number];
 type PlayerPositionDetail = { code: string; label: string };
+type MatchPlayerAttribute = { code: string; name: string; value: string; category: PlayerAttributeCategory };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
@@ -345,6 +348,7 @@ function readDeepLinkState(): DeepLinkState {
     seasonId: params.get("season") ?? "",
     roundId: params.get("round") ?? "",
     matchId: params.get("match") ?? "",
+    matchPlayerId: params.get("matchPlayer") ?? "",
     matchSide: side === "away" ? "away" : "home",
     clubId: params.get("club") ?? "",
     playerId: params.get("player") ?? "",
@@ -381,6 +385,7 @@ function writeDeepLinkState(state: DeepLinkState) {
   setString("season", state.seasonId);
   setString("round", state.roundId);
   setString("match", state.matchId);
+  setString("matchPlayer", state.matchPlayerId);
   setString("side", state.matchSide);
   setString("club", state.clubId);
   setString("player", state.playerId);
@@ -438,6 +443,7 @@ export function App() {
   const [seasonId, setSeasonId] = useState(initialDeepLink.seasonId);
   const [roundId, setRoundId] = useState(initialDeepLink.roundId);
   const [matchId, setMatchId] = useState(initialDeepLink.matchId);
+  const [matchPlayerId, setMatchPlayerId] = useState(initialDeepLink.matchPlayerId);
   const [clubId, setClubId] = useState(initialDeepLink.clubId);
   const [playerId, setPlayerId] = useState(initialDeepLink.playerId);
   const [metricCode, setMetricCode] = useState(initialDeepLink.metricCode);
@@ -534,6 +540,7 @@ export function App() {
       if (next.seasonId) setSeasonId(next.seasonId);
       setRoundId(next.roundId);
       setMatchId(next.matchId);
+      setMatchPlayerId(next.matchPlayerId);
       setMatchSide(next.matchSide);
       setClubId(next.clubId);
       setPlayerId(next.playerId);
@@ -1079,6 +1086,7 @@ export function App() {
       seasonId,
       roundId,
       matchId,
+      matchPlayerId,
       matchSide,
       clubId,
       playerId,
@@ -1113,6 +1121,7 @@ export function App() {
     leaderRatingMinimumMinutes,
     loading,
     matchId,
+    matchPlayerId,
     matchSide,
     metricCode,
     playerHistoryRange,
@@ -1136,6 +1145,7 @@ export function App() {
   function openMatch(match: Match) {
     if (match.round_id) setRoundId(match.round_id);
     setMatchId(match.match_id);
+    setMatchPlayerId("");
     setMatchSide("home");
     navigate("matches");
   }
@@ -1239,11 +1249,14 @@ export function App() {
             setRoundId={setRoundId}
             matches={roundMatches}
             selectedMatch={selectedMatch}
-            selectMatch={(id) => { setMatchId(id); setMatchSide("home"); }}
+            selectMatch={(id) => { setMatchId(id); setMatchPlayerId(""); setMatchSide("home"); }}
             matchSide={matchSide}
             setMatchSide={setMatchSide}
+            selectedMatchPlayerId={matchPlayerId}
+            setSelectedMatchPlayerId={setMatchPlayerId}
             players={visibleMatchPlayers}
             seasonPlayers={players}
+            metrics={metrics}
             comparisons={teamComparisons}
             detailLoading={detailLoading}
             openPlayer={openPlayer}
@@ -1444,8 +1457,11 @@ function MatchesView({
   selectMatch,
   matchSide,
   setMatchSide,
+  selectedMatchPlayerId,
+  setSelectedMatchPlayerId,
   players,
   seasonPlayers,
+  metrics,
   comparisons,
   detailLoading,
   openPlayer,
@@ -1459,8 +1475,11 @@ function MatchesView({
   selectMatch: (id: string) => void;
   matchSide: "home" | "away";
   setMatchSide: (side: "home" | "away") => void;
+  selectedMatchPlayerId: string;
+  setSelectedMatchPlayerId: (id: string) => void;
   players: PlayerPivot[];
   seasonPlayers: SeasonPlayer[];
+  metrics: Metric[];
   comparisons: Array<{ code: string; label: string; home: number; away: number; valueType: string }>;
   detailLoading: boolean;
   openPlayer: (id: string) => void;
@@ -1469,6 +1488,11 @@ function MatchesView({
   const roundIndex = rounds.findIndex((item) => item.round_id === roundId);
   const PreviousIcon = language === "he" ? ChevronRight : ChevronLeft;
   const NextIcon = language === "he" ? ChevronLeft : ChevronRight;
+  const selectedMatchPlayer = players.find((player) => player.player_id === selectedMatchPlayerId);
+  const selectedMatchSeasonPlayer = seasonPlayers.find((player) => player.player_id === selectedMatchPlayerId);
+  useEffect(() => {
+    if (!detailLoading && selectedMatchPlayerId && !selectedMatchPlayer) setSelectedMatchPlayerId("");
+  }, [detailLoading, selectedMatchPlayer, selectedMatchPlayerId, setSelectedMatchPlayerId]);
   return (
     <>
       <PageHeading eyebrow={round?.stage_name ? localizedStageName(round.stage_name, language) : text.seasonSchedule} title={text.fixturesResults} description={text.fixturesDescription} />
@@ -1512,17 +1536,27 @@ function MatchesView({
                   <div className="lineup-heading">
                     <div><span>{text.playerStatistics}</span><strong>{localizedMatchTeam(selectedMatch, matchSide, language)}</strong></div>
                     <div className="segmented compact-segmented">
-                      <button className={matchSide === "home" ? "active" : ""} type="button" onClick={() => setMatchSide("home")}>{text.home}</button>
-                      <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => setMatchSide("away")}>{text.away}</button>
+                      <button className={matchSide === "home" ? "active" : ""} type="button" onClick={() => { setSelectedMatchPlayerId(""); setMatchSide("home"); }}>{text.home}</button>
+                      <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => { setSelectedMatchPlayerId(""); setMatchSide("away"); }}>{text.away}</button>
                     </div>
                   </div>
-                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} openPlayer={openPlayer} />}
+                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} openPlayer={openPlayer} inspectPlayer={setSelectedMatchPlayerId} />}
                 </div>
               </div>
             </>
           ) : <EmptyState text={text.selectMatch} />}
         </section>
       </div>
+      {selectedMatch && selectedMatchPlayer && (
+        <PlayerMatchInspector
+          match={selectedMatch}
+          player={selectedMatchPlayer}
+          seasonPlayer={selectedMatchSeasonPlayer}
+          metrics={metrics}
+          onClose={() => setSelectedMatchPlayerId("")}
+          openPlayer={openPlayer}
+        />
+      )}
     </>
   );
 }
@@ -2081,21 +2115,139 @@ function ComparisonBar({ label, home, away, valueType }: { label: string; home: 
   );
 }
 
-function PlayerMatchTable({ players, seasonPlayers, openPlayer }: { players: PlayerPivot[]; seasonPlayers: SeasonPlayer[]; openPlayer: (id: string) => void }) {
+function PlayerMatchTable({
+  players,
+  seasonPlayers,
+  openPlayer,
+  inspectPlayer,
+}: {
+  players: PlayerPivot[];
+  seasonPlayers: SeasonPlayer[];
+  openPlayer: (id: string) => void;
+  inspectPlayer: (id: string) => void;
+}) {
   const { language, text } = useLocale();
   const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
   if (!players.length) return <EmptyState text={text.noSidePlayerStats} />;
   return (
     <div className="data-table-wrap">
       <table className="player-stat-table">
-        <thead><tr><th>{text.player}</th><th>{text.minShort}</th><th>{text.rating}</th><th>{text.goalsShort}</th><th>{text.assistsShort}</th><th>{text.passPct}</th><th>{text.shots}</th></tr></thead>
+        <thead><tr><th>{text.player}</th><th>{text.minShort}</th><th>{text.rating}</th><th>{text.goalsShort}</th><th>{text.assistsShort}</th><th>{text.passPct}</th><th>{text.shots}</th><th aria-label={text.matchAttributes} /></tr></thead>
         <tbody>{players.map((player) => (
           <tr key={player.appearance_id}>
             <td><button type="button" onClick={() => openPlayer(player.player_id)}><span>{player.shirt_number ?? "-"}</span><span><strong>{localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language)}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></button></td>
             <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td><td>{formatMetric(player.values.total_shots)}</td>
+            <td><button className="match-stat-open" type="button" title={text.viewMatchAttributes} aria-label={`${text.viewMatchAttributes}: ${localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language)}`} onClick={() => inspectPlayer(player.player_id)}><ListFilter size={15} aria-hidden="true" /></button></td>
           </tr>
         ))}</tbody>
       </table>
+    </div>
+  );
+}
+
+function PlayerMatchInspector({
+  match,
+  player,
+  seasonPlayer,
+  metrics,
+  onClose,
+  openPlayer,
+}: {
+  match: Match;
+  player: PlayerPivot;
+  seasonPlayer?: SeasonPlayer;
+  metrics: Metric[];
+  onClose: () => void;
+  openPlayer: (id: string) => void;
+}) {
+  const { language, text } = useLocale();
+  const [rows, setRows] = useState<MatchPlayerStat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const isGoalkeeper = seasonPlayer?.role_group === "Goalkeepers" || /goalkeeper/i.test(player.position_name ?? "");
+  const attributes = useMemo(
+    () => buildMatchPlayerAttributes(rows, metrics, language, isGoalkeeper),
+    [isGoalkeeper, language, metrics, rows],
+  );
+  const categoryOrder = isGoalkeeper
+    ? (["Goalkeeping", ...playerAttributeCategories.filter((category) => category !== "Goalkeeping")] as PlayerAttributeCategory[])
+    : playerAttributeCategories.filter((category) => category !== "Goalkeeping");
+  const attributeGroups = categoryOrder
+    .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.category === category) }))
+    .filter((group) => group.attributes.length > 0);
+  const playerTeam = player.side === "away" ? localizedMatchTeam(match, "away", language) : localizedMatchTeam(match, "home", language);
+  const opponent = player.side === "away" ? localizedMatchTeam(match, "home", language) : localizedMatchTeam(match, "away", language);
+  const displayName = localizedPlayerName(seasonPlayer, player.display_name, language);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAttributes() {
+      setLoading(true);
+      setLoadError(null);
+      if (!hasSupabaseConfig || !supabase) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      const result = await supabase
+        .from("api_match_player_stats")
+        .select("*")
+        .eq("match_id", match.match_id)
+        .eq("player_id", player.player_id)
+        .limit(500);
+      if (cancelled) return;
+      setRows((result.data ?? []) as MatchPlayerStat[]);
+      setLoadError(result.error?.message ?? null);
+      setLoading(false);
+    }
+    void loadAttributes();
+    return () => { cancelled = true; };
+  }, [match.match_id, player.player_id]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="match-player-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="match-player-dialog" role="dialog" aria-modal="true" aria-labelledby="match-player-dialog-title">
+        <header className="match-player-dialog-header">
+          <div>
+            <span>{text.matchAttributes}</span>
+            <h2 id="match-player-dialog-title">{displayName}</h2>
+            <p>{playerTeam} · {text.opponent}: {opponent}</p>
+          </div>
+          <div className="match-player-dialog-actions">
+            <button className="profile-command" type="button" onClick={() => { onClose(); openPlayer(player.player_id); }}>{text.fullPlayerProfile}<ArrowUpRight size={15} aria-hidden="true" /></button>
+            <button className="icon-button compact" type="button" title={text.closeMatchAttributes} aria-label={text.closeMatchAttributes} onClick={onClose} autoFocus><X size={17} aria-hidden="true" /></button>
+          </div>
+        </header>
+        <div className="match-player-summary">
+          <span><small>{text.position}</small><strong>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || text.player}</strong></span>
+          <span><small>{text.minutes}</small><strong>{formatMetric(player.minutes_played)}</strong></span>
+          <span><small>{text.rating}</small><strong>{formatMetric(player.values.rating_365)}</strong></span>
+          <span><small>{text.match}</small><strong>{formatScore(match.home_score, match.away_score)}</strong></span>
+        </div>
+        <div className="match-player-dialog-body">
+          {loading ? <InlineLoading /> : loadError ? <EmptyState text={loadError} /> : attributeGroups.length ? attributeGroups.map((group) => (
+            <section className="match-attribute-group" key={group.category}>
+              <h3>{categoryName(group.category, language)}</h3>
+              <div className="match-attribute-grid">
+                {group.attributes.map((attribute) => <div key={attribute.code}><span>{attribute.name}</span><strong>{attribute.value}</strong></div>)}
+              </div>
+            </section>
+          )) : <EmptyState text={text.noMatchAttributes} />}
+        </div>
+      </section>
     </div>
   );
 }
@@ -2142,7 +2294,7 @@ function pivotMatchPlayers(rows: MatchPlayerStat[]): PlayerPivot[] {
   const pivots = new Map<string, { base: MatchPlayerStat; values: Map<string, number[]> }>();
   rows.forEach((row) => {
     const current = pivots.get(row.appearance_id) ?? { base: row, values: new Map<string, number[]>() };
-    if (row.value_numeric !== null) {
+    if (row.value_numeric !== null && isUsableMetricValue(row.metric_code, Number(row.value_numeric))) {
       const metricValues = current.values.get(row.metric_code) ?? [];
       metricValues.push(Number(row.value_numeric));
       current.values.set(row.metric_code, metricValues);
@@ -2153,6 +2305,41 @@ function pivotMatchPlayers(rows: MatchPlayerStat[]): PlayerPivot[] {
     ...base,
     values: Object.fromEntries([...values.entries()].map(([code, numbers]) => [code, average(numbers)])),
   })).sort((a, b) => Number(b.minutes_played ?? 0) - Number(a.minutes_played ?? 0));
+}
+
+function buildMatchPlayerAttributes(
+  rows: MatchPlayerStat[],
+  metrics: Metric[],
+  language: Language,
+  isGoalkeeper: boolean,
+): MatchPlayerAttribute[] {
+  const grouped = new Map<string, { row: MatchPlayerStat; values: number[] }>();
+  rows.forEach((row) => {
+    if (row.value_numeric === null || !isUsableMetricValue(row.metric_code, Number(row.value_numeric))) return;
+    const current = grouped.get(row.metric_code) ?? { row, values: [] };
+    current.values.push(Number(row.value_numeric));
+    grouped.set(row.metric_code, current);
+  });
+  const valuesByCode = new Map([...grouped].map(([code, item]) => [code, average(item.values)]));
+  const metricByCode = new Map(metrics.map((metric) => [metric.code, metric]));
+
+  return [...grouped].flatMap(([code, item]) => {
+    const metric = metricByCode.get(code);
+    if (!isGoalkeeper && isGoalkeepingMetricCode(code)) return [];
+    const valueType = metric?.value_type ?? item.row.value_type;
+    const numerator = metric?.numerator_metric_code ? valuesByCode.get(metric.numerator_metric_code) : undefined;
+    const denominator = metric?.denominator_metric_code ? valuesByCode.get(metric.denominator_metric_code) : undefined;
+    return [{
+      code,
+      name: metricName(code, friendlyMetric(metric?.name ?? item.row.metric_name), language),
+      value: formatMetricWithRatio(valuesByCode.get(code), valueType, numerator, denominator),
+      category: playerAttributeCategory(metric ?? { code }),
+    }];
+  }).sort((a, b) => a.name.localeCompare(b.name, localeCode(language)));
+}
+
+function isUsableMetricValue(metricCode: string, value: number) {
+  return Number.isFinite(value) && !(metricCode === "rating_365" && value < 0);
 }
 
 function buildTeamComparisons(rows: MatchTeamStat[], language: Language) {
@@ -2176,7 +2363,7 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeY
     const metricValue = (code?: string | null) => {
       if (!code) return null;
       const values = matchRows
-        .filter((item) => item.metric_code === code && item.value_numeric !== null)
+        .filter((item) => item.metric_code === code && item.value_numeric !== null && isUsableMetricValue(item.metric_code, Number(item.value_numeric)))
         .map((item) => Number(item.value_numeric))
         .filter(Number.isFinite);
       return values.length ? average(values) : null;
@@ -2241,7 +2428,7 @@ function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerCh
   };
 }
 
-function playerAttributeCategory(metric: PlayerChartMetric): PlayerAttributeCategory {
+function playerAttributeCategory(metric: Pick<Metric, "code">): PlayerAttributeCategory {
   const code = metric.code.toLowerCase();
   if (isGoalkeepingMetricCode(code)) return "Goalkeeping";
   if (/(card|foul|penalty_committed)/.test(code)) return "Discipline";
