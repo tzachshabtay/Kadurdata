@@ -267,7 +267,7 @@ const demoPlayers: SeasonPlayer[] = [
 }));
 
 const demoMetrics: Metric[] = [
-  { metric_id: "rating", code: "rating_365", name: "Rating", subject_type: "player_match", value_type: "rating", numerator_metric_code: null, denominator_metric_code: null },
+  { metric_id: "rating", code: "rating_365", name: "Rating (365Score)", subject_type: "player_match", value_type: "rating", numerator_metric_code: null, denominator_metric_code: null },
   { metric_id: "passes", code: "pass_completion_pct", name: "Pass completion", subject_type: "player_match", value_type: "percentage", numerator_metric_code: "passes_completed", denominator_metric_code: "passes_attempted" },
   { metric_id: "goals", code: "goals", name: "Goals", subject_type: "player_match", value_type: "count", numerator_metric_code: null, denominator_metric_code: null },
   { metric_id: "shots", code: "total_shots", name: "Total shots", subject_type: "player_match", value_type: "count", numerator_metric_code: null, denominator_metric_code: null },
@@ -310,6 +310,9 @@ export function App() {
   const [leaderMinimums, setLeaderMinimums] = useState<Record<string, number>>({});
   const [squadMinimums, setSquadMinimums] = useState<Record<string, number>>({});
   const [explorerMinimums, setExplorerMinimums] = useState<Record<string, number>>({});
+  const [leaderRatingMinimumMinutes, setLeaderRatingMinimumMinutes] = useState(60);
+  const [squadRatingMinimumMinutes, setSquadRatingMinimumMinutes] = useState(60);
+  const [explorerRatingMinimumMinutes, setExplorerRatingMinimumMinutes] = useState(60);
   const [matchSide, setMatchSide] = useState<"home" | "away">("home");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
   const [positionFilter, setPositionFilter] = useState("All");
@@ -587,6 +590,7 @@ export function App() {
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
         p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
+        p_min_minutes: isRatingMetricCode(leaderMetricCode) ? leaderRatingMinimumMinutes : 0,
       });
       if (cancelled) return;
       if (result.error) {
@@ -600,7 +604,7 @@ export function App() {
 
     void loadLeaderboard();
     return () => { cancelled = true; };
-  }, [leaderMetricCode, players, seasonId]);
+  }, [leaderMetricCode, leaderRatingMinimumMinutes, players, seasonId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -626,6 +630,7 @@ export function App() {
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
         p_metric_code: leaderboardSourceMetricCode(squadMetricCode),
+        p_min_minutes: isRatingMetricCode(squadMetricCode) ? squadRatingMinimumMinutes : 0,
       });
       if (cancelled) return;
       if (result.error) {
@@ -639,7 +644,7 @@ export function App() {
 
     void loadSquadLeaderboard();
     return () => { cancelled = true; };
-  }, [players, seasonId, squadMetricCode, view]);
+  }, [players, seasonId, squadMetricCode, squadRatingMinimumMinutes, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -665,6 +670,7 @@ export function App() {
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
         p_metric_code: leaderboardSourceMetricCode(explorerMetricCode),
+        p_min_minutes: isRatingMetricCode(explorerMetricCode) ? explorerRatingMinimumMinutes : 0,
       });
       if (cancelled) return;
       if (result.error) {
@@ -678,7 +684,7 @@ export function App() {
 
     void loadExplorerLeaderboard();
     return () => { cancelled = true; };
-  }, [explorerMetricCode, players, seasonId, view]);
+  }, [explorerMetricCode, explorerRatingMinimumMinutes, players, seasonId, view]);
 
   const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
   const currentRound = rounds.find((round) => round.round_id === roundId);
@@ -969,6 +975,8 @@ export function App() {
             qualification={leaderQualification}
             minimum={leaderMinimum}
             setMinimum={(value) => setLeaderMinimums((current) => ({ ...current, [leaderMetricCode]: value }))}
+            ratingMinimumMinutes={leaderRatingMinimumMinutes}
+            setRatingMinimumMinutes={setLeaderRatingMinimumMinutes}
             loading={leaderboardLoading}
             error={leaderboardError}
             openMatch={openMatch}
@@ -1006,6 +1014,8 @@ export function App() {
             qualification={squadQualification}
             minimum={squadMinimum}
             setMinimum={(value) => setSquadMinimums((current) => ({ ...current, [squadMetricCode]: value }))}
+            ratingMinimumMinutes={squadRatingMinimumMinutes}
+            setRatingMinimumMinutes={setSquadRatingMinimumMinutes}
             leaderboardLoading={squadLeaderboardLoading}
             leaderboardError={squadLeaderboardError}
             openMatch={openMatch}
@@ -1021,6 +1031,8 @@ export function App() {
             rankingQualification={explorerQualification}
             rankingMinimum={explorerMinimum}
             setRankingMinimum={(value) => setExplorerMinimums((current) => ({ ...current, [explorerMetricCode]: value }))}
+            rankingRatingMinimumMinutes={explorerRatingMinimumMinutes}
+            setRankingRatingMinimumMinutes={setExplorerRatingMinimumMinutes}
             rankingLoading={explorerLeaderboardLoading}
             rankingError={explorerLeaderboardError}
             allPlayersCount={players.length}
@@ -1070,6 +1082,8 @@ function OverviewView({
   qualification,
   minimum,
   setMinimum,
+  ratingMinimumMinutes,
+  setRatingMinimumMinutes,
   loading,
   error,
   openMatch,
@@ -1089,6 +1103,8 @@ function OverviewView({
   qualification: LeaderboardQualification | null;
   minimum: number;
   setMinimum: (value: number) => void;
+  ratingMinimumMinutes: number;
+  setRatingMinimumMinutes: (value: number) => void;
   loading: boolean;
   error: string | null;
   openMatch: (match: Match) => void;
@@ -1146,7 +1162,7 @@ function OverviewView({
               </select>
             </label>
           </div>
-          {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} />}
+          {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
           <div className="leader-list">
             {loading ? <InlineLoading /> : error ? <EmptyState text="Leaderboard data could not be loaded." /> : leaders.length ? leaders.map((player, index) => (
               <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
@@ -1263,6 +1279,8 @@ function ClubsView({
   qualification,
   minimum,
   setMinimum,
+  ratingMinimumMinutes,
+  setRatingMinimumMinutes,
   leaderboardLoading,
   leaderboardError,
   openMatch,
@@ -1280,6 +1298,8 @@ function ClubsView({
   qualification: LeaderboardQualification | null;
   minimum: number;
   setMinimum: (value: number) => void;
+  ratingMinimumMinutes: number;
+  setRatingMinimumMinutes: (value: number) => void;
   leaderboardLoading: boolean;
   leaderboardError: string | null;
   openMatch: (match: Match) => void;
@@ -1336,7 +1356,7 @@ function ClubsView({
                       </select>
                     </label>
                   </div>
-                  {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} />}
+                  {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
                   <div className="squad-list">
                     {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text="Squad leaderboard data could not be loaded." /> : squadLeaders.length ? squadLeaders.map((leader, index) => {
                       const player = squadByPlayerId.get(leader.player_id);
@@ -1366,34 +1386,62 @@ function LeaderboardQualificationFilter({
   setMinimum,
   qualifiedCount,
   loading,
+  ratingMinimumMinutes = null,
+  setRatingMinimumMinutes,
 }: {
   qualification: LeaderboardQualification;
   minimum: number;
   setMinimum: (value: number) => void;
   qualifiedCount: number;
   loading: boolean;
+  ratingMinimumMinutes?: number | null;
+  setRatingMinimumMinutes?: (value: number) => void;
 }) {
   return (
-    <label className="qualification-filter">
-      <span className="qualification-copy">
-        <strong>Minimum sample</strong>
-        <small>{loading ? "Updating ranking" : `${qualifiedCount} ${qualifiedCount === 1 ? "player qualifies" : "players qualify"}`}</small>
-      </span>
-      <span className="qualification-input">
-        <input
-          type="number"
-          min="0"
-          step={qualification.step}
-          value={minimum}
-          onChange={(event) => {
-            if (Number.isNaN(event.currentTarget.valueAsNumber)) return;
-            setMinimum(Math.max(0, event.currentTarget.valueAsNumber));
-          }}
-          aria-label={`Minimum ${qualification.unit}`}
-        />
-        <small>{qualification.unit}</small>
-      </span>
-    </label>
+    <div className={`qualification-filters${ratingMinimumMinutes !== null ? " has-rating-minutes" : ""}`}>
+      <label className="qualification-filter">
+        <span className="qualification-copy">
+          <strong>Minimum sample</strong>
+          <small>{loading ? "Updating ranking" : `${qualifiedCount} ${qualifiedCount === 1 ? "player qualifies" : "players qualify"}`}</small>
+        </span>
+        <span className="qualification-input">
+          <input
+            type="number"
+            min="0"
+            step={qualification.step}
+            value={minimum}
+            onChange={(event) => {
+              if (Number.isNaN(event.currentTarget.valueAsNumber)) return;
+              setMinimum(Math.max(0, event.currentTarget.valueAsNumber));
+            }}
+            aria-label={`Minimum ${qualification.unit}`}
+          />
+          <small>{qualification.unit}</small>
+        </span>
+      </label>
+      {ratingMinimumMinutes !== null && setRatingMinimumMinutes && (
+        <label className="qualification-filter rating-minutes-filter">
+          <span className="qualification-copy">
+            <strong>Minimum minutes</strong>
+            <small>Per rated match</small>
+          </span>
+          <span className="qualification-input">
+            <input
+              type="number"
+              min="0"
+              step="5"
+              value={ratingMinimumMinutes}
+              onChange={(event) => {
+                if (Number.isNaN(event.currentTarget.valueAsNumber)) return;
+                setRatingMinimumMinutes(Math.max(0, event.currentTarget.valueAsNumber));
+              }}
+              aria-label="Minimum minutes per rated match"
+            />
+            <small>minutes</small>
+          </span>
+        </label>
+      )}
+    </div>
   );
 }
 
@@ -1406,6 +1454,8 @@ function PlayersView({
   rankingQualification,
   rankingMinimum,
   setRankingMinimum,
+  rankingRatingMinimumMinutes,
+  setRankingRatingMinimumMinutes,
   rankingLoading,
   rankingError,
   allPlayersCount,
@@ -1444,6 +1494,8 @@ function PlayersView({
   rankingQualification: LeaderboardQualification | null;
   rankingMinimum: number;
   setRankingMinimum: (value: number) => void;
+  rankingRatingMinimumMinutes: number;
+  setRankingRatingMinimumMinutes: (value: number) => void;
   rankingLoading: boolean;
   rankingError: string | null;
   allPlayersCount: number;
@@ -1568,7 +1620,7 @@ function PlayersView({
           </div>
           {rankingQualification && (
             <div className="directory-qualification">
-              <LeaderboardQualificationFilter qualification={rankingQualification} minimum={rankingMinimum} setMinimum={setRankingMinimum} qualifiedCount={players.length} loading={rankingLoading} />
+              <LeaderboardQualificationFilter qualification={rankingQualification} minimum={rankingMinimum} setMinimum={setRankingMinimum} qualifiedCount={players.length} loading={rankingLoading} ratingMinimumMinutes={isRatingMetricCode(rankingMetricCode) ? rankingRatingMinimumMinutes : null} setRatingMinimumMinutes={setRankingRatingMinimumMinutes} />
             </div>
           )}
           <div className="player-list">
@@ -2122,6 +2174,10 @@ function explorerRankingSampleLabel(
 
 function leaderboardSourceMetricCode(metricCode: string) {
   return metricCode.replace(/::per90$/, "");
+}
+
+function isRatingMetricCode(metricCode: string) {
+  return leaderboardSourceMetricCode(metricCode) === "rating_365";
 }
 
 function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPlayer[], metricCode: string) {

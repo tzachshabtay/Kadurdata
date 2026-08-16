@@ -848,6 +848,16 @@ input[type="search"]::-webkit-search-cancel-button {
   background: var(--panel-deep);
 }
 
+.qualification-filters {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.qualification-filters .qualification-filter {
+  margin-bottom: 0;
+}
+
 .qualification-copy {
   display: grid;
   min-width: 0;
@@ -1724,8 +1734,12 @@ tr:last-child td {
   background: var(--panel-deep);
 }
 
-.directory-qualification .qualification-filter {
+.directory-qualification .qualification-filters {
   margin-bottom: 8px;
+}
+
+.directory-qualification .qualification-filter {
+  margin-bottom: 0;
 }
 
 .player-list > button {
