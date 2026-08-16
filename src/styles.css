@@ -1607,6 +1607,36 @@ tr:last-child td {
   min-width: 64px;
 }
 
+.role-filter-stack {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.position-filter {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.position-filter > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.position-segments {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.position-segments button {
+  min-width: 40px;
+}
+
 .filter-select,
 .search-field {
   display: flex;
@@ -1731,6 +1761,34 @@ tr:last-child td {
   margin-top: 5px;
   color: var(--text);
   font-size: 24px;
+}
+
+.player-position-line {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-position-line b {
+  display: inline-flex;
+  min-width: 30px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  color: var(--teal);
+  border: 1px solid var(--green);
+  border-radius: 4px;
+  background: var(--panel-deep);
+  font-size: 9px;
+}
+
+.player-position-line > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metric-select {
@@ -2334,6 +2392,16 @@ tr:last-child td {
   .role-segments button {
     flex: 1 0 54px;
     min-width: 54px;
+  }
+
+  .position-filter {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .position-segments {
+    width: 100%;
   }
 
   .search-field {

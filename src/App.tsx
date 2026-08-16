@@ -71,6 +71,7 @@ type PlayerAttributeSummary = {
   value: string;
 };
 type PlayerAttributeCategory = (typeof playerAttributeCategories)[number];
+type PlayerPositionDetail = { code: string; label: string };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
@@ -86,6 +87,28 @@ const goalkeeperMetricCodes = new Set([
   "played_sweeper",
   "punches",
 ]);
+const specificPositionDetails: Record<string, PlayerPositionDetail> = {
+  "goalkeeper": { code: "GK", label: "Goalkeeper" },
+  "left back": { code: "LB", label: "Left Back" },
+  "left wing back": { code: "LWB", label: "Left Wing Back" },
+  "centre back": { code: "CB", label: "Centre Back" },
+  "center back": { code: "CB", label: "Centre Back" },
+  "right back": { code: "RB", label: "Right Back" },
+  "right wing back": { code: "RWB", label: "Right Wing Back" },
+  "left midfield": { code: "LM", label: "Left Midfield" },
+  "defensive midfield": { code: "DM", label: "Defensive Midfield" },
+  "central midfield": { code: "CM", label: "Central Midfield" },
+  "attacking midfield": { code: "AM", label: "Attacking Midfield" },
+  "right midfield": { code: "RM", label: "Right Midfield" },
+  "left forward": { code: "LW", label: "Left Forward" },
+  "left wing": { code: "LW", label: "Left Wing" },
+  "secondary striker": { code: "SS", label: "Secondary Striker" },
+  "centre forward": { code: "CF", label: "Centre Forward" },
+  "center forward": { code: "CF", label: "Centre Forward" },
+  "right forward": { code: "RW", label: "Right Forward" },
+  "right wing": { code: "RW", label: "Right Wing" },
+};
+const positionCodeOrder = ["GK", "LB", "LWB", "CB", "RB", "RWB", "LM", "DM", "CM", "AM", "RM", "LW", "SS", "CF", "RW", "Other"];
 const seasonLeaderboardMetrics: LeaderboardMetricOption[] = [
   { code: "season_appearances", name: "Appearances", value_type: "count", denominator_metric_code: null, kind: "season" },
   { code: "season_starts", name: "Starts", value_type: "count", denominator_metric_code: null, kind: "season" },
@@ -231,6 +254,7 @@ const demoPlayers: SeasonPlayer[] = [
   display_name: String(display_name),
   display_name_he: null,
   primary_position: String(role_group).replace(/s$/, ""),
+  specific_position: demoSpecificPosition(String(role_group), index),
   role_group: role_group as SeasonPlayer["role_group"],
   team_id: `demo-team-${index % 4}`,
   team_name: demoClubNames[index % 4],
@@ -285,6 +309,7 @@ export function App() {
   const [squadMinimums, setSquadMinimums] = useState<Record<string, number>>({});
   const [matchSide, setMatchSide] = useState<"home" | "away">("home");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
+  const [positionFilter, setPositionFilter] = useState("All");
   const [clubFilter, setClubFilter] = useState("all");
   const [playerQuery, setPlayerQuery] = useState("");
   const [refreshToken, setRefreshToken] = useState(0);
@@ -689,17 +714,43 @@ export function App() {
     () => [...clubs].sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference),
     [clubs],
   );
+  useEffect(() => {
+    setPositionFilter("All");
+  }, [roleFilter]);
+  const positionOptions = useMemo(() => {
+    if (!["Defenders", "Midfielders", "Attackers"].includes(roleFilter)) return [];
+    const options = new Map<string, PlayerPositionDetail>();
+    players
+      .filter((player) => player.role_group === roleFilter)
+      .forEach((player) => {
+        const position = playerPositionFilterDetail(player);
+        options.set(position.code, position);
+      });
+    return [...options.values()].sort((a, b) => {
+      const aOrder = positionCodeOrder.indexOf(a.code);
+      const bOrder = positionCodeOrder.indexOf(b.code);
+      return (aOrder < 0 ? positionCodeOrder.length : aOrder)
+        - (bOrder < 0 ? positionCodeOrder.length : bOrder)
+        || a.label.localeCompare(b.label);
+    });
+  }, [players, roleFilter]);
   const filteredPlayers = useMemo(() => {
     const query = playerQuery.trim().toLowerCase();
     return players.filter((player) => {
+      const detailedPosition = playerPositionDetail(player);
       const matchesRole = roleFilter === "All" || player.role_group === roleFilter;
+      const matchesPosition = positionFilter === "All" || playerPositionFilterDetail(player).code === positionFilter;
       const matchesClub = clubFilter === "all" || player.team_id === clubFilter;
-      const matchesQuery = !query || [player.display_name, player.team_name, player.primary_position]
+      const matchesQuery = !query || [player.display_name, player.team_name, player.primary_position, detailedPosition.code, detailedPosition.label]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(query));
-      return matchesRole && matchesClub && matchesQuery;
+      return matchesRole && matchesPosition && matchesClub && matchesQuery;
     });
-  }, [clubFilter, playerQuery, players, roleFilter]);
+  }, [clubFilter, playerQuery, players, positionFilter, roleFilter]);
+  useEffect(() => {
+    if (!filteredPlayers.length || filteredPlayers.some((player) => player.player_id === playerId)) return;
+    setPlayerId(filteredPlayers[0].player_id);
+  }, [filteredPlayers, playerId]);
   const clubMatches = useMemo(
     () => [...matches]
       .filter((match) => match.home_team_id === clubId || match.away_team_id === clubId)
@@ -898,6 +949,9 @@ export function App() {
             roles={roleFilters}
             roleFilter={roleFilter}
             setRoleFilter={setRoleFilter}
+            positions={positionOptions}
+            positionFilter={positionFilter}
+            setPositionFilter={setPositionFilter}
             clubs={clubs}
             clubFilter={clubFilter}
             setClubFilter={setClubFilter}
@@ -1210,7 +1264,7 @@ function ClubsView({
                         <button key={leader.player_id} type="button" onClick={() => openPlayer(leader.player_id)}>
                           <span className="squad-rank">{String(index + 1).padStart(2, "0")}</span>
                           <span className="avatar">{initials(leader.display_name)}</span>
-                          <span><strong>{leader.display_name}</strong><small>{player?.primary_position ?? player?.role_group ?? "Player"}</small></span>
+                          <span><strong>{leader.display_name}</strong><small>{player ? `${playerPositionDetail(player).code} · ${playerPositionDetail(player).label}` : "Player"}</small></span>
                           <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
                         </button>
                       );
@@ -1271,6 +1325,9 @@ function PlayersView({
   roles,
   roleFilter,
   setRoleFilter,
+  positions,
+  positionFilter,
+  setPositionFilter,
   clubs,
   clubFilter,
   setClubFilter,
@@ -1297,6 +1354,9 @@ function PlayersView({
   roles: RoleFilter[];
   roleFilter: RoleFilter;
   setRoleFilter: (role: RoleFilter) => void;
+  positions: PlayerPositionDetail[];
+  positionFilter: string;
+  setPositionFilter: (position: string) => void;
   clubs: Club[];
   clubFilter: string;
   setClubFilter: (id: string) => void;
@@ -1318,6 +1378,7 @@ function PlayersView({
 }) {
   const [attributeQuery, setAttributeQuery] = useState("");
   const metric = metrics.find((item) => item.chartKey === metricCode);
+  const selectedPosition = selectedPlayer ? playerPositionDetail(selectedPlayer) : null;
   const attributeGroups = useMemo(() => {
     const normalizedQuery = attributeQuery.trim().toLowerCase();
     const categoryOrder = selectedPlayer?.role_group === "Goalkeepers"
@@ -1372,8 +1433,21 @@ function PlayersView({
     <>
       <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} players`} title="Player explorer" description="Filter the league by role or club, then track an individual metric from match to match." />
       <div className="player-filters">
-        <div className="segmented role-segments">
-          {roles.map((role) => <button aria-label={role} className={roleFilter === role ? "active" : ""} key={role} title={role} type="button" onClick={() => setRoleFilter(role)}>{roleLabel(role)}</button>)}
+        <div className="role-filter-stack">
+          <div className="segmented role-segments">
+            {roles.map((role) => <button aria-label={role} className={roleFilter === role ? "active" : ""} key={role} title={role} type="button" onClick={() => setRoleFilter(role)}>{roleLabel(role)}</button>)}
+          </div>
+          {positions.length > 0 && (
+            <div className="position-filter">
+              <span>Position</span>
+              <div className="segmented compact-segmented position-segments" aria-label={`${roleFilter} positions`}>
+                <button className={positionFilter === "All" ? "active" : ""} type="button" onClick={() => setPositionFilter("All")}>All</button>
+                {positions.map((position) => (
+                  <button className={positionFilter === position.code ? "active" : ""} key={position.code} title={position.label} type="button" onClick={() => setPositionFilter(position.code)}>{position.code}</button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <label className="filter-select"><ListFilter size={16} /><select value={clubFilter} onChange={(event) => setClubFilter(event.target.value)}><option value="all">All clubs</option>{clubs.map((club) => <option key={club.team_id} value={club.team_id}>{cleanTeamName(club.team_name)}</option>)}</select></label>
         <label className="search-field"><Search size={17} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search players" /></label>
@@ -1386,7 +1460,7 @@ function PlayersView({
             {players.map((player) => (
               <button className={player.player_id === selectedPlayer?.player_id ? "active" : ""} key={player.player_id} type="button" onClick={() => selectPlayer(player.player_id)}>
                 <span className="avatar">{initials(player.display_name)}</span>
-                <span className="player-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "Free agent")} · {player.primary_position ?? player.role_group}</small></span>
+                <span className="player-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "Free agent")} · {playerPositionDetail(player).code}</small></span>
                 <span className="player-numbers"><strong>{numberFormatter.format(Math.round(Number(player.minutes)))}</strong><small>{formatNumber(player.goals)} · {formatNumber(player.assists)}</small></span>
               </button>
             ))}
@@ -1398,7 +1472,10 @@ function PlayersView({
             <>
               <div className="player-profile-head">
                 <span className="avatar large">{initials(selectedPlayer.display_name)}</span>
-                <div><span>{selectedPlayer.role_group} · {cleanTeamName(selectedPlayer.team_name ?? "")}</span><h2>{selectedPlayer.display_name}</h2></div>
+                <div>
+                  <span className="player-position-line"><b title={selectedPosition?.label}>{selectedPosition?.code}</b><span>{selectedPosition?.label} · {cleanTeamName(selectedPlayer.team_name ?? "")}</span></span>
+                  <h2>{selectedPlayer.display_name}</h2>
+                </div>
               </div>
               <section className="stat-band player-stats">
                 <Stat label="Appearances" value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} starts`} />
@@ -1798,6 +1875,41 @@ function ratioComponentLabel(code?: string | null) {
 
 function humanizeMetricCode(code: string) {
   return code.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function specificPositionDetail(position?: string | null): PlayerPositionDetail | null {
+  const normalized = position?.trim().toLowerCase();
+  if (!normalized) return null;
+  const known = specificPositionDetails[normalized];
+  if (known) return known;
+  const label = position!.trim();
+  const code = label.split(/\s+/).map((word) => word[0]).join("").slice(0, 3).toUpperCase();
+  return { code: code || "Other", label };
+}
+
+function playerPositionDetail(player: SeasonPlayer): PlayerPositionDetail {
+  const specific = specificPositionDetail(player.specific_position);
+  if (specific) return specific;
+  if (player.role_group === "Goalkeepers") return { code: "GK", label: "Goalkeeper" };
+  if (player.role_group === "Defenders") return { code: "DEF", label: "Defender" };
+  if (player.role_group === "Midfielders") return { code: "MID", label: "Midfielder" };
+  if (player.role_group === "Attackers") return { code: "FWD", label: "Forward" };
+  return { code: "Other", label: player.primary_position || "Other" };
+}
+
+function playerPositionFilterDetail(player: SeasonPlayer): PlayerPositionDetail {
+  return specificPositionDetail(player.specific_position) ?? { code: "Other", label: "Other" };
+}
+
+function demoSpecificPosition(role: string, index: number) {
+  const positions: Record<string, string[]> = {
+    Goalkeepers: ["Goalkeeper"],
+    Defenders: ["Left Back", "Centre Back", "Right Back"],
+    Midfielders: ["Defensive Midfield", "Central Midfield", "Attacking Midfield"],
+    Attackers: ["Left Forward", "Centre Forward", "Right Forward"],
+  };
+  const options = positions[role] ?? [];
+  return options.length ? options[index % options.length] : null;
 }
 
 function competitionLabel(name?: string) {

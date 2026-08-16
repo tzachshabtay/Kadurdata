@@ -119,6 +119,7 @@ export type SeasonPlayer = {
   display_name: string;
   display_name_he: string | null;
   primary_position: string | null;
+  specific_position: string | null;
   role_group: "Goalkeepers" | "Defenders" | "Midfielders" | "Attackers" | "Other";
   team_id: string | null;
   team_name: string | null;
