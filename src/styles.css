@@ -1748,6 +1748,125 @@ tr:last-child td {
   border-radius: 0;
 }
 
+.player-attributes {
+  margin: 0 -22px;
+  padding: 18px 22px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-deep);
+}
+
+.attribute-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.attribute-heading > div > span,
+.attribute-group h4 {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.attribute-heading h3 {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.attribute-search {
+  display: flex;
+  width: min(240px, 100%);
+  height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.attribute-search:focus-within {
+  color: var(--teal);
+  border-color: var(--green);
+}
+
+.attribute-search input {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 11px;
+}
+
+.attribute-scroll {
+  max-height: 320px;
+  padding-right: 5px;
+  overflow-y: auto;
+}
+
+.attribute-group + .attribute-group {
+  margin-top: 15px;
+}
+
+.attribute-group h4 {
+  margin-bottom: 7px;
+}
+
+.attribute-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 6px;
+}
+
+.attribute-grid button {
+  display: grid;
+  height: 54px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+}
+
+.attribute-grid button:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--raised);
+}
+
+.attribute-grid button.active {
+  color: var(--text);
+  border-color: var(--green);
+  background: var(--raised);
+  box-shadow: inset 3px 0 var(--teal);
+}
+
+.attribute-grid button span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+
+.attribute-grid button strong {
+  color: var(--teal);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .trend-heading {
   display: flex;
   align-items: flex-end;
@@ -2239,6 +2358,31 @@ tr:last-child td {
   .player-stats {
     margin-right: -15px;
     margin-left: -15px;
+  }
+
+  .player-attributes {
+    margin-right: -15px;
+    margin-left: -15px;
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .attribute-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .attribute-search {
+    width: 100%;
+  }
+
+  .attribute-scroll {
+    max-height: 290px;
+  }
+
+  .attribute-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .chart-frame {

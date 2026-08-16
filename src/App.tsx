@@ -64,9 +64,17 @@ type PlayerChartPoint = {
   numerator: number | null;
   denominator: number | null;
 };
+type PlayerAttributeSummary = {
+  chartKey: string;
+  name: string;
+  category: PlayerAttributeCategory;
+  value: string;
+};
+type PlayerAttributeCategory = (typeof playerAttributeCategories)[number];
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
+const playerAttributeCategories = ["General", "Attacking", "Passing", "Possession & duels", "Defending", "Discipline", "Goalkeeping"] as const;
 const seasonLeaderboardMetrics: LeaderboardMetricOption[] = [
   { code: "season_appearances", name: "Appearances", value_type: "count", denominator_metric_code: null, kind: "season" },
   { code: "season_starts", name: "Starts", value_type: "count", denominator_metric_code: null, kind: "season" },
@@ -460,22 +468,14 @@ export function App() {
     let cancelled = false;
 
     async function loadPlayerDetail() {
-      if (!competitionId || !playerId || !metricCode) {
+      if (!competitionId || !playerId) {
         setPlayerHistory([]);
         setDetailLoading(false);
         return;
       }
-      const sourceMetricCode = metricCode.replace(/::(paired|per90)$/, "");
-      const selectedMetric = metrics.find((metric) => metric.code === sourceMetricCode);
-      const metricCodes = [...new Set([
-        sourceMetricCode,
-        selectedMetric?.numerator_metric_code,
-        selectedMetric?.denominator_metric_code,
-        "minutes",
-      ].filter((code): code is string => Boolean(code)))];
       const client = supabase;
       if (!hasSupabaseConfig || !client) {
-        setPlayerHistory(makeDemoHistory(playerId, selectedMetric));
+        setPlayerHistory(demoMetrics.flatMap((metric) => makeDemoHistory(playerId, metric)));
         return;
       }
       setDetailLoading(true);
@@ -489,7 +489,6 @@ export function App() {
           .select("*")
           .eq("competition_id", competitionId)
           .eq("player_id", playerId)
-          .in("metric_code", metricCodes)
           .order("scheduled_at")
           .order("match_id")
           .order("metric_code")
@@ -514,7 +513,7 @@ export function App() {
 
     void loadPlayerDetail();
     return () => { cancelled = true; };
-  }, [competitionId, metricCode, metrics, playerId]);
+  }, [competitionId, playerId]);
 
   useEffect(() => {
     setPlayerHistoryRange("latest");
@@ -892,6 +891,7 @@ export function App() {
             setHistoryRange={setPlayerHistoryRange}
             latestHistorySeasonLabel={latestPlayerHistorySeason?.season_name ?? "Latest season"}
             historySeasonCount={playerHistorySeasonCount}
+            historyRows={visiblePlayerHistory}
             chartData={playerChartData}
             average={playerAverage}
             averageNumerator={playerRatioDenominator > 0 ? playerRatioNumerator : null}
@@ -1264,6 +1264,7 @@ function PlayersView({
   setHistoryRange,
   latestHistorySeasonLabel,
   historySeasonCount,
+  historyRows,
   chartData,
   average,
   averageNumerator,
@@ -1289,13 +1290,26 @@ function PlayersView({
   setHistoryRange: (range: PlayerHistoryRange) => void;
   latestHistorySeasonLabel: string;
   historySeasonCount: number;
+  historyRows: PlayerHistory[];
   chartData: PlayerChartPoint[];
   average: number | null;
   averageNumerator: number | null;
   averageDenominator: number | null;
   detailLoading: boolean;
 }) {
+  const [attributeQuery, setAttributeQuery] = useState("");
   const metric = metrics.find((item) => item.chartKey === metricCode);
+  const attributeGroups = useMemo(() => {
+    const normalizedQuery = attributeQuery.trim().toLowerCase();
+    const attributes = metrics
+      .map((item) => summarizePlayerAttribute(historyRows, item))
+      .filter((attribute) => !normalizedQuery
+        || attribute.name.toLowerCase().includes(normalizedQuery)
+        || attribute.category.toLowerCase().includes(normalizedQuery));
+    return playerAttributeCategories
+      .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.category === category) }))
+      .filter((group) => group.attributes.length > 0);
+  }, [attributeQuery, historyRows, metrics]);
   const isPairedMetric = metric?.chartMode === "paired"
     && Boolean(metric.numerator_metric_code)
     && Boolean(metric.denominator_metric_code);
@@ -1363,13 +1377,40 @@ function PlayersView({
               <div className="player-profile-head">
                 <span className="avatar large">{initials(selectedPlayer.display_name)}</span>
                 <div><span>{selectedPlayer.role_group} · {cleanTeamName(selectedPlayer.team_name ?? "")}</span><h2>{selectedPlayer.display_name}</h2></div>
-                <label className="metric-select"><span>Metric</span><select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>{metrics.map((item) => <option key={item.chartKey} value={item.chartKey}>{item.name}</option>)}</select></label>
               </div>
               <section className="stat-band player-stats">
                 <Stat label="Appearances" value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} starts`} />
                 <Stat label="Minutes" value={numberFormatter.format(Math.round(Number(selectedPlayer.minutes)))} note="Season total" />
                 <Stat label="Goals + assists" value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} goals · ${formatNumber(selectedPlayer.assists)} assists`} />
                 <Stat label={metric?.name ?? "Average"} value={summaryValue} note={summaryNote} accent />
+              </section>
+              <section className="player-attributes">
+                <div className="attribute-heading">
+                  <div><span>Player attributes</span><h3>{metrics.length} chartable metrics</h3></div>
+                  <label className="attribute-search"><Search size={15} /><input aria-label="Search player attributes" type="search" value={attributeQuery} onChange={(event) => setAttributeQuery(event.target.value)} placeholder="Find an attribute" /></label>
+                </div>
+                <div className="attribute-scroll">
+                  {attributeGroups.map((group) => (
+                    <section className="attribute-group" key={group.category}>
+                      <h4>{group.category}</h4>
+                      <div className="attribute-grid">
+                        {group.attributes.map((attribute) => (
+                          <button
+                            className={attribute.chartKey === metricCode ? "active" : ""}
+                            key={attribute.chartKey}
+                            title={`Show ${attribute.name} match by match`}
+                            type="button"
+                            onClick={() => setMetricCode(attribute.chartKey)}
+                          >
+                            <span>{attribute.name}</span>
+                            <strong>{attribute.value}</strong>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                  {!attributeGroups.length && <EmptyState text="No attributes match this search." />}
+                </div>
               </section>
               <div className="trend-heading">
                 <div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div>
@@ -1605,6 +1646,52 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeY
       denominator,
     };
   });
+}
+
+function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerChartMetric): PlayerAttributeSummary {
+  const points = aggregatePlayerHistory(historyRows, metric);
+  const values = points.map((point) => point.value).filter((value): value is number => value !== null && Number.isFinite(value));
+  const totalMinutes = points.reduce((total, point) => total + Number(point.minutes ?? 0), 0);
+  const totalValue = values.reduce((total, value) => total + value, 0);
+  const numerator = points.reduce((total, point) => total + Number(point.numerator ?? 0), 0);
+  const denominator = points.reduce((total, point) => total + Number(point.denominator ?? 0), 0);
+  const isPaired = metric.chartMode === "paired"
+    && Boolean(metric.numerator_metric_code)
+    && Boolean(metric.denominator_metric_code);
+
+  let value = "-";
+  if (metric.normalization === "per90" && totalMinutes > 0) {
+    value = isPaired
+      ? `${formatMetric(numerator * 90 / totalMinutes)} / ${formatMetric(denominator * 90 / totalMinutes)}`
+      : formatMetric(totalValue * 90 / totalMinutes);
+  } else if (isPaired && points.length) {
+    value = `${formatMetric(numerator)} / ${formatMetric(denominator)}`;
+  } else if (metric.value_type === "percentage" && values.length) {
+    const weightedValue = denominator > 0 ? numerator * 100 / denominator : average(values);
+    value = formatMetric(weightedValue, "percentage");
+  } else if (metric.value_type === "count" && points.length) {
+    value = formatMetric(totalValue);
+  } else if (values.length) {
+    value = formatMetric(average(values), metric.value_type);
+  }
+
+  return {
+    chartKey: metric.chartKey,
+    name: metric.name,
+    category: playerAttributeCategory(metric),
+    value,
+  };
+}
+
+function playerAttributeCategory(metric: PlayerChartMetric): PlayerAttributeCategory {
+  const code = metric.code.toLowerCase();
+  if (/(save|goalkeeper|goals_conceded|xgot_conceded|high_claim|punch|sweeper|penalties_(faced|saved)|clean_sheet)/.test(code)) return "Goalkeeping";
+  if (/(card|foul|penalty_committed)/.test(code)) return "Discipline";
+  if (/(tackle|interception|clearance|block|error|possession_won|ball_recovery|dribbled_past)/.test(code)) return "Defending";
+  if (/(pass|cross)/.test(code)) return "Passing";
+  if (/(duel|dribble|touch|possession_lost|was_fouled)/.test(code)) return "Possession & duels";
+  if (/(goal|assist|shot|chance|expected|xg|xa|offside|woodwork|penalty_(won|missed))/.test(code)) return "Attacking";
+  return "General";
 }
 
 function makeDemoHistory(playerId: string, metric?: Metric): PlayerHistory[] {
