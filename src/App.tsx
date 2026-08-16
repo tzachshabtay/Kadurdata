@@ -1565,7 +1565,7 @@ function MatchesView({
               <button className={selectedMatch?.match_id === match.match_id ? "active" : ""} key={match.match_id} type="button" onClick={() => selectMatch(match.match_id)}>
                 <time>{formatFixtureDate(match.scheduled_at, language)}</time>
                 <span className="fixture-clubs"><span>{localizedMatchTeam(match, "home", language)}</span><span>{localizedMatchTeam(match, "away", language)}</span></span>
-                <strong className="fixture-score"><span>{match.home_score ?? "-"}</span><span>{match.away_score ?? "-"}</span></strong>
+                <strong className="fixture-score"><span>{displayMatchScore(match.home_score)}</span><span>{displayMatchScore(match.away_score)}</span></strong>
                 <ChevronRight size={16} aria-hidden="true" />
               </button>
             ))}
@@ -2126,10 +2126,13 @@ function CompactMatch({ match, onClick }: { match: Match; onClick: () => void })
   return (
     <button className="compact-match" type="button" onClick={onClick}>
       <time>{formatFixtureDate(match.scheduled_at, language)}</time>
-      <span className="compact-club"><ClubBadge name={localizedMatchTeam(match, "home", language)} logoUrl={match.home_team_logo_url} size="tiny" /><strong>{localizedMatchTeam(match, "home", language)}</strong></span>
-      <span className="compact-score">{match.home_score ?? "-"}</span>
-      <span className="compact-club"><ClubBadge name={localizedMatchTeam(match, "away", language)} logoUrl={match.away_team_logo_url} size="tiny" /><strong>{localizedMatchTeam(match, "away", language)}</strong></span>
-      <span className="compact-score">{match.away_score ?? "-"}</span>
+      <span className="compact-club compact-club-home"><strong>{localizedMatchTeam(match, "home", language)}</strong><ClubBadge name={localizedMatchTeam(match, "home", language)} logoUrl={match.home_team_logo_url} size="tiny" /></span>
+      <span className="compact-scoreline" aria-label={formatScore(match.home_score, match.away_score)}>
+        <span className="compact-score">{displayMatchScore(match.home_score)}</span>
+        <span className="compact-score-separator" aria-hidden="true">:</span>
+        <span className="compact-score">{displayMatchScore(match.away_score)}</span>
+      </span>
+      <span className="compact-club compact-club-away"><ClubBadge name={localizedMatchTeam(match, "away", language)} logoUrl={match.away_team_logo_url} size="tiny" /><strong>{localizedMatchTeam(match, "away", language)}</strong></span>
       <OpenIcon size={16} />
     </button>
   );
@@ -2142,7 +2145,7 @@ function MatchScoreboard({ match }: { match: Match }) {
       <div className="match-meta"><span>{localizedStageName(match.stage_name, language)} · {text.round} {match.round_number}</span><strong>{formatLongDate(match.scheduled_at, language)}</strong></div>
       <div className="scoreboard-main">
         <div className="score-club home"><div><strong>{localizedMatchTeam(match, "home", language)}</strong><span>{text.home}</span></div><ClubBadge name={localizedMatchTeam(match, "home", language)} logoUrl={match.home_team_logo_url} size="large" /></div>
-        <div className="big-score"><strong>{match.home_score ?? "-"}</strong><span>:</span><strong>{match.away_score ?? "-"}</strong><small>{localizedStatus(match.status, language, text.scheduled)}</small></div>
+        <div className="big-score"><strong>{displayMatchScore(match.home_score)}</strong><span>:</span><strong>{displayMatchScore(match.away_score)}</strong><small>{localizedStatus(match.status, language, text.scheduled)}</small></div>
         <div className="score-club"><ClubBadge name={localizedMatchTeam(match, "away", language)} logoUrl={match.away_team_logo_url} size="large" /><div><strong>{localizedMatchTeam(match, "away", language)}</strong><span>{text.away}</span></div></div>
       </div>
     </div>
@@ -3098,11 +3101,21 @@ function formatDateRange(start?: string | null, end?: string | null, language: L
 }
 
 function formatScore(home: number | null, away: number | null) {
-  return home === null || away === null ? "-" : `${home}:${away}`;
+  const validHome = normalizedMatchScore(home);
+  const validAway = normalizedMatchScore(away);
+  return validHome === null || validAway === null ? "-" : `${validHome}:${validAway}`;
 }
 
 function isCompletedMatch(match: Match) {
-  return match.home_score !== null && match.away_score !== null;
+  return normalizedMatchScore(match.home_score) !== null && normalizedMatchScore(match.away_score) !== null;
+}
+
+function normalizedMatchScore(score: number | null) {
+  return score !== null && score >= 0 ? score : null;
+}
+
+function displayMatchScore(score: number | null) {
+  return normalizedMatchScore(score) ?? "-";
 }
 
 function clubResult(match: Match, clubId: string) {
