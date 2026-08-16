@@ -75,6 +75,17 @@ type PlayerAttributeCategory = (typeof playerAttributeCategories)[number];
 const numberFormatter = new Intl.NumberFormat("en-US");
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
 const playerAttributeCategories = ["General", "Attacking", "Passing", "Possession & duels", "Defending", "Discipline", "Goalkeeping"] as const;
+const goalkeeperMetricCodes = new Set([
+  "expected_goals_on_target_conceded",
+  "expected_goals_prevented",
+  "goalkeeper_saves",
+  "goals_conceded",
+  "high_claims",
+  "penalties_faced",
+  "penalties_saved",
+  "played_sweeper",
+  "punches",
+]);
 const seasonLeaderboardMetrics: LeaderboardMetricOption[] = [
   { code: "season_appearances", name: "Appearances", value_type: "count", denominator_metric_code: null, kind: "season" },
   { code: "season_starts", name: "Starts", value_type: "count", denominator_metric_code: null, kind: "season" },
@@ -639,11 +650,17 @@ export function App() {
         ];
       });
   }, [playerMetrics]);
+  const playerViewMetrics = useMemo(
+    () => selectedPlayer?.role_group === "Goalkeepers"
+      ? playerChartMetrics
+      : playerChartMetrics.filter((metric) => !isGoalkeepingMetricCode(metric.code)),
+    [playerChartMetrics, selectedPlayer?.role_group],
+  );
   useEffect(() => {
-    if (playerChartMetrics.some((metric) => metric.chartKey === metricCode)) return;
-    const preferred = playerChartMetrics.find((metric) => metric.code === preferredMetric(playerMetrics));
-    setMetricCode(preferred?.chartKey ?? playerChartMetrics[0]?.chartKey ?? "");
-  }, [metricCode, playerChartMetrics, playerMetrics]);
+    if (playerViewMetrics.some((metric) => metric.chartKey === metricCode)) return;
+    const preferred = playerViewMetrics.find((metric) => metric.code === preferredMetric(playerMetrics));
+    setMetricCode(preferred?.chartKey ?? playerViewMetrics[0]?.chartKey ?? "");
+  }, [metricCode, playerMetrics, playerViewMetrics]);
   const leaderboardMetrics = useMemo<LeaderboardMetricOption[]>(
     () => [
       ...seasonLeaderboardMetrics,
@@ -698,7 +715,7 @@ export function App() {
     return squadLeaderboardRows.filter((player) => squadPlayerIds.has(player.player_id));
   }, [clubSquad, squadLeaderboardRows]);
   const clubSquadLeaders = filterLeaderboardRows(clubSquadLeaderboardRows, players, squadQualification, squadMinimum);
-  const selectedPlayerMetric = playerChartMetrics.find((metric) => metric.chartKey === metricCode);
+  const selectedPlayerMetric = playerViewMetrics.find((metric) => metric.chartKey === metricCode);
   const latestPlayerHistorySeasonId = useMemo(() => {
     const latestMatchBySeason = new Map<string, number>();
     playerHistory.forEach((row) => latestMatchBySeason.set(
@@ -722,7 +739,9 @@ export function App() {
     if (playerHistoryRange === "all" && playerHistorySeasonCount <= 1) setPlayerHistoryRange("latest");
   }, [playerHistoryRange, playerHistorySeasonCount]);
   const playerChartData = useMemo(
-    () => aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all"),
+    () => selectedPlayerMetric
+      ? aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all")
+      : [],
     [playerHistoryRange, selectedPlayerMetric, visiblePlayerHistory],
   );
   const playerRatioNumerator = playerChartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0);
@@ -884,7 +903,7 @@ export function App() {
             setClubFilter={setClubFilter}
             query={playerQuery}
             setQuery={setPlayerQuery}
-            metrics={playerChartMetrics}
+            metrics={playerViewMetrics}
             metricCode={metricCode}
             setMetricCode={setMetricCode}
             historyRange={playerHistoryRange}
@@ -1301,15 +1320,18 @@ function PlayersView({
   const metric = metrics.find((item) => item.chartKey === metricCode);
   const attributeGroups = useMemo(() => {
     const normalizedQuery = attributeQuery.trim().toLowerCase();
+    const categoryOrder = selectedPlayer?.role_group === "Goalkeepers"
+      ? (["Goalkeeping", ...playerAttributeCategories.filter((category) => category !== "Goalkeeping")] as PlayerAttributeCategory[])
+      : playerAttributeCategories.filter((category) => category !== "Goalkeeping");
     const attributes = metrics
       .map((item) => summarizePlayerAttribute(historyRows, item))
       .filter((attribute) => !normalizedQuery
         || attribute.name.toLowerCase().includes(normalizedQuery)
         || attribute.category.toLowerCase().includes(normalizedQuery));
-    return playerAttributeCategories
+    return categoryOrder
       .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.category === category) }))
       .filter((group) => group.attributes.length > 0);
-  }, [attributeQuery, historyRows, metrics]);
+  }, [attributeQuery, historyRows, metrics, selectedPlayer?.role_group]);
   const isPairedMetric = metric?.chartMode === "paired"
     && Boolean(metric.numerator_metric_code)
     && Boolean(metric.denominator_metric_code);
@@ -1685,13 +1707,17 @@ function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerCh
 
 function playerAttributeCategory(metric: PlayerChartMetric): PlayerAttributeCategory {
   const code = metric.code.toLowerCase();
-  if (/(save|goalkeeper|goals_conceded|xgot_conceded|high_claim|punch|sweeper|penalties_(faced|saved)|clean_sheet)/.test(code)) return "Goalkeeping";
+  if (isGoalkeepingMetricCode(code)) return "Goalkeeping";
   if (/(card|foul|penalty_committed)/.test(code)) return "Discipline";
   if (/(tackle|interception|clearance|block|error|possession_won|ball_recovery|dribbled_past)/.test(code)) return "Defending";
   if (/(pass|cross)/.test(code)) return "Passing";
   if (/(duel|dribble|touch|possession_lost|was_fouled)/.test(code)) return "Possession & duels";
   if (/(goal|assist|shot|chance|expected|xg|xa|offside|woodwork|penalty_(won|missed))/.test(code)) return "Attacking";
   return "General";
+}
+
+function isGoalkeepingMetricCode(metricCode: string) {
+  return goalkeeperMetricCodes.has(metricCode.replace(/::(paired|per90)$/, ""));
 }
 
 function makeDemoHistory(playerId: string, metric?: Metric): PlayerHistory[] {
@@ -1853,10 +1879,14 @@ function leaderboardSourceMetricCode(metricCode: string) {
 }
 
 function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPlayer[], metricCode: string) {
-  if (!metricCode.endsWith("::per90")) return [...rows].sort(compareLeaderboardRows);
+  const roleByPlayer = new Map(players.map((player) => [player.player_id, player.role_group]));
+  const eligibleRows = isGoalkeepingMetricCode(metricCode)
+    ? rows.filter((row) => roleByPlayer.get(row.player_id) === "Goalkeepers")
+    : rows;
+  if (!metricCode.endsWith("::per90")) return [...eligibleRows].sort(compareLeaderboardRows);
 
   const minutesByPlayer = new Map(players.map((player) => [player.player_id, Number(player.minutes)]));
-  return rows.map((row): PlayerLeaderboardRow => {
+  return eligibleRows.map((row): PlayerLeaderboardRow => {
     const minutes = minutesByPlayer.get(row.player_id) ?? 0;
     const total = row.total_value === null ? Number(row.leaderboard_value) : Number(row.total_value);
     const value = minutes > 0 && Number.isFinite(total) ? total * 90 / minutes : null;
