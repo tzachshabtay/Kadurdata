@@ -34,6 +34,10 @@ html {
   background: var(--canvas);
 }
 
+html[dir="rtl"] {
+  font-family: Arial, "Segoe UI", sans-serif;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -137,7 +141,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .header-main {
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr) 42px;
+  grid-template-columns: 270px minmax(0, 1fr) auto;
   align-items: center;
   min-height: 66px;
   gap: 24px;
@@ -152,7 +156,7 @@ input[type="search"]::-webkit-search-cancel-button {
   color: var(--text);
   border: 0;
   background: transparent;
-  text-align: left;
+  text-align: start;
 }
 
 .brand-mark {
@@ -253,8 +257,10 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .brand strong {
+  direction: ltr;
   font-size: 16px;
   line-height: 1;
+  unicode-bidi: isolate;
 }
 
 .brand-data {
@@ -343,6 +349,45 @@ input[type="search"]::-webkit-search-cancel-button {
   height: 38px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-deep);
+  direction: rtl;
+}
+
+.language-toggle button {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 8px;
+  color: var(--muted);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.language-toggle button:hover {
+  color: var(--text);
+  background: var(--raised);
+}
+
+.language-toggle button.active {
+  color: var(--text);
+  background: var(--green);
+}
+
 .context-bar {
   display: flex;
   align-items: center;
@@ -353,7 +398,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .context-copy {
   min-width: 230px;
-  margin-right: auto;
+  margin-inline-end: auto;
 }
 
 .context-copy span,
@@ -484,11 +529,11 @@ input[type="search"]::-webkit-search-cancel-button {
   position: relative;
   min-width: 0;
   padding: 18px 20px;
-  border-right: 1px solid var(--line);
+  border-inline-end: 1px solid var(--line);
 }
 
 .stat:last-child {
-  border-right: 0;
+  border-inline-end: 0;
 }
 
 .stat span,
@@ -596,7 +641,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
-  text-align: left;
+  text-align: start;
 }
 
 .compact-match:hover {
@@ -725,7 +770,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
-  text-align: left;
+  text-align: start;
   font-size: 11px;
 }
 
@@ -765,7 +810,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
-  text-align: left;
+  text-align: start;
 }
 
 .leader-list {
@@ -893,11 +938,11 @@ input[type="search"]::-webkit-search-cancel-button {
   padding: 0 7px;
   color: var(--text);
   border: 0;
-  border-right: 1px solid var(--line-strong);
+  border-inline-end: 1px solid var(--line-strong);
   background: var(--raised);
   font-size: 9px;
   font-weight: 800;
-  text-align: right;
+  text-align: end;
 }
 
 .qualification-input input:focus-visible {
@@ -947,7 +992,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .leader-value {
-  text-align: right;
+  text-align: end;
 }
 
 .leader-value strong {
@@ -1038,10 +1083,10 @@ input[type="search"]::-webkit-search-cancel-button {
   padding: 9px 12px;
   color: var(--text);
   border: 0;
-  border-left: 3px solid transparent;
+  border-inline-start: 3px solid transparent;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
-  text-align: left;
+  text-align: start;
 }
 
 .fixture-list > button:hover,
@@ -1050,7 +1095,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .fixture-list > button.active {
-  border-left-color: var(--teal);
+  border-inline-start-color: var(--teal);
 }
 
 .fixture-list > button.active > svg {
@@ -1123,7 +1168,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .score-club.home {
   justify-content: flex-end;
-  text-align: right;
+  text-align: end;
 }
 
 .score-club strong,
@@ -1183,7 +1228,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .comparison-panel {
-  border-right: 1px solid var(--line);
+  border-inline-end: 1px solid var(--line);
 }
 
 .comparison-row {
@@ -1203,7 +1248,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .comparison-row strong:last-child {
-  text-align: right;
+  text-align: end;
 }
 
 .comparison-row span {
@@ -1229,7 +1274,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .comparison-track .home {
-  margin-left: auto;
+  margin-inline-start: auto;
   background: var(--teal);
 }
 
@@ -1316,7 +1361,7 @@ th,
 td {
   padding: 10px;
   border-bottom: 1px solid var(--line);
-  text-align: right;
+  text-align: end;
 }
 
 th {
@@ -1339,7 +1384,7 @@ tbody tr:hover td {
 
 th:first-child,
 td:first-child {
-  text-align: left;
+  text-align: start;
 }
 
 tr:last-child td {
@@ -1355,7 +1400,7 @@ tr:last-child td {
   color: var(--text);
   border: 0;
   background: transparent;
-  text-align: left;
+  text-align: start;
 }
 
 .player-stat-table td:first-child button > span:first-child {
@@ -1423,10 +1468,10 @@ tr:last-child td {
   padding: 6px 13px;
   color: var(--text);
   border: 0;
-  border-left: 3px solid transparent;
+  border-inline-start: 3px solid transparent;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
-  text-align: left;
+  text-align: start;
   font-size: 10px;
 }
 
@@ -1436,7 +1481,7 @@ tr:last-child td {
 }
 
 .club-directory > button.active {
-  border-left-color: var(--teal);
+  border-inline-start-color: var(--teal);
 }
 
 .club-detail {
@@ -1530,7 +1575,7 @@ tr:last-child td {
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
-  text-align: left;
+  text-align: start;
 }
 
 .squad-rank {
@@ -1570,7 +1615,7 @@ tr:last-child td {
   font-size: 9px;
   font-style: normal;
   font-weight: 800;
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
 }
 
@@ -1752,10 +1797,10 @@ tr:last-child td {
   padding: 7px 11px;
   color: var(--text);
   border: 0;
-  border-left: 3px solid transparent;
+  border-inline-start: 3px solid transparent;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
-  text-align: left;
+  text-align: start;
 }
 
 .player-list > button:hover,
@@ -1764,7 +1809,7 @@ tr:last-child td {
 }
 
 .player-list > button.active {
-  border-left-color: var(--teal);
+  border-inline-start-color: var(--teal);
 }
 
 .player-list > button.active .avatar {
@@ -1796,7 +1841,7 @@ tr:last-child td {
 }
 
 .player-numbers {
-  text-align: right;
+  text-align: end;
 }
 
 .player-numbers strong {
@@ -1847,7 +1892,7 @@ tr:last-child td {
 }
 
 .metric-select {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .metric-select select {
@@ -1856,8 +1901,7 @@ tr:last-child td {
 
 .player-stats {
   margin: 20px -22px 0;
-  border-right: 0;
-  border-left: 0;
+  border-inline: 0;
   border-radius: 0;
 }
 
@@ -1949,7 +1993,7 @@ tr:last-child td {
   border: 1px solid var(--line);
   border-radius: 5px;
   background: transparent;
-  text-align: left;
+  text-align: start;
 }
 
 .attribute-grid button:hover {
@@ -1963,6 +2007,14 @@ tr:last-child td {
   border-color: var(--green);
   background: var(--raised);
   box-shadow: inset 3px 0 var(--teal);
+}
+
+html[dir="rtl"] .attribute-grid button.active {
+  box-shadow: inset -3px 0 var(--teal);
+}
+
+.rtl-arrow {
+  transform: scaleX(-1);
 }
 
 .attribute-grid button span {
@@ -2140,7 +2192,7 @@ tr:last-child td {
   }
 
   .header-main {
-    grid-template-columns: 220px minmax(0, 1fr) 42px;
+    grid-template-columns: 220px minmax(0, 1fr) auto;
   }
 
   .primary-nav button {
@@ -2158,7 +2210,7 @@ tr:last-child td {
   }
 
   .comparison-panel {
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--line);
   }
 
@@ -2177,7 +2229,7 @@ tr:last-child td {
   }
 
   .header-main {
-    grid-template-columns: 1fr 42px;
+    grid-template-columns: 1fr auto;
     padding-top: 10px;
   }
 
@@ -2312,7 +2364,7 @@ tr:last-child td {
   }
 
   .stat:nth-child(2) {
-    border-right: 0;
+    border-inline-end: 0;
   }
 
   .stat:nth-child(3),
@@ -2369,7 +2421,7 @@ tr:last-child td {
 
   .round-date {
     width: 100%;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .match-scoreboard {
@@ -2479,15 +2531,12 @@ tr:last-child td {
   }
 
   .player-stats {
-    margin-right: -15px;
-    margin-left: -15px;
+    margin-inline: -15px;
   }
 
   .player-attributes {
-    margin-right: -15px;
-    margin-left: -15px;
-    padding-right: 15px;
-    padding-left: 15px;
+    margin-inline: -15px;
+    padding-inline: 15px;
   }
 
   .attribute-heading {

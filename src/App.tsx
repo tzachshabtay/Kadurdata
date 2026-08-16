@@ -23,6 +23,22 @@ import {
   YAxis,
 } from "recharts";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
+import {
+  LocaleContext,
+  categoryName,
+  localeCode,
+  localizedStageName,
+  localizedStatus,
+  metricGroupName,
+  metricName,
+  per90Name,
+  positionName,
+  qualificationUnit,
+  ratioPartName,
+  textByLanguage,
+  useLocale,
+  type Language,
+} from "./lib/i18n";
 import type {
   Club,
   Competition,
@@ -59,6 +75,7 @@ type PlayerChartPoint = {
   date: string;
   value: number | null;
   opponent: string;
+  opponentTeamId: string | null;
   score: string;
   minutes: number | null;
   numerator: number | null;
@@ -282,6 +299,8 @@ function delay(milliseconds: number) {
 }
 
 export function App() {
+  const [language, setLanguage] = useState<Language>(readLanguage);
+  const text = textByLanguage[language];
   const [view, setView] = useState<View>(readViewFromHash);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -376,6 +395,14 @@ export function App() {
   useEffect(() => {
     void loadReferenceData();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = language === "he" ? "rtl" : "ltr";
+    document.title = text.pageTitle;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", text.metaDescription);
+    window.localStorage.setItem("kadurdata-language", language);
+  }, [language, text]);
 
   useEffect(() => {
     const onHashChange = () => setView(readViewFromHash());
@@ -705,9 +732,11 @@ export function App() {
     return playerMetrics
       .filter((metric) => !ratioComponentCodes.has(metric.code))
       .flatMap((metric): PlayerChartMetric[] => {
+        const localizedName = metricName(metric.code, metric.name, language);
         if (metric.value_type !== "percentage") {
           const rawMetric: PlayerChartMetric = {
             ...metric,
+            name: localizedName,
             chartKey: metric.code,
             chartMode: "single",
             normalization: "raw",
@@ -715,18 +744,18 @@ export function App() {
           return metric.value_type === "count" && metric.code !== "minutes"
             ? [
                 rawMetric,
-                { ...rawMetric, name: `${metric.name} (90 mins)`, chartKey: `${metric.code}::per90`, normalization: "per90" },
+                { ...rawMetric, name: per90Name(localizedName, language), chartKey: `${metric.code}::per90`, normalization: "per90" },
               ]
             : [rawMetric];
         }
-        const groupName = percentageMetricGroupName(metric);
+        const groupName = metricGroupName(metric.code, percentageMetricGroupName(metric), language);
         return [
           { ...metric, name: groupName, chartKey: `${metric.code}::paired`, chartMode: "paired", normalization: "raw" },
           { ...metric, name: `${groupName} (%)`, chartKey: metric.code, chartMode: "single", normalization: "raw" },
-          { ...metric, name: `${groupName} (90 mins)`, chartKey: `${metric.code}::per90`, chartMode: "paired", normalization: "per90" },
+          { ...metric, name: per90Name(groupName, language), chartKey: `${metric.code}::per90`, chartMode: "paired", normalization: "per90" },
         ];
       });
-  }, [playerMetrics]);
+  }, [language, playerMetrics]);
   const playerViewMetrics = useMemo(
     () => selectedPlayer?.role_group === "Goalkeepers"
       ? playerChartMetrics
@@ -740,21 +769,22 @@ export function App() {
   }, [metricCode, playerMetrics, playerViewMetrics]);
   const leaderboardMetrics = useMemo<LeaderboardMetricOption[]>(
     () => [
-      ...seasonLeaderboardMetrics,
+      ...seasonLeaderboardMetrics.map((metric) => ({ ...metric, name: metricName(metric.code, metric.name, language) })),
       ...playerMetrics.flatMap((metric): LeaderboardMetricOption[] => {
+        const localizedName = metricName(metric.code, metric.name, language);
         const rawMetric: LeaderboardMetricOption = {
           code: metric.code,
-          name: metric.name,
+          name: localizedName,
           value_type: metric.value_type,
           denominator_metric_code: metric.denominator_metric_code,
           kind: "match",
         };
         return metric.value_type === "count" && metric.code !== "minutes"
-          ? [rawMetric, { ...rawMetric, code: `${metric.code}::per90`, name: `${metric.name} (90 min)`, value_type: "rate" }]
+          ? [rawMetric, { ...rawMetric, code: `${metric.code}::per90`, name: per90Name(localizedName, language), value_type: "rate" }]
           : [rawMetric];
       }),
     ],
-    [playerMetrics],
+    [language, playerMetrics],
   );
   const explorerLeaderboardMetrics = useMemo(() => {
     if (roleFilter === "All") return leaderboardMetrics;
@@ -809,15 +839,16 @@ export function App() {
     const query = playerQuery.trim().toLowerCase();
     return players.filter((player) => {
       const detailedPosition = playerPositionDetail(player);
+      const club = clubs.find((item) => item.team_id === player.team_id);
       const matchesRole = roleFilter === "All" || player.role_group === roleFilter;
       const matchesPosition = positionFilter === "All" || playerPositionFilterDetail(player).code === positionFilter;
       const matchesClub = clubFilter === "all" || player.team_id === clubFilter;
-      const matchesQuery = !query || [player.display_name, player.team_name, player.primary_position, detailedPosition.code, detailedPosition.label]
+      const matchesQuery = !query || [player.display_name, player.display_name_he, player.team_name, club?.team_name_he, player.primary_position, detailedPosition.code, detailedPosition.label]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(query));
       return matchesRole && matchesPosition && matchesClub && matchesQuery;
     });
-  }, [clubFilter, playerQuery, players, positionFilter, roleFilter]);
+  }, [clubFilter, clubs, playerQuery, players, positionFilter, roleFilter]);
   const filteredPlayerIds = new Set(filteredPlayers.map((player) => player.player_id));
   const filteredExplorerRows = explorerLeaderboardRows.filter((row) => filteredPlayerIds.has(row.player_id));
   const qualifiedExplorerRows = filterLeaderboardRows(filteredExplorerRows, players, explorerQualification, explorerMinimum);
@@ -870,9 +901,9 @@ export function App() {
   }, [playerHistoryRange, playerHistorySeasonCount]);
   const playerChartData = useMemo(
     () => selectedPlayerMetric
-      ? aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all")
+      ? aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all", language)
       : [],
-    [playerHistoryRange, selectedPlayerMetric, visiblePlayerHistory],
+    [language, playerHistoryRange, selectedPlayerMetric, visiblePlayerHistory],
   );
   const playerRatioNumerator = playerChartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0);
   const playerRatioDenominator = playerChartData.reduce((total, point) => total + Number(point.denominator ?? 0), 0);
@@ -888,7 +919,7 @@ export function App() {
     : null;
   const matchPlayers = useMemo(() => pivotMatchPlayers(matchPlayerStats), [matchPlayerStats]);
   const visibleMatchPlayers = matchPlayers.filter((player) => player.side === matchSide);
-  const teamComparisons = useMemo(() => buildTeamComparisons(matchTeamStats), [matchTeamStats]);
+  const teamComparisons = useMemo(() => buildTeamComparisons(matchTeamStats, language), [language, matchTeamStats]);
 
   function navigate(nextView: View) {
     setView(nextView);
@@ -908,49 +939,56 @@ export function App() {
   }
 
   return (
+    <LocaleContext.Provider value={{ language, text }}>
     <div className="site-shell">
       <header className="site-header">
         <div className="header-main">
           <button className="brand" type="button" onClick={() => navigate("overview")}>
             <BrandMark />
-            <span><strong>KADUR<span className="brand-data">DATA</span></strong><small>Israeli football intelligence</small></span>
+            <span><strong>KADUR<span className="brand-data">DATA</span></strong><small>{text.brandTagline}</small></span>
           </button>
 
-          <nav className="primary-nav" aria-label="Primary navigation">
+          <nav className="primary-nav" aria-label={text.primaryNavigation}>
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
                 <button className={view === item.id ? "active" : ""} key={item.id} type="button" onClick={() => navigate(item.id)}>
                   <Icon size={17} aria-hidden="true" />
-                  <span>{item.label}</span>
+                  <span>{text[item.id]}</span>
                 </button>
               );
             })}
           </nav>
 
-          <button className="icon-button" type="button" onClick={() => { void loadReferenceData(); setRefreshToken((value) => value + 1); }} title="Refresh data" aria-label="Refresh data">
-            <RefreshCcw size={18} aria-hidden="true" />
-          </button>
+          <div className="header-actions">
+            <div className="language-toggle" aria-label={text.language}>
+              <button className={language === "he" ? "active" : ""} type="button" onClick={() => setLanguage("he")} aria-label={text.hebrew}>עב</button>
+              <button className={language === "en" ? "active" : ""} type="button" onClick={() => setLanguage("en")} aria-label={text.english}>EN</button>
+            </div>
+            <button className="icon-button" type="button" onClick={() => { void loadReferenceData(); setRefreshToken((value) => value + 1); }} title={text.refreshData} aria-label={text.refreshData}>
+              <RefreshCcw size={18} aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         <div className="context-bar">
           <div className="context-copy">
-            <span>Viewing</span>
-            <strong>{competitionLabel(competitions.find((item) => item.competition_id === competitionId)?.name)}</strong>
+            <span>{text.viewing}</span>
+            <strong>{localizedCompetition(competitions.find((item) => item.competition_id === competitionId), language)}</strong>
           </div>
           <label className="context-select">
-            <span>Competition</span>
+            <span>{text.competition}</span>
             <select value={competitionId} onChange={(event) => setCompetitionId(event.target.value)}>
               {competitions.map((competition) => (
-                <option key={competition.competition_id} value={competition.competition_id}>{competitionLabel(competition.name)}</option>
+                <option key={competition.competition_id} value={competition.competition_id}>{localizedCompetition(competition, language)}</option>
               ))}
             </select>
           </label>
           <label className="context-select">
-            <span>Season</span>
+            <span>{text.season}</span>
             <select value={seasonId} onChange={(event) => setSeasonId(event.target.value)}>
               {availableSeasons.map((season) => (
-                <option key={season.season_id} value={season.season_id}>{season.season_name}{season.season_id === latestDataSeason?.season_id ? " · Latest" : ""}</option>
+                <option key={season.season_id} value={season.season_id}>{season.season_name}{season.season_id === latestDataSeason?.season_id ? ` · ${text.latest}` : ""}</option>
               ))}
             </select>
           </label>
@@ -958,8 +996,8 @@ export function App() {
       </header>
 
       <main className="page-shell">
-        {error && <div className="error-banner"><strong>Some data could not be loaded.</strong><span>{error}</span></div>}
-        {!hasSupabaseConfig && <div className="demo-banner">Previewing the interface with sample data.</div>}
+        {error && <div className="error-banner"><strong>{text.dataLoadError}</strong><span>{error}</span></div>}
+        {!hasSupabaseConfig && <div className="demo-banner">{text.demoPreview}</div>}
 
         {loading || seasonLoading ? (
           <LoadingState />
@@ -998,6 +1036,7 @@ export function App() {
             matchSide={matchSide}
             setMatchSide={setMatchSide}
             players={visibleMatchPlayers}
+            seasonPlayers={players}
             comparisons={teamComparisons}
             detailLoading={detailLoading}
             openPlayer={openPlayer}
@@ -1056,7 +1095,7 @@ export function App() {
             setMetricCode={setMetricCode}
             historyRange={playerHistoryRange}
             setHistoryRange={setPlayerHistoryRange}
-            latestHistorySeasonLabel={latestPlayerHistorySeason?.season_name ?? "Latest season"}
+            latestHistorySeasonLabel={latestPlayerHistorySeason?.season_name ?? text.latestSeasonWithData}
             historySeasonCount={playerHistorySeasonCount}
             historyRows={visiblePlayerHistory}
             chartData={playerChartData}
@@ -1068,6 +1107,7 @@ export function App() {
         )}
       </main>
     </div>
+    </LocaleContext.Provider>
   );
 }
 
@@ -1114,37 +1154,39 @@ function OverviewView({
   openPlayer: (id: string) => void;
   showMatches: () => void;
 }) {
+  const { language, text } = useLocale();
   const selectedMetric = metrics.find((metric) => metric.code === metricCode);
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
   const minutesByPlayer = new Map(seasonPlayers.map((player) => [player.player_id, Number(player.minutes)]));
+  const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
   return (
     <>
-      <PageHeading eyebrow={`${competitionLabel(season.competition_name)} · ${season.season_name}`} title="Season overview" description="The current shape of the league, from the latest results to the players setting the pace." />
-      <section className="stat-band" aria-label="Season summary">
-        <Stat label="Matches played" value={`${numberFormatter.format(season.completed_match_count)} / ${numberFormatter.format(season.match_count)}`} note={`${Math.round((season.completed_match_count / Math.max(season.match_count, 1)) * 100)}% complete`} />
-        <Stat label="Clubs" value={numberFormatter.format(season.team_count)} note="League participants" />
-        <Stat label="Players used" value={numberFormatter.format(season.player_count)} note="Across all matchdays" />
-        <Stat label="Goals" value={numberFormatter.format(season.goals_scored)} note={`${(season.goals_scored / Math.max(season.completed_match_count, 1)).toFixed(2)} per match`} accent />
+      <PageHeading eyebrow={`${localizedSeasonCompetition(season, language)} · ${season.season_name}`} title={text.seasonOverview} description={text.seasonOverviewDescription} />
+      <section className="stat-band" aria-label={text.seasonSummary}>
+        <Stat label={text.matchesPlayed} value={`${numberFormatter.format(season.completed_match_count)} / ${numberFormatter.format(season.match_count)}`} note={`${Math.round((season.completed_match_count / Math.max(season.match_count, 1)) * 100)}% ${text.complete}`} />
+        <Stat label={text.clubs} value={numberFormatter.format(season.team_count)} note={text.leagueParticipants} />
+        <Stat label={text.playersUsed} value={numberFormatter.format(season.player_count)} note={text.acrossMatchdays} />
+        <Stat label={text.goals} value={numberFormatter.format(season.goals_scored)} note={`${(season.goals_scored / Math.max(season.completed_match_count, 1)).toFixed(2)} ${text.perMatch}`} accent />
       </section>
 
       <div className="overview-grid">
         <section className="surface round-surface">
-          <SectionHeading eyebrow={round?.stage_name ?? "Latest matchday"} title={`Round ${round?.round_number ?? "-"}`} action="All matches" onAction={showMatches} />
+          <SectionHeading eyebrow={round?.stage_name ? localizedStageName(round.stage_name, language) : text.latestMatchday} title={`${text.round} ${round?.round_number ?? "-"}`} action={text.allMatches} onAction={showMatches} />
           <div className="score-list">
             {roundMatches.slice(0, 7).map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />)}
           </div>
         </section>
 
         <section className="surface standings-surface">
-          <SectionHeading eyebrow="League table" title="The leading pack" action="All clubs" onAction={() => openClub(standings[0]?.team_id ?? "")} />
-          <div className="mini-table" aria-label="League standings">
-            <div className="mini-table-head"><span>#</span><span>Club</span><span>GD</span><span>Pts</span></div>
+          <SectionHeading eyebrow={text.leagueTable} title={text.leadingPack} action={text.allClubs} onAction={() => openClub(standings[0]?.team_id ?? "")} />
+          <div className="mini-table" aria-label={text.leagueStandings}>
+            <div className="mini-table-head"><span>#</span><span>{text.club}</span><span>{text.goalDifferenceShort}</span><span>{text.pointsShort}</span></div>
             <div className="mini-table-body">
               {standings.map((club, index) => (
                 <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
                   <span className="rank">{index + 1}</span>
-                  <span className="club-cell"><ClubBadge name={club.team_name} logoUrl={club.logo_url} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
+                  <span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span>
                   <span>{signed(club.goal_difference)}</span>
                   <strong>{club.points}</strong>
                 </button>
@@ -1155,24 +1197,27 @@ function OverviewView({
 
         <section className="surface leaders-surface">
           <div className="leaderboard-heading">
-            <div><span>Player leaderboard</span><h2>{selectedMetric?.name ?? "Performance"}</h2></div>
+            <div><span>{text.playerLeaderboard}</span><h2>{selectedMetric?.name ?? text.performance}</h2></div>
             <label className="leader-metric-select">
-              <span>Sort by</span>
+              <span>{text.sortBy}</span>
               <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
-                <optgroup label="Season summary">{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-                <optgroup label="Match metrics">{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
               </select>
             </label>
           </div>
           {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
           <div className="leader-list">
-            {loading ? <InlineLoading /> : error ? <EmptyState text="Leaderboard data could not be loaded." /> : leaders.length ? leaders.map((player, index) => (
-              <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
-                <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
-                <span className="leader-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "")}</small></span>
-                <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{leaderboardSampleLabel(player, qualification, minutesByPlayer)}</small></span>
-              </button>
-            )) : <EmptyState text={qualification ? "No players meet the current minimum sample." : "No leaderboard data is available for this metric."} />}
+            {loading ? <InlineLoading /> : error ? <EmptyState text={text.leaderboardLoadError} /> : leaders.length ? leaders.map((player, index) => {
+              const seasonPlayer = seasonPlayerById.get(player.player_id);
+              return (
+                <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
+                  <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="leader-copy"><strong>{localizedPlayerName(seasonPlayer, player.display_name, language)}</strong><small>{localizedClubById(standings, player.team_id, player.team_name, language)}</small></span>
+                  <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{leaderboardSampleLabel(player, qualification, minutesByPlayer, language)}</small></span>
+                </button>
+              );
+            }) : <EmptyState text={qualification ? text.noMinimumSamplePlayers : text.noLeaderboardData} />}
           </div>
         </section>
       </div>
@@ -1191,6 +1236,7 @@ function MatchesView({
   matchSide,
   setMatchSide,
   players,
+  seasonPlayers,
   comparisons,
   detailLoading,
   openPlayer,
@@ -1205,34 +1251,38 @@ function MatchesView({
   matchSide: "home" | "away";
   setMatchSide: (side: "home" | "away") => void;
   players: PlayerPivot[];
+  seasonPlayers: SeasonPlayer[];
   comparisons: Array<{ code: string; label: string; home: number; away: number }>;
   detailLoading: boolean;
   openPlayer: (id: string) => void;
 }) {
+  const { language, text } = useLocale();
   const roundIndex = rounds.findIndex((item) => item.round_id === roundId);
+  const PreviousIcon = language === "he" ? ChevronRight : ChevronLeft;
+  const NextIcon = language === "he" ? ChevronLeft : ChevronRight;
   return (
     <>
-      <PageHeading eyebrow={round?.stage_name ?? "Season schedule"} title="Fixtures & results" description="Move through the season by round, then open any match for team and player-level detail." />
+      <PageHeading eyebrow={round?.stage_name ? localizedStageName(round.stage_name, language) : text.seasonSchedule} title={text.fixturesResults} description={text.fixturesDescription} />
       <div className="round-toolbar">
-        <button className="icon-button compact" type="button" disabled={roundIndex <= 0} onClick={() => setRoundId(rounds[roundIndex - 1]?.round_id)} aria-label="Previous round"><ChevronLeft size={18} /></button>
+        <button className="icon-button compact" type="button" disabled={roundIndex <= 0} onClick={() => setRoundId(rounds[roundIndex - 1]?.round_id)} aria-label={text.previousRound}><PreviousIcon size={18} /></button>
         <label>
-          <span>Matchday</span>
+          <span>{text.matchday}</span>
           <select value={roundId} onChange={(event) => setRoundId(event.target.value)}>
-            {rounds.map((item) => <option key={item.round_id} value={item.round_id}>{item.stage_name} · Round {item.round_number}</option>)}
+            {rounds.map((item) => <option key={item.round_id} value={item.round_id}>{localizedStageName(item.stage_name, language)} · {text.round} {item.round_number}</option>)}
           </select>
         </label>
-        <button className="icon-button compact" type="button" disabled={roundIndex < 0 || roundIndex >= rounds.length - 1} onClick={() => setRoundId(rounds[roundIndex + 1]?.round_id)} aria-label="Next round"><ChevronRight size={18} /></button>
-        <span className="round-date">{formatDateRange(round?.first_match_at, round?.last_match_at)}</span>
+        <button className="icon-button compact" type="button" disabled={roundIndex < 0 || roundIndex >= rounds.length - 1} onClick={() => setRoundId(rounds[roundIndex + 1]?.round_id)} aria-label={text.nextRound}><NextIcon size={18} /></button>
+        <span className="round-date">{formatDateRange(round?.first_match_at, round?.last_match_at, language)}</span>
       </div>
 
       <div className="match-workspace">
         <aside className="surface fixture-rail">
-          <div className="rail-heading"><strong>{matches.length} matches</strong><span>{round?.completed_match_count ?? 0} completed</span></div>
+          <div className="rail-heading"><strong>{matches.length} {text.matches.toLowerCase()}</strong><span>{round?.completed_match_count ?? 0} {text.completed}</span></div>
           <div className="fixture-list">
             {matches.map((match) => (
               <button className={selectedMatch?.match_id === match.match_id ? "active" : ""} key={match.match_id} type="button" onClick={() => selectMatch(match.match_id)}>
-                <time>{formatFixtureDate(match.scheduled_at)}</time>
-                <span className="fixture-clubs"><span>{cleanTeamName(match.home_team_name)}</span><span>{cleanTeamName(match.away_team_name)}</span></span>
+                <time>{formatFixtureDate(match.scheduled_at, language)}</time>
+                <span className="fixture-clubs"><span>{localizedMatchTeam(match, "home", language)}</span><span>{localizedMatchTeam(match, "away", language)}</span></span>
                 <strong className="fixture-score"><span>{match.home_score ?? "-"}</span><span>{match.away_score ?? "-"}</span></strong>
                 <ChevronRight size={16} aria-hidden="true" />
               </button>
@@ -1246,22 +1296,22 @@ function MatchesView({
               <MatchScoreboard match={selectedMatch} />
               <div className="detail-grid">
                 <div className="comparison-panel">
-                  <SectionHeading eyebrow="Team comparison" title="Match profile" />
-                  {detailLoading ? <InlineLoading /> : comparisons.length ? comparisons.map((item) => <ComparisonBar key={item.code} {...item} />) : <EmptyState text="Team comparison data is not available for this match." />}
+                  <SectionHeading eyebrow={text.teamComparison} title={text.matchProfile} />
+                  {detailLoading ? <InlineLoading /> : comparisons.length ? comparisons.map((item) => <ComparisonBar key={item.code} {...item} />) : <EmptyState text={text.noTeamComparison} />}
                 </div>
                 <div className="lineup-panel">
                   <div className="lineup-heading">
-                    <div><span>Player statistics</span><strong>{matchSide === "home" ? cleanTeamName(selectedMatch.home_team_name) : cleanTeamName(selectedMatch.away_team_name)}</strong></div>
+                    <div><span>{text.playerStatistics}</span><strong>{localizedMatchTeam(selectedMatch, matchSide, language)}</strong></div>
                     <div className="segmented compact-segmented">
-                      <button className={matchSide === "home" ? "active" : ""} type="button" onClick={() => setMatchSide("home")}>Home</button>
-                      <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => setMatchSide("away")}>Away</button>
+                      <button className={matchSide === "home" ? "active" : ""} type="button" onClick={() => setMatchSide("home")}>{text.home}</button>
+                      <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => setMatchSide("away")}>{text.away}</button>
                     </div>
                   </div>
-                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} openPlayer={openPlayer} />}
+                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} openPlayer={openPlayer} />}
                 </div>
               </div>
             </>
-          ) : <EmptyState text="Select a match to inspect its statistics." />}
+          ) : <EmptyState text={text.selectMatch} />}
         </section>
       </div>
     </>
@@ -1307,20 +1357,21 @@ function ClubsView({
   openMatch: (match: Match) => void;
   openPlayer: (id: string) => void;
 }) {
+  const { language, text } = useLocale();
   const recent = matches.filter(isCompletedMatch).slice(0, 5);
   const squadByPlayerId = new Map(squad.map((player) => [player.player_id, player]));
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
   return (
     <>
-      <PageHeading eyebrow="Season directory" title="Clubs" description="Compare league position, form, results, and the players carrying each team through the season." />
+      <PageHeading eyebrow={text.seasonDirectory} title={text.clubs} description={text.clubsDescription} />
       <div className="club-workspace">
         <aside className="surface club-directory">
-          <div className="club-table-head"><span>#</span><span>Club</span><span>P</span><span>Pts</span></div>
+          <div className="club-table-head"><span>#</span><span>{text.club}</span><span>{text.playedShort}</span><span>{text.pointsShort}</span></div>
           {clubs.map((club, index) => (
             <button className={club.team_id === selectedClub?.team_id ? "active" : ""} key={club.team_id} type="button" onClick={() => setClubId(club.team_id)}>
               <span>{index + 1}</span>
-              <span className="club-cell"><ClubBadge name={club.team_name} logoUrl={club.logo_url} size="small" /><strong>{cleanTeamName(club.team_name)}</strong></span>
+              <span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span>
               <span>{club.played}</span><strong>{club.points}</strong>
             </button>
           ))}
@@ -1330,52 +1381,52 @@ function ClubsView({
           {selectedClub ? (
             <>
               <div className="club-identity">
-                <ClubBadge name={selectedClub.team_name} logoUrl={selectedClub.logo_url} size="large" />
-                <div><span>League position {clubs.findIndex((club) => club.team_id === selectedClub.team_id) + 1}</span><h2>{cleanTeamName(selectedClub.team_name)}</h2><p>{selectedClub.city ?? "Israel"} · {selectedClub.played} matches played</p></div>
-                <div className="form-strip" aria-label="Recent form">
-                  {recent.map((match) => <span className={clubResult(match, selectedClub.team_id).toLowerCase()} key={match.match_id}>{clubResult(match, selectedClub.team_id)}</span>)}
+                <ClubBadge name={localizedClubName(selectedClub, language)} logoUrl={selectedClub.logo_url} size="large" />
+                <div><span>{text.leaguePosition} {clubs.findIndex((club) => club.team_id === selectedClub.team_id) + 1}</span><h2>{localizedClubName(selectedClub, language)}</h2><p>{language === "he" ? text.israel : selectedClub.city ?? text.israel} · {selectedClub.played} {text.matchesPlayedSuffix}</p></div>
+                <div className="form-strip" aria-label={text.recentForm}>
+                  {recent.map((match) => <span className={clubResult(match, selectedClub.team_id).toLowerCase()} key={match.match_id}>{localizedResult(clubResult(match, selectedClub.team_id), language)}</span>)}
                 </div>
               </div>
               <section className="stat-band club-stats">
-                <Stat label="Record" value={`${selectedClub.won}-${selectedClub.drawn}-${selectedClub.lost}`} note="W-D-L" />
-                <Stat label="Goals" value={`${selectedClub.goals_for}:${selectedClub.goals_against}`} note="For : against" />
-                <Stat label="Goal difference" value={signed(selectedClub.goal_difference)} note="Season total" />
-                <Stat label="Points" value={String(selectedClub.points)} note={`${(selectedClub.points / Math.max(selectedClub.played, 1)).toFixed(2)} per match`} accent />
+                <Stat label={text.record} value={`${selectedClub.won}-${selectedClub.drawn}-${selectedClub.lost}`} note={text.winsDrawsLosses} />
+                <Stat label={text.goals} value={`${selectedClub.goals_for}:${selectedClub.goals_against}`} note={text.forAgainst} />
+                <Stat label={text.goalDifference} value={signed(selectedClub.goal_difference)} note={text.seasonTotal} />
+                <Stat label={text.points} value={String(selectedClub.points)} note={`${(selectedClub.points / Math.max(selectedClub.played, 1)).toFixed(2)} ${text.perMatch}`} accent />
               </section>
               <div className="club-detail-grid">
                 <section className="surface club-results">
-                  <SectionHeading eyebrow="Season schedule" title="Recent matches" />
+                  <SectionHeading eyebrow={text.seasonSchedule} title={text.recentMatches} />
                   {matches.slice(0, 8).map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />)}
                 </section>
                 <section className="surface squad-panel">
                   <div className="squad-leaderboard-heading">
-                    <div><span>{squad.length} players</span><h2>Season squad</h2></div>
+                    <div><span>{squad.length} {text.players.toLowerCase()}</span><h2>{text.seasonSquad}</h2></div>
                     <label className="leader-metric-select squad-metric-select">
-                      <span>Rank by</span>
+                      <span>{text.rankBy}</span>
                       <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
-                        <optgroup label="Season summary">{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-                        <optgroup label="Match metrics">{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                        <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                        <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
                       </select>
                     </label>
                   </div>
                   {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
                   <div className="squad-list">
-                    {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text="Squad leaderboard data could not be loaded." /> : squadLeaders.length ? squadLeaders.map((leader, index) => {
+                    {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text={text.squadLoadError} /> : squadLeaders.length ? squadLeaders.map((leader, index) => {
                       const player = squadByPlayerId.get(leader.player_id);
                       return (
                         <button key={leader.player_id} type="button" onClick={() => openPlayer(leader.player_id)}>
                           <span className="squad-rank">{String(index + 1).padStart(2, "0")}</span>
                           <span className="avatar">{initials(leader.display_name)}</span>
-                          <span><strong>{leader.display_name}</strong><small>{player ? `${playerPositionDetail(player).code} · ${playerPositionDetail(player).label}` : "Player"}</small></span>
+                          <span><strong>{localizedPlayerName(player, leader.display_name, language)}</strong><small>{player ? `${playerPositionDetail(player).code} · ${localizedPlayerPosition(player, language).label}` : text.player}</small></span>
                           <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
                         </button>
                       );
-                    }) : <EmptyState text={qualification ? "No squad players meet the current minimum sample." : "No squad data is available for this metric."} />}
+                    }) : <EmptyState text={qualification ? text.noSquadMinimumSample : text.noSquadData} />}
                   </div>
                 </section>
               </div>
             </>
-          ) : <EmptyState text="Select a club to open its season workspace." />}
+          ) : <EmptyState text={text.selectClub} />}
         </section>
       </div>
     </>
@@ -1399,12 +1450,14 @@ function LeaderboardQualificationFilter({
   ratingMinimumMinutes?: number | null;
   setRatingMinimumMinutes?: (value: number) => void;
 }) {
+  const { language, text } = useLocale();
+  const unitLabel = qualificationUnit(qualification.unit, language);
   return (
     <div className={`qualification-filters${ratingMinimumMinutes !== null ? " has-rating-minutes" : ""}`}>
       <label className="qualification-filter">
         <span className="qualification-copy">
-          <strong>Minimum sample</strong>
-          <small>{loading ? "Updating ranking" : `${qualifiedCount} ${qualifiedCount === 1 ? "player qualifies" : "players qualify"}`}</small>
+          <strong>{text.minimumSample}</strong>
+          <small>{loading ? text.updatingRanking : `${qualifiedCount} ${qualifiedCount === 1 ? text.playerQualifies : text.playersQualify}`}</small>
         </span>
         <span className="qualification-input">
           <input
@@ -1416,16 +1469,16 @@ function LeaderboardQualificationFilter({
               if (Number.isNaN(event.currentTarget.valueAsNumber)) return;
               setMinimum(Math.max(0, event.currentTarget.valueAsNumber));
             }}
-            aria-label={`Minimum ${qualification.unit}`}
+            aria-label={`${text.minimumSample}: ${unitLabel}`}
           />
-          <small>{qualification.unit}</small>
+          <small>{unitLabel}</small>
         </span>
       </label>
       {ratingMinimumMinutes !== null && setRatingMinimumMinutes && (
         <label className="qualification-filter rating-minutes-filter">
           <span className="qualification-copy">
-            <strong>Minimum minutes</strong>
-            <small>Per rated match</small>
+            <strong>{text.minimumMinutes}</strong>
+            <small>{text.perRatedMatch}</small>
           </span>
           <span className="qualification-input">
             <input
@@ -1437,9 +1490,9 @@ function LeaderboardQualificationFilter({
                 if (Number.isNaN(event.currentTarget.valueAsNumber)) return;
                 setRatingMinimumMinutes(Math.max(0, event.currentTarget.valueAsNumber));
               }}
-              aria-label="Minimum minutes per rated match"
+              aria-label={text.minimumMinutesPerRatedMatch}
             />
-            <small>minutes</small>
+            <small>{text.minutes}</small>
           </span>
         </label>
       )}
@@ -1528,12 +1581,13 @@ function PlayersView({
   averageDenominator: number | null;
   detailLoading: boolean;
 }) {
+  const { language, text } = useLocale();
   const [attributeQuery, setAttributeQuery] = useState("");
   const metric = metrics.find((item) => item.chartKey === metricCode);
   const rankingByPlayerId = new Map(rankingRows.map((row) => [row.player_id, row]));
   const seasonRankingMetrics = rankingMetrics.filter((item) => item.kind === "season");
   const matchRankingMetrics = rankingMetrics.filter((item) => item.kind === "match");
-  const selectedPosition = selectedPlayer ? playerPositionDetail(selectedPlayer) : null;
+  const selectedPosition = selectedPlayer ? localizedPlayerPosition(selectedPlayer, language) : null;
   const attributeGroups = useMemo(() => {
     const normalizedQuery = attributeQuery.trim().toLowerCase();
     const categoryOrder = selectedPlayer?.role_group === "Goalkeepers"
@@ -1543,18 +1597,23 @@ function PlayersView({
       .map((item) => summarizePlayerAttribute(historyRows, item))
       .filter((attribute) => !normalizedQuery
         || attribute.name.toLowerCase().includes(normalizedQuery)
-        || attribute.category.toLowerCase().includes(normalizedQuery));
+        || attribute.category.toLowerCase().includes(normalizedQuery)
+        || categoryName(attribute.category, language).includes(normalizedQuery));
     return categoryOrder
       .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.category === category) }))
       .filter((group) => group.attributes.length > 0);
-  }, [attributeQuery, historyRows, metrics, selectedPlayer?.role_group]);
+  }, [attributeQuery, historyRows, language, metrics, selectedPlayer?.role_group]);
   const isPairedMetric = metric?.chartMode === "paired"
     && Boolean(metric.numerator_metric_code)
     && Boolean(metric.denominator_metric_code);
   const isPer90Metric = metric?.normalization === "per90";
-  const numeratorLabel = ratioComponentLabel(metric?.numerator_metric_code);
-  const denominatorLabel = ratioComponentLabel(metric?.denominator_metric_code);
-  const plottedChartData = isPer90Metric ? chartData.flatMap((point) => {
+  const numeratorLabel = ratioComponentLabel(metric?.numerator_metric_code, language);
+  const denominatorLabel = ratioComponentLabel(metric?.denominator_metric_code, language);
+  const localizedChartData = chartData.map((point) => ({
+    ...point,
+    opponent: localizedClubById(clubs, point.opponentTeamId, point.opponent, language) || text.opponent,
+  }));
+  const plottedChartData = isPer90Metric ? localizedChartData.flatMap((point) => {
     if (point.minutes === null || point.minutes <= 0) return [];
     const factor = 90 / point.minutes;
     return [{
@@ -1563,7 +1622,7 @@ function PlayersView({
       numerator: point.numerator === null ? null : point.numerator * factor,
       denominator: point.denominator === null ? null : point.denominator * factor,
     }];
-  }) : chartData;
+  }) : localizedChartData;
   const totalSampleMinutes = chartData.reduce((total, point) => total + Number(point.minutes ?? 0), 0);
   const per90Value = totalSampleMinutes > 0
     ? chartData.reduce((total, point) => total + Number(point.value ?? 0), 0) * 90 / totalSampleMinutes
@@ -1580,43 +1639,43 @@ function PlayersView({
       : formatMetric(per90Value)
     : average === null ? "-" : formatMetricWithRatio(average, metric?.value_type, averageNumerator, averageDenominator);
   const summaryNote = isPer90Metric
-    ? isPairedMetric ? `${numeratorLabel} / ${denominatorLabel} per 90` : "Minutes-weighted rate per 90"
+    ? isPairedMetric ? `${numeratorLabel} / ${denominatorLabel} ${text.numeratorDenominatorPer90}` : text.weightedPer90
     : historyRange === "all"
-      ? `${chartData.length} matches · ${historySeasonCount} ${historySeasonCount === 1 ? "season" : "seasons"}`
-      : `${chartData.length} matches sampled`;
+      ? `${chartData.length} ${text.matches.toLowerCase()} · ${historySeasonCount} ${historySeasonCount === 1 ? text.seasonSingular : text.seasons}`
+      : `${chartData.length} ${text.matchesSampled}`;
   return (
     <>
-      <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} players`} title="Player explorer" description="Filter the league by role or club, then track an individual metric from match to match." />
+      <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} ${text.players.toLowerCase()}`} title={text.playerExplorer} description={text.playerExplorerDescription} />
       <div className="player-filters">
         <div className="role-filter-stack">
           <div className="segmented role-segments">
-            {roles.map((role) => <button aria-label={role} className={roleFilter === role ? "active" : ""} key={role} title={role} type="button" onClick={() => setRoleFilter(role)}>{roleLabel(role)}</button>)}
+            {roles.map((role) => <button aria-label={localizedRoleName(role, language)} className={roleFilter === role ? "active" : ""} key={role} title={localizedRoleName(role, language)} type="button" onClick={() => setRoleFilter(role)}>{roleLabel(role, language)}</button>)}
           </div>
           {positions.length > 0 && (
             <div className="position-filter">
-              <span>Position</span>
-              <div className="segmented compact-segmented position-segments" aria-label={`${roleFilter} positions`}>
-                <button className={positionFilter === "All" ? "active" : ""} type="button" onClick={() => setPositionFilter("All")}>All</button>
+              <span>{text.position}</span>
+              <div className="segmented compact-segmented position-segments" aria-label={`${localizedRoleName(roleFilter, language)} · ${text.position}`}>
+                <button className={positionFilter === "All" ? "active" : ""} type="button" onClick={() => setPositionFilter("All")}>{text.all}</button>
                 {positions.map((position) => (
-                  <button className={positionFilter === position.code ? "active" : ""} key={position.code} title={position.label} type="button" onClick={() => setPositionFilter(position.code)}>{position.code}</button>
+                  <button className={positionFilter === position.code ? "active" : ""} key={position.code} title={positionName(position.code, position.label, language)} type="button" onClick={() => setPositionFilter(position.code)}>{position.code}</button>
                 ))}
               </div>
             </div>
           )}
         </div>
-        <label className="filter-select"><ListFilter size={16} /><select value={clubFilter} onChange={(event) => setClubFilter(event.target.value)}><option value="all">All clubs</option>{clubs.map((club) => <option key={club.team_id} value={club.team_id}>{cleanTeamName(club.team_name)}</option>)}</select></label>
-        <label className="search-field"><Search size={17} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search players" /></label>
+        <label className="filter-select"><ListFilter size={16} /><select value={clubFilter} onChange={(event) => setClubFilter(event.target.value)}><option value="all">{text.allClubs}</option>{clubs.map((club) => <option key={club.team_id} value={club.team_id}>{localizedClubName(club, language)}</option>)}</select></label>
+        <label className="search-field"><Search size={17} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.searchPlayers} /></label>
       </div>
 
       <div className="player-workspace">
         <aside className="surface player-directory">
           <div className="rail-heading player-ranking-heading">
-            <strong>{numberFormatter.format(players.length)} results</strong>
+            <strong>{numberFormatter.format(players.length)} {text.results}</strong>
             <label className="player-ranking-select">
-              <span>Rank by</span>
-              <select aria-label="Rank players by" value={rankingMetricCode} onChange={(event) => setRankingMetricCode(event.target.value)}>
-                <optgroup label="Season summary">{seasonRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
-                <optgroup label="Match metrics">{matchRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
+              <span>{text.rankBy}</span>
+              <select aria-label={text.rankPlayersBy} value={rankingMetricCode} onChange={(event) => setRankingMetricCode(event.target.value)}>
+                <optgroup label={text.seasonSummaryGroup}>{seasonRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
+                <optgroup label={text.matchMetricsGroup}>{matchRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
               </select>
             </label>
           </div>
@@ -1626,19 +1685,20 @@ function PlayersView({
             </div>
           )}
           <div className="player-list">
-            {rankingLoading ? <InlineLoading /> : rankingError ? <EmptyState text="Player ranking data could not be loaded." /> : players.length ? players.map((player) => {
+            {rankingLoading ? <InlineLoading /> : rankingError ? <EmptyState text={text.playerRankingLoadError} /> : players.length ? players.map((player) => {
               const ranking = rankingByPlayerId.get(player.player_id);
+              const displayName = localizedPlayerName(player, player.display_name, language);
               return (
                 <button className={player.player_id === selectedPlayer?.player_id ? "active" : ""} key={player.player_id} type="button" onClick={() => selectPlayer(player.player_id)}>
-                  <span className="avatar">{initials(player.display_name)}</span>
-                  <span className="player-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "Free agent")} · {playerPositionDetail(player).code}</small></span>
+                  <span className="avatar">{initials(displayName)}</span>
+                  <span className="player-copy"><strong>{displayName}</strong><small>{localizedClubById(clubs, player.team_id, player.team_name ?? text.freeAgent, language)} · {playerPositionDetail(player).code}</small></span>
                   <span className="player-numbers">
                     <strong>{ranking ? formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value) : "-"}</strong>
-                    <small>{ranking ? explorerRankingSampleLabel(ranking, player, rankingQualification) : ""}</small>
+                    <small>{ranking ? explorerRankingSampleLabel(ranking, player, rankingQualification, language) : ""}</small>
                   </span>
                 </button>
               );
-            }) : <EmptyState text={rankingQualification ? "No players meet the current minimum sample." : "No players are available for this metric."} />}
+            }) : <EmptyState text={rankingQualification ? text.noMinimumSamplePlayers : text.noPlayersForMetric} />}
           </div>
         </aside>
 
@@ -1646,33 +1706,33 @@ function PlayersView({
           {selectedPlayer ? (
             <>
               <div className="player-profile-head">
-                <span className="avatar large">{initials(selectedPlayer.display_name)}</span>
+                <span className="avatar large">{initials(localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language))}</span>
                 <div>
-                  <span className="player-position-line"><b title={selectedPosition?.label}>{selectedPosition?.code}</b><span>{selectedPosition?.label} · {cleanTeamName(selectedPlayer.team_name ?? "")}</span></span>
-                  <h2>{selectedPlayer.display_name}</h2>
+                  <span className="player-position-line"><b title={selectedPosition?.label}>{selectedPosition?.code}</b><span>{selectedPosition?.label} · {localizedClubById(clubs, selectedPlayer.team_id, selectedPlayer.team_name, language)}</span></span>
+                  <h2>{localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)}</h2>
                 </div>
               </div>
               <section className="stat-band player-stats">
-                <Stat label="Appearances" value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} starts`} />
-                <Stat label="Minutes" value={numberFormatter.format(Math.round(Number(selectedPlayer.minutes)))} note="Season total" />
-                <Stat label="Goals + assists" value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} goals · ${formatNumber(selectedPlayer.assists)} assists`} />
-                <Stat label={metric?.name ?? "Average"} value={summaryValue} note={summaryNote} accent />
+                <Stat label={text.appearances} value={formatNumber(selectedPlayer.appearances)} note={`${formatNumber(selectedPlayer.starts)} ${text.starts}`} />
+                <Stat label={text.minutes} value={numberFormatter.format(Math.round(Number(selectedPlayer.minutes)))} note={text.seasonTotal} />
+                <Stat label={text.goalsAssists} value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} ${text.goals.toLowerCase()} · ${formatNumber(selectedPlayer.assists)} ${text.assists}`} />
+                <Stat label={metric?.name ?? text.average} value={summaryValue} note={summaryNote} accent />
               </section>
               <section className="player-attributes">
                 <div className="attribute-heading">
-                  <div><span>Player attributes</span><h3>{metrics.length} chartable metrics</h3></div>
-                  <label className="attribute-search"><Search size={15} /><input aria-label="Search player attributes" type="search" value={attributeQuery} onChange={(event) => setAttributeQuery(event.target.value)} placeholder="Find an attribute" /></label>
+                  <div><span>{text.playerAttributes}</span><h3>{metrics.length} {text.chartableMetrics}</h3></div>
+                  <label className="attribute-search"><Search size={15} /><input aria-label={text.searchPlayerAttributes} type="search" value={attributeQuery} onChange={(event) => setAttributeQuery(event.target.value)} placeholder={text.findAttribute} /></label>
                 </div>
                 <div className="attribute-scroll">
                   {attributeGroups.map((group) => (
                     <section className="attribute-group" key={group.category}>
-                      <h4>{group.category}</h4>
+                      <h4>{categoryName(group.category, language)}</h4>
                       <div className="attribute-grid">
                         {group.attributes.map((attribute) => (
                           <button
                             className={attribute.chartKey === metricCode ? "active" : ""}
                             key={attribute.chartKey}
-                            title={`Show ${attribute.name} match by match`}
+                            title={`${text.showMetricMatchByMatch}: ${attribute.name}`}
                             type="button"
                             onClick={() => setMetricCode(attribute.chartKey)}
                           >
@@ -1683,22 +1743,22 @@ function PlayersView({
                       </div>
                     </section>
                   ))}
-                  {!attributeGroups.length && <EmptyState text="No attributes match this search." />}
+                  {!attributeGroups.length && <EmptyState text={text.noMatchingAttributes} />}
                 </div>
               </section>
               <div className="trend-heading">
-                <div><span>Match-by-match</span><h3>{metric?.name ?? "Performance trend"}</h3></div>
+                <div><span>{text.matchByMatch}</span><h3>{metric?.name ?? text.performanceTrend}</h3></div>
                 <div className="trend-actions">
-                  <div className="segmented compact-segmented history-range" aria-label="Match history range">
-                    <button className={historyRange === "latest" ? "active" : ""} title="Latest season with data" type="button" onClick={() => setHistoryRange("latest")}>{latestHistorySeasonLabel}</button>
+                  <div className="segmented compact-segmented history-range" aria-label={text.matchHistoryRange}>
+                    <button className={historyRange === "latest" ? "active" : ""} title={text.latestSeasonWithData} type="button" onClick={() => setHistoryRange("latest")}>{latestHistorySeasonLabel}</button>
                     <button
                       className={historyRange === "all" ? "active" : ""}
                       disabled={historySeasonCount <= 1}
-                      title={historySeasonCount <= 1 ? "Only one season has player match data" : `Show all ${historySeasonCount} seasons`}
+                      title={historySeasonCount <= 1 ? text.onlyOneHistorySeason : `${text.allSeasons}: ${historySeasonCount}`}
                       type="button"
                       onClick={() => setHistoryRange("all")}
                     >
-                      All seasons ({historySeasonCount})
+                      {text.allSeasons} ({historySeasonCount})
                     </button>
                   </div>
                   <div className="trend-keys">
@@ -1707,7 +1767,7 @@ function PlayersView({
                         <span className="trend-key completed"><i /> {numeratorLabel}</span>
                         <span className="trend-key attempted"><i /> {denominatorLabel}</span>
                       </>
-                    ) : <span className="trend-key completed"><i /> Trend</span>}
+                    ) : <span className="trend-key completed"><i /> {text.trend}</span>}
                   </div>
                 </div>
               </div>
@@ -1722,10 +1782,10 @@ function PlayersView({
                         const point = item.payload as PlayerChartPoint;
                         return isPairedMetric
                           ? [formatMetric(Number(value)), String(name)]
-                          : [formatMetricWithRatio(Number(value), metric?.value_type, point.numerator, point.denominator), metric?.name ?? "Value"];
+                          : [formatMetricWithRatio(Number(value), metric?.value_type, point.numerator, point.denominator), metric?.name ?? text.value];
                       }} labelFormatter={(_, payload) => {
                         const point = payload?.[0]?.payload as PlayerChartPoint | undefined;
-                        if (!point) return "Match";
+                        if (!point) return text.match;
                         const ratio = isPairedMetric
                           ? ` · ${formatMetricWithRatio(point.value, "percentage", point.numerator, point.denominator)}`
                           : "";
@@ -1739,13 +1799,13 @@ function PlayersView({
                       ) : <Area type="monotone" dataKey="value" stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />}
                     </AreaChart>
                   </ResponsiveContainer>
-                ) : <EmptyState text="No match data is available for this player and metric." />}
+                ) : <EmptyState text={text.noPlayerMetricData} />}
               </div>
               <div className="history-strip">
                 {plottedChartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{isPer90Metric && isPairedMetric ? `${formatMetric(item.numerator)} / ${formatMetric(item.denominator)}` : formatMetricWithRatio(item.value, metric?.value_type, item.numerator, item.denominator)}</strong><small>{item.score}</small></div>)}
               </div>
             </>
-          ) : <EmptyState text="Select a player to explore their season." />}
+          ) : <EmptyState text={text.selectPlayer} />}
         </section>
       </div>
     </>
@@ -1757,7 +1817,8 @@ function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: 
 }
 
 function SectionHeading({ eyebrow, title, action, onAction }: { eyebrow: string; title: string; action?: string; onAction?: () => void }) {
-  return <div className="section-heading"><div><span>{eyebrow}</span><h2>{title}</h2></div>{action && <button type="button" onClick={onAction}>{action}<ArrowUpRight size={15} /></button>}</div>;
+  const { language } = useLocale();
+  return <div className="section-heading"><div><span>{eyebrow}</span><h2>{title}</h2></div>{action && <button type="button" onClick={onAction}>{action}<ArrowUpRight className={language === "he" ? "rtl-arrow" : ""} size={15} /></button>}</div>;
 }
 
 function Stat({ label, value, note, accent = false }: { label: string; value: string; note: string; accent?: boolean }) {
@@ -1765,26 +1826,29 @@ function Stat({ label, value, note, accent = false }: { label: string; value: st
 }
 
 function CompactMatch({ match, onClick }: { match: Match; onClick: () => void }) {
+  const { language } = useLocale();
+  const OpenIcon = language === "he" ? ChevronLeft : ChevronRight;
   return (
     <button className="compact-match" type="button" onClick={onClick}>
-      <time>{formatFixtureDate(match.scheduled_at)}</time>
-      <span className="compact-club"><ClubBadge name={match.home_team_name} logoUrl={match.home_team_logo_url} size="tiny" /><strong>{cleanTeamName(match.home_team_name)}</strong></span>
+      <time>{formatFixtureDate(match.scheduled_at, language)}</time>
+      <span className="compact-club"><ClubBadge name={localizedMatchTeam(match, "home", language)} logoUrl={match.home_team_logo_url} size="tiny" /><strong>{localizedMatchTeam(match, "home", language)}</strong></span>
       <span className="compact-score">{match.home_score ?? "-"}</span>
-      <span className="compact-club"><ClubBadge name={match.away_team_name} logoUrl={match.away_team_logo_url} size="tiny" /><strong>{cleanTeamName(match.away_team_name)}</strong></span>
+      <span className="compact-club"><ClubBadge name={localizedMatchTeam(match, "away", language)} logoUrl={match.away_team_logo_url} size="tiny" /><strong>{localizedMatchTeam(match, "away", language)}</strong></span>
       <span className="compact-score">{match.away_score ?? "-"}</span>
-      <ChevronRight size={16} />
+      <OpenIcon size={16} />
     </button>
   );
 }
 
 function MatchScoreboard({ match }: { match: Match }) {
+  const { language, text } = useLocale();
   return (
     <div className="match-scoreboard">
-      <div className="match-meta"><span>{match.stage_name} · Round {match.round_number}</span><strong>{formatLongDate(match.scheduled_at)}</strong></div>
+      <div className="match-meta"><span>{localizedStageName(match.stage_name, language)} · {text.round} {match.round_number}</span><strong>{formatLongDate(match.scheduled_at, language)}</strong></div>
       <div className="scoreboard-main">
-        <div className="score-club home"><div><strong>{cleanTeamName(match.home_team_name)}</strong><span>Home</span></div><ClubBadge name={match.home_team_name} logoUrl={match.home_team_logo_url} size="large" /></div>
-        <div className="big-score"><strong>{match.home_score ?? "-"}</strong><span>:</span><strong>{match.away_score ?? "-"}</strong><small>{match.status ?? "Scheduled"}</small></div>
-        <div className="score-club"><ClubBadge name={match.away_team_name} logoUrl={match.away_team_logo_url} size="large" /><div><strong>{cleanTeamName(match.away_team_name)}</strong><span>Away</span></div></div>
+        <div className="score-club home"><div><strong>{localizedMatchTeam(match, "home", language)}</strong><span>{text.home}</span></div><ClubBadge name={localizedMatchTeam(match, "home", language)} logoUrl={match.home_team_logo_url} size="large" /></div>
+        <div className="big-score"><strong>{match.home_score ?? "-"}</strong><span>:</span><strong>{match.away_score ?? "-"}</strong><small>{localizedStatus(match.status, language, text.scheduled)}</small></div>
+        <div className="score-club"><ClubBadge name={localizedMatchTeam(match, "away", language)} logoUrl={match.away_team_logo_url} size="large" /><div><strong>{localizedMatchTeam(match, "away", language)}</strong><span>{text.away}</span></div></div>
       </div>
     </div>
   );
@@ -1802,15 +1866,17 @@ function ComparisonBar({ label, home, away }: { label: string; home: number; awa
   );
 }
 
-function PlayerMatchTable({ players, openPlayer }: { players: PlayerPivot[]; openPlayer: (id: string) => void }) {
-  if (!players.length) return <EmptyState text="Player statistics are not available for this side." />;
+function PlayerMatchTable({ players, seasonPlayers, openPlayer }: { players: PlayerPivot[]; seasonPlayers: SeasonPlayer[]; openPlayer: (id: string) => void }) {
+  const { language, text } = useLocale();
+  const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
+  if (!players.length) return <EmptyState text={text.noSidePlayerStats} />;
   return (
     <div className="data-table-wrap">
       <table className="player-stat-table">
-        <thead><tr><th>Player</th><th>Min</th><th>Rating</th><th>G</th><th>A</th><th>Pass %</th><th>Shots</th></tr></thead>
+        <thead><tr><th>{text.player}</th><th>{text.minShort}</th><th>{text.rating}</th><th>{text.goalsShort}</th><th>{text.assistsShort}</th><th>{text.passPct}</th><th>{text.shots}</th></tr></thead>
         <tbody>{players.map((player) => (
           <tr key={player.appearance_id}>
-            <td><button type="button" onClick={() => openPlayer(player.player_id)}><span>{player.shirt_number ?? "-"}</span><span><strong>{player.display_name}</strong><small>{player.position_name ?? player.lineup_status ?? "Player"}</small></span></button></td>
+            <td><button type="button" onClick={() => openPlayer(player.player_id)}><span>{player.shirt_number ?? "-"}</span><span><strong>{localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language)}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></button></td>
             <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td><td>{formatMetric(player.values.total_shots)}</td>
           </tr>
         ))}</tbody>
@@ -1844,11 +1910,13 @@ function BrandMark() {
 }
 
 function LoadingState() {
-  return <div className="loading-state"><Loader2 className="spin" size={28} /><strong>Building the season view</strong><span>Loading matches, clubs, and player data.</span></div>;
+  const { text } = useLocale();
+  return <div className="loading-state"><Loader2 className="spin" size={28} /><strong>{text.buildingSeason}</strong><span>{text.loadingSeason}</span></div>;
 }
 
 function InlineLoading() {
-  return <div className="inline-loading"><Loader2 className="spin" size={20} /><span>Loading match data</span></div>;
+  const { text } = useLocale();
+  return <div className="inline-loading"><Loader2 className="spin" size={20} /><span>{text.loadingMatchData}</span></div>;
 }
 
 function EmptyState({ text }: { text: string }) {
@@ -1872,10 +1940,10 @@ function pivotMatchPlayers(rows: MatchPlayerStat[]): PlayerPivot[] {
   })).sort((a, b) => Number(b.minutes_played ?? 0) - Number(a.minutes_played ?? 0));
 }
 
-function buildTeamComparisons(rows: MatchTeamStat[]) {
+function buildTeamComparisons(rows: MatchTeamStat[], language: Language) {
   const grouped = new Map<string, { label: string; home: number[]; away: number[] }>();
   rows.filter((row) => comparisonMetrics.includes(row.metric_code) && row.value_numeric !== null).forEach((row) => {
-    const current = grouped.get(row.metric_code) ?? { label: friendlyMetric(row.metric_name), home: [], away: [] };
+    const current = grouped.get(row.metric_code) ?? { label: metricName(row.metric_code, friendlyMetric(row.metric_name), language), home: [], away: [] };
     current[row.side].push(Number(row.value_numeric));
     grouped.set(row.metric_code, current);
   });
@@ -1885,7 +1953,7 @@ function buildTeamComparisons(rows: MatchTeamStat[]) {
   });
 }
 
-function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeYear = false): PlayerChartPoint[] {
+function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeYear = false, language: Language = "en"): PlayerChartPoint[] {
   const grouped = new Map<string, PlayerHistory[]>();
   rows.forEach((row) => grouped.set(row.match_id, [...(grouped.get(row.match_id) ?? []), row]));
   return [...grouped.values()].map((matchRows, index): PlayerChartPoint => {
@@ -1911,9 +1979,10 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeY
       : metric?.value_type === "count" ? observedValue ?? 0 : observedValue;
     return {
       match: index + 1,
-      date: formatPlayerHistoryDate(row.scheduled_at, includeYear),
+      date: formatPlayerHistoryDate(row.scheduled_at, includeYear, language),
       value,
-      opponent: cleanTeamName(row.opponent_team_name ?? "Opponent"),
+      opponent: cleanTeamName(row.opponent_team_name ?? textByLanguage[language].opponent),
+      opponentTeamId: row.opponent_team_id,
       score: formatScore(row.home_score, row.away_score),
       minutes: row.minutes_played === null ? null : Number(row.minutes_played),
       numerator,
@@ -2027,6 +2096,14 @@ function readViewFromHash(): View {
   return navItems.some((item) => item.id === value) ? value : "overview";
 }
 
+function readLanguage(): Language {
+  try {
+    return window.localStorage.getItem("kadurdata-language") === "en" ? "en" : "he";
+  } catch {
+    return "he";
+  }
+}
+
 function preferredMetric(metrics: Metric[]) {
   return metrics.find((metric) => metric.code === "rating_365")?.code
     ?? metrics.find((metric) => metric.code === "pass_completion_pct")?.code
@@ -2039,7 +2116,9 @@ function percentageMetricGroupName(metric: Metric) {
   return baseCode ? humanizeMetricCode(baseCode) : metric.name.replace(/\s+(Pct|Percentage)$/i, "");
 }
 
-function ratioComponentLabel(code?: string | null) {
+function ratioComponentLabel(code: string | null | undefined, language: Language) {
+  const localized = ratioPartName(code, language);
+  if (localized) return localized;
   if (!code) return "Value";
   if (code.endsWith("_completed")) return "Completed";
   if (code.endsWith("_attempted")) return "Attempted";
@@ -2091,6 +2170,130 @@ function competitionLabel(name?: string) {
   return name?.toLowerCase().includes("israeli premier") ? "Ligat Ha'Al" : name ?? "Competition";
 }
 
+const hebrewCompetitionNames: Record<string, string> = {
+  "division 3": "ליגה א׳",
+  "division 4": "ליגה ב׳",
+  "fa cup": "גביע המדינה",
+  "israeli premier league": "ליגת העל",
+  "liga leumit": "הליגה הלאומית",
+  "premier league": "ליגת העל",
+  "super cup": "אלוף האלופים",
+  "toto cup national league": "גביע הטוטו לאומית",
+  "toto league cup": "גביע הטוטו",
+  "youth cup": "גביע המדינה לנוער",
+  "youth league": "ליגת העל לנוער",
+};
+
+const hebrewTeamNames: Record<string, string> = {
+  "beitar jerusalem": "בית״ר ירושלים",
+  "bnei sakhnin": "בני סכנין",
+  "hapoel acre": "הפועל עכו",
+  "hapoel ashkelon": "הפועל אשקלון",
+  "hapoel be'er sheva": "הפועל באר שבע",
+  "hapoel bnei lod": "הפועל בני לוד",
+  "hapoel hadera": "הפועל חדרה",
+  "hapoel haifa": "הפועל חיפה",
+  "hapoel ironi kiryat shmona": "הפועל קריית שמונה",
+  "hapoel ironi rishon lezion": "הפועל ראשון לציון",
+  "hapoel jerusalem": "הפועל ירושלים",
+  "hapoel kafr qasim": "מ.ס. כפר קאסם",
+  "hapoel kfar saba": "הפועל כפר סבא",
+  "hapoel nof hagalil": "הפועל נוף הגליל",
+  "hapoel petah tikva": "הפועל פתח תקווה",
+  "hapoel raanana": "הפועל רעננה",
+  "hapoel tel aviv": "הפועל תל אביב",
+  "ironi tiberias": "עירוני טבריה",
+  "maccabi bnei raina": "מכבי בני ריינה",
+  "maccabi haifa": "מכבי חיפה",
+  "maccabi herzliya": "מכבי הרצליה",
+  "maccabi netanya": "מכבי נתניה",
+  "maccabi petah tikva": "מכבי פתח תקווה",
+  "maccabi tel aviv": "מכבי תל אביב",
+  "sc ashdod": "מ.ס. אשדוד",
+  "sektzia ness ziona": "סקציה נס ציונה",
+  "bnei yehuda tel aviv": "בני יהודה תל אביב",
+};
+
+function hebrewCompetitionName(name: string) {
+  const normalized = name.trim().toLowerCase();
+  return hebrewCompetitionNames[normalized]
+    ?? (normalized.includes("premier") ? "ליגת העל" : name);
+}
+
+function hebrewTeamName(name: string) {
+  const cleaned = cleanTeamName(name);
+  return hebrewTeamNames[cleaned.toLowerCase()] ?? cleaned;
+}
+
+function localizedCompetition(competition: Competition | undefined, language: Language) {
+  if (!competition) return language === "he" ? "מפעל" : "Competition";
+  if (language === "he") {
+    return competition.name_he ?? hebrewCompetitionName(competition.name);
+  }
+  return competitionLabel(competition.name);
+}
+
+function localizedSeasonCompetition(season: Season, language: Language) {
+  if (language === "he") {
+    return season.competition_name_he ?? hebrewCompetitionName(season.competition_name);
+  }
+  return competitionLabel(season.competition_name);
+}
+
+function localizedClubName(club: Club, language: Language) {
+  return language === "he" && club.team_name_he
+    ? club.team_name_he
+    : language === "he" ? hebrewTeamName(club.team_name) : cleanTeamName(club.team_name);
+}
+
+function localizedClubById(
+  clubs: Club[],
+  teamId: string | null,
+  fallback: string | null | undefined,
+  language: Language,
+) {
+  const club = clubs.find((item) => item.team_id === teamId);
+  if (club) return localizedClubName(club, language);
+  return fallback ? language === "he" ? hebrewTeamName(fallback) : cleanTeamName(fallback) : "";
+}
+
+function localizedMatchTeam(match: Match, side: "home" | "away", language: Language) {
+  const englishName = side === "home" ? match.home_team_name : match.away_team_name;
+  const hebrewName = side === "home" ? match.home_team_name_he : match.away_team_name_he;
+  return language === "he" ? hebrewName ?? hebrewTeamName(englishName) : cleanTeamName(englishName);
+}
+
+function localizedPlayerName(player: SeasonPlayer | undefined, fallback: string, language: Language) {
+  return language === "he" && player?.display_name_he ? player.display_name_he : fallback;
+}
+
+function localizedPlayerPosition(player: SeasonPlayer, language: Language): PlayerPositionDetail {
+  const detail = playerPositionDetail(player);
+  return { ...detail, label: positionName(detail.code, detail.label, language) };
+}
+
+function localizedFormationPosition(value: string | null | undefined, language: Language) {
+  const detail = specificPositionDetail(value);
+  return detail ? positionName(detail.code, detail.label, language) : value ?? "";
+}
+
+function localizedRoleName(role: RoleFilter, language: Language) {
+  if (language === "en") return role === "All" ? "All positions" : role;
+  return ({
+    All: "כל העמדות",
+    Goalkeepers: "שוערים",
+    Defenders: "שחקני הגנה",
+    Midfielders: "קשרים",
+    Attackers: "שחקני התקפה",
+    Other: "אחר",
+  } as Record<RoleFilter, string>)[role];
+}
+
+function localizedResult(result: string, language: Language) {
+  if (language === "en") return result;
+  return ({ W: "נ", D: "ת", L: "ה", "-": "-" } as Record<string, string>)[result] ?? result;
+}
+
 function latestSeasonWithData(seasons: Season[]) {
   const orderedSeasons = [...seasons].sort((a, b) => dateValue(b.start_date) - dateValue(a.start_date));
   return orderedSeasons.find((season) => Number(season.completed_match_count) > 0)
@@ -2098,8 +2301,10 @@ function latestSeasonWithData(seasons: Season[]) {
     ?? orderedSeasons[0];
 }
 
-function roleLabel(role: RoleFilter) {
-  return ({ All: "All", Goalkeepers: "GK", Defenders: "DEF", Midfielders: "MID", Attackers: "FWD", Other: "Other" } as Record<RoleFilter, string>)[role];
+function roleLabel(role: RoleFilter, language: Language) {
+  if (role === "All") return language === "he" ? "הכול" : "All";
+  if (role === "Other") return language === "he" ? "אחר" : "Other";
+  return ({ Goalkeepers: "GK", Defenders: "DEF", Midfielders: "MID", Attackers: "FWD" } as Record<string, string>)[role];
 }
 
 function compareLeaderboardRows(a: PlayerLeaderboardRow, b: PlayerLeaderboardRow) {
@@ -2162,23 +2367,30 @@ function leaderboardSampleLabel(
   row: PlayerLeaderboardRow,
   qualification: LeaderboardQualification | null,
   minutesByPlayer: Map<string, number>,
+  language: Language,
 ) {
+  const aggregation = language === "he"
+    ? ({ total: "סך הכול", average: "ממוצע", weighted: "משוקלל" } as Record<string, string>)[row.aggregation]
+    : row.aggregation;
   return qualification?.source === "minutes"
-    ? `${row.aggregation} · ${numberFormatter.format(minutesByPlayer.get(row.player_id) ?? 0)} minutes`
-    : `${row.aggregation} · ${row.sample_size} matches`;
+    ? `${aggregation} · ${numberFormatter.format(minutesByPlayer.get(row.player_id) ?? 0)} ${textByLanguage[language].minutes}`
+    : `${aggregation} · ${row.sample_size} ${language === "he" ? "משחקים" : "matches"}`;
 }
 
 function explorerRankingSampleLabel(
   row: PlayerLeaderboardRow,
   player: SeasonPlayer,
   qualification: LeaderboardQualification | null,
+  language: Language,
 ) {
-  if (qualification?.source === "minutes") return `${numberFormatter.format(Math.round(Number(player.minutes)))} min`;
+  if (qualification?.source === "minutes") return `${numberFormatter.format(Math.round(Number(player.minutes)))} ${language === "he" ? "דק׳" : "min"}`;
   if (qualification?.source === "denominator") {
-    return `${numberFormatter.format(Math.round(Number(row.denominator_value ?? 0)))} ${qualification.unit}`;
+    return `${numberFormatter.format(Math.round(Number(row.denominator_value ?? 0)))} ${qualificationUnit(qualification.unit, language)}`;
   }
-  if (qualification?.source === "matches") return `${numberFormatter.format(row.sample_size)} matches`;
-  return row.aggregation === "total" ? "Season total" : `${numberFormatter.format(row.sample_size)} matches`;
+  if (qualification?.source === "matches") return `${numberFormatter.format(row.sample_size)} ${language === "he" ? "משחקים" : "matches"}`;
+  return row.aggregation === "total"
+    ? textByLanguage[language].seasonTotal
+    : `${numberFormatter.format(row.sample_size)} ${language === "he" ? "משחקים" : "matches"}`;
 }
 
 function leaderboardSourceMetricCode(metricCode: string) {
@@ -2329,28 +2541,32 @@ function formatMetricWithRatio(
   return `${formatted} (${formatMetric(Number(numerator))}/${formatMetric(Number(denominator))})`;
 }
 
-function formatShortDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(value)) : "-";
+function formatShortDate(value: string | null, language: Language = "en") {
+  return value ? new Intl.DateTimeFormat(localeCode(language), { day: "2-digit", month: "short" }).format(new Date(value)) : "-";
 }
 
-function formatPlayerHistoryDate(value: string | null, includeYear: boolean) {
+function formatPlayerHistoryDate(value: string | null, includeYear: boolean, language: Language = "en") {
   return value
-    ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: includeYear ? "2-digit" : undefined }).format(new Date(value))
+    ? new Intl.DateTimeFormat(localeCode(language), { day: "2-digit", month: "short", year: includeYear ? "2-digit" : undefined }).format(new Date(value))
     : "-";
 }
 
-function formatFixtureDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-digit", month: "short" }).format(new Date(value)) : "TBD";
+function formatFixtureDate(value: string | null, language: Language = "en") {
+  return value
+    ? new Intl.DateTimeFormat(localeCode(language), { weekday: "short", day: "2-digit", month: "short" }).format(new Date(value))
+    : textByLanguage[language].dateTbd;
 }
 
-function formatLongDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "Date to be confirmed";
+function formatLongDate(value: string | null, language: Language = "en") {
+  return value
+    ? new Intl.DateTimeFormat(localeCode(language), { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(value))
+    : textByLanguage[language].dateTbd;
 }
 
-function formatDateRange(start?: string | null, end?: string | null) {
-  if (!start) return "Dates to be confirmed";
-  if (!end || formatShortDate(start) === formatShortDate(end)) return formatShortDate(start);
-  return `${formatShortDate(start)} – ${formatShortDate(end)}`;
+function formatDateRange(start?: string | null, end?: string | null, language: Language = "en") {
+  if (!start) return textByLanguage[language].datesTbd;
+  if (!end || formatShortDate(start, language) === formatShortDate(end, language)) return formatShortDate(start, language);
+  return `${formatShortDate(start, language)} – ${formatShortDate(end, language)}`;
 }
 
 function formatScore(home: number | null, away: number | null) {
