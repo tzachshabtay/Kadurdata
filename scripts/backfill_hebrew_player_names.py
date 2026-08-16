@@ -9,6 +9,7 @@ import os
 import socket
 import time
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -33,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--retries", type=int, default=4)
     parser.add_argument("--sleep", type=float, default=0.25)
+    parser.add_argument("--workers", type=int, default=6)
     parser.add_argument(
         "--refresh",
         action="store_true",
@@ -68,6 +70,18 @@ def athletes_url(athlete_ids: Iterable[str]) -> str:
     return f"{BASE_URL}/web/athletes/?{urlencode(params)}"
 
 
+def game_url(game_id: str) -> str:
+    params = {
+        "appTypeId": 5,
+        "langId": 2,
+        "timezoneName": "Asia/Jerusalem",
+        "userCountryId": 6,
+        "gameId": game_id,
+        "topBookmaker": 14,
+    }
+    return f"{BASE_URL}/web/game/?{urlencode(params)}"
+
+
 def contains_hebrew(value: str) -> bool:
     return any("\u0590" <= character <= "\u05ff" for character in value)
 
@@ -88,6 +102,28 @@ def extract_hebrew_names(payload: dict[str, Any]) -> dict[str, str]:
         normalized_name = name.strip()
         if normalized_name and contains_hebrew(normalized_name):
             names[str(athlete_id)] = normalized_name
+    return names
+
+
+def extract_game_hebrew_names(payload: dict[str, Any]) -> dict[str, str]:
+    names: dict[str, str] = {}
+    game = payload.get("game")
+    members = game.get("members") if isinstance(game, dict) else None
+    if not isinstance(members, list):
+        return names
+
+    for member in members:
+        if not isinstance(member, dict):
+            continue
+        name = member.get("name")
+        if not isinstance(name, str):
+            continue
+        normalized_name = name.strip()
+        if not normalized_name or not contains_hebrew(normalized_name):
+            continue
+        for identifier in (member.get("athleteId"), member.get("id")):
+            if identifier is not None:
+                names[str(identifier)] = normalized_name
     return names
 
 
@@ -127,6 +163,75 @@ def player_mappings(cur: psycopg.Cursor, *, refresh: bool) -> dict[str, str]:
         for row in cur.fetchall()
         if is_365scores_athlete_id(row["source_entity_id"])
     }
+
+
+def recent_match_ids(
+    cur: psycopg.Cursor,
+    source_player_ids: list[str],
+) -> dict[str, str]:
+    if not source_player_ids:
+        return {}
+    cur.execute(
+        """
+        select distinct on (appearance.source_player_id)
+          appearance.source_player_id,
+          appearance.source_match_id
+        from obs.player_appearance_observations appearance
+        join source.sources source on source.id = appearance.source_id
+        where source.code = %s
+          and appearance.source_player_id = any(%s)
+        order by
+          appearance.source_player_id,
+          appearance.observed_at desc,
+          appearance.source_match_id desc
+        """,
+        (SOURCE_CODE, source_player_ids),
+    )
+    return {row["source_player_id"]: row["source_match_id"] for row in cur.fetchall()}
+
+
+def game_name_fallback(
+    source_player_ids: list[str],
+    match_ids_by_source_player: dict[str, str],
+    *,
+    retries: int,
+    sleep_seconds: float,
+    workers: int,
+    allow_fetch_failures: bool,
+) -> tuple[dict[str, str], int]:
+    source_players_by_match: dict[str, list[str]] = {}
+    for source_player_id in source_player_ids:
+        match_id = match_ids_by_source_player.get(source_player_id)
+        if match_id:
+            source_players_by_match.setdefault(match_id, []).append(source_player_id)
+
+    names: dict[str, str] = {}
+    failed_games = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
+        futures = {
+            executor.submit(
+                fetch_json,
+                game_url(match_id),
+                retries=retries,
+                sleep_seconds=sleep_seconds,
+            ): match_id
+            for match_id in source_players_by_match
+        }
+        for future in as_completed(futures):
+            match_id = futures[future]
+            try:
+                game_names = extract_game_hebrew_names(future.result())
+            except RuntimeError as exc:
+                if not allow_fetch_failures:
+                    raise
+                failed_games += 1
+                print(f"warning: {exc}")
+                continue
+            for source_player_id in source_players_by_match[match_id]:
+                hebrew_name = game_names.get(source_player_id)
+                if hebrew_name:
+                    names[source_player_id] = hebrew_name
+    return names, failed_games
 
 
 def update_players(
@@ -173,6 +278,8 @@ def main() -> int:
     args = parse_args()
     if args.batch_size < 1:
         raise SystemExit("--batch-size must be at least 1")
+    if args.workers < 1:
+        raise SystemExit("--workers must be at least 1")
 
     database_url = os.environ.get("SUPABASE_DB_URL")
     if not database_url:
@@ -182,7 +289,7 @@ def main() -> int:
         with conn.cursor() as cur:
             mappings = player_mappings(cur, refresh=args.refresh)
 
-            names_by_player_id: dict[str, str] = {}
+            names_by_source_player: dict[str, str] = {}
             failed_batches = 0
             for athlete_batch in chunked(list(mappings), args.batch_size):
                 try:
@@ -199,19 +306,38 @@ def main() -> int:
                     continue
 
                 for source_player_id, hebrew_name in extract_hebrew_names(payload).items():
-                    player_id = mappings.get(source_player_id)
-                    if player_id:
-                        names_by_player_id[player_id] = hebrew_name
+                    if source_player_id in mappings:
+                        names_by_source_player[source_player_id] = hebrew_name
                 time.sleep(args.sleep)
 
+            unresolved = [
+                source_player_id
+                for source_player_id in mappings
+                if source_player_id not in names_by_source_player
+            ]
+            match_ids = recent_match_ids(cur, unresolved)
+            game_names, failed_games = game_name_fallback(
+                unresolved,
+                match_ids,
+                retries=args.retries,
+                sleep_seconds=args.sleep,
+                workers=args.workers,
+                allow_fetch_failures=args.allow_fetch_failures,
+            )
+            names_by_source_player.update(game_names)
+            names_by_player_id = {
+                mappings[source_player_id]: hebrew_name
+                for source_player_id, hebrew_name in names_by_source_player.items()
+            }
             updated = update_players(cur, names_by_player_id, refresh=args.refresh)
             conn.commit()
 
-    missing = len(mappings) - len(names_by_player_id)
+    missing = len(mappings) - len(names_by_source_player)
     print(
         "Hebrew player names: "
-        f"eligible={len(mappings)}, returned={len(names_by_player_id)}, "
-        f"updated={updated}, missing={missing}, failed_batches={failed_batches}"
+        f"eligible={len(mappings)}, returned={len(names_by_source_player)}, "
+        f"updated={updated}, missing={missing}, failed_batches={failed_batches}, "
+        f"failed_games={failed_games}"
     )
     return 0
 

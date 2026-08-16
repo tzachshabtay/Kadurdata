@@ -91,4 +91,5 @@ jobs:
           python scripts/backfill_hebrew_player_names.py \
             --allow-fetch-failures \
             --retries 4 \
-            --sleep 0.25
+            --sleep 0.25 \
+            --workers 6
