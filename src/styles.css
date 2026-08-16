@@ -1679,12 +1679,53 @@ tr:last-child td {
 }
 
 .player-directory {
+  display: flex;
+  flex-direction: column;
   max-height: 720px;
 }
 
 .player-list {
-  max-height: 670px;
+  min-height: 0;
+  flex: 1;
   overflow: auto;
+}
+
+.player-ranking-heading {
+  flex: 0 0 auto;
+  min-height: 62px;
+}
+
+.player-ranking-select {
+  display: grid;
+  gap: 4px;
+}
+
+.player-ranking-select > span {
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.player-ranking-select select {
+  width: 182px;
+  height: 32px;
+  padding: 0 27px 0 9px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--raised);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.directory-qualification {
+  flex: 0 0 auto;
+  padding: 8px 9px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-deep);
+}
+
+.directory-qualification .qualification-filter {
+  margin-bottom: 8px;
 }
 
 .player-list > button {

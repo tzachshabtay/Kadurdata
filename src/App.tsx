@@ -295,6 +295,7 @@ export function App() {
   const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
+  const [explorerLeaderboardRows, setExplorerLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [competitionId, setCompetitionId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [roundId, setRoundId] = useState("");
@@ -305,8 +306,10 @@ export function App() {
   const [playerHistoryRange, setPlayerHistoryRange] = useState<PlayerHistoryRange>("latest");
   const [leaderMetricCode, setLeaderMetricCode] = useState("goals");
   const [squadMetricCode, setSquadMetricCode] = useState("season_minutes");
+  const [explorerMetricCode, setExplorerMetricCode] = useState("season_minutes");
   const [leaderMinimums, setLeaderMinimums] = useState<Record<string, number>>({});
   const [squadMinimums, setSquadMinimums] = useState<Record<string, number>>({});
+  const [explorerMinimums, setExplorerMinimums] = useState<Record<string, number>>({});
   const [matchSide, setMatchSide] = useState<"home" | "away">("home");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
   const [positionFilter, setPositionFilter] = useState("All");
@@ -320,6 +323,8 @@ export function App() {
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [squadLeaderboardLoading, setSquadLeaderboardLoading] = useState(false);
   const [squadLeaderboardError, setSquadLeaderboardError] = useState<string | null>(null);
+  const [explorerLeaderboardLoading, setExplorerLeaderboardLoading] = useState(false);
+  const [explorerLeaderboardError, setExplorerLeaderboardError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function loadReferenceData() {
@@ -636,6 +641,45 @@ export function App() {
     return () => { cancelled = true; };
   }, [players, seasonId, squadMetricCode, view]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadExplorerLeaderboard() {
+      if (view !== "players" || !seasonId || !explorerMetricCode) return;
+
+      setExplorerLeaderboardLoading(true);
+      setExplorerLeaderboardError(null);
+
+      if (explorerMetricCode.startsWith("season_")) {
+        setExplorerLeaderboardRows(makeSeasonSummaryLeaderboard(players, seasonId, explorerMetricCode));
+        setExplorerLeaderboardLoading(false);
+        return;
+      }
+
+      if (!hasSupabaseConfig || !supabase) {
+        setExplorerLeaderboardRows(makeDemoLeaderboard(players, seasonId, explorerMetricCode));
+        setExplorerLeaderboardLoading(false);
+        return;
+      }
+
+      const result = await supabase.rpc("api_player_leaderboard", {
+        p_season_id: seasonId,
+        p_metric_code: leaderboardSourceMetricCode(explorerMetricCode),
+      });
+      if (cancelled) return;
+      if (result.error) {
+        setExplorerLeaderboardError(result.error.message);
+        setExplorerLeaderboardRows([]);
+      } else {
+        setExplorerLeaderboardRows(prepareLeaderboardRows((result.data ?? []) as PlayerLeaderboardRow[], players, explorerMetricCode));
+      }
+      setExplorerLeaderboardLoading(false);
+    }
+
+    void loadExplorerLeaderboard();
+    return () => { cancelled = true; };
+  }, [explorerMetricCode, players, seasonId, view]);
+
   const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
   const currentRound = rounds.find((round) => round.round_id === roundId);
   const selectedMatch = matches.find((match) => match.match_id === matchId);
@@ -704,10 +748,29 @@ export function App() {
     ],
     [playerMetrics],
   );
+  const explorerLeaderboardMetrics = useMemo(() => {
+    if (roleFilter === "All") return leaderboardMetrics;
+    const seasonMetrics = leaderboardMetrics.filter((metric) => metric.kind === "season");
+    const matchMetrics = leaderboardMetrics.filter((metric) => metric.kind === "match");
+    if (roleFilter === "Goalkeepers") {
+      return [
+        ...seasonMetrics,
+        ...matchMetrics.filter((metric) => isGoalkeepingMetricCode(metric.code)),
+        ...matchMetrics.filter((metric) => !isGoalkeepingMetricCode(metric.code)),
+      ];
+    }
+    return [...seasonMetrics, ...matchMetrics.filter((metric) => !isGoalkeepingMetricCode(metric.code))];
+  }, [leaderboardMetrics, roleFilter]);
+  useEffect(() => {
+    if (explorerLeaderboardMetrics.some((metric) => metric.code === explorerMetricCode)) return;
+    setExplorerMetricCode("season_minutes");
+  }, [explorerLeaderboardMetrics, explorerMetricCode]);
   const leaderQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === leaderMetricCode));
   const squadQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === squadMetricCode));
+  const explorerQualification = getLeaderboardQualification(explorerLeaderboardMetrics.find((metric) => metric.code === explorerMetricCode));
   const leaderMinimum = leaderQualification ? leaderMinimums[leaderMetricCode] ?? leaderQualification.defaultValue : 0;
   const squadMinimum = squadQualification ? squadMinimums[squadMetricCode] ?? squadQualification.defaultValue : 0;
+  const explorerMinimum = explorerQualification ? explorerMinimums[explorerMetricCode] ?? explorerQualification.defaultValue : 0;
   const qualifiedLeaderboardRows = filterLeaderboardRows(leaderboardRows, players, leaderQualification, leaderMinimum);
 
   const standings = useMemo(
@@ -747,10 +810,18 @@ export function App() {
       return matchesRole && matchesPosition && matchesClub && matchesQuery;
     });
   }, [clubFilter, playerQuery, players, positionFilter, roleFilter]);
+  const filteredPlayerIds = new Set(filteredPlayers.map((player) => player.player_id));
+  const filteredExplorerRows = explorerLeaderboardRows.filter((row) => filteredPlayerIds.has(row.player_id));
+  const qualifiedExplorerRows = filterLeaderboardRows(filteredExplorerRows, players, explorerQualification, explorerMinimum);
+  const filteredPlayersById = new Map(filteredPlayers.map((player) => [player.player_id, player]));
+  const rankedExplorerPlayers = qualifiedExplorerRows.flatMap((row) => {
+    const player = filteredPlayersById.get(row.player_id);
+    return player ? [player] : [];
+  });
   useEffect(() => {
-    if (!filteredPlayers.length || filteredPlayers.some((player) => player.player_id === playerId)) return;
-    setPlayerId(filteredPlayers[0].player_id);
-  }, [filteredPlayers, playerId]);
+    if (view !== "players" || explorerLeaderboardLoading || !rankedExplorerPlayers.length || rankedExplorerPlayers.some((player) => player.player_id === playerId)) return;
+    setPlayerId(rankedExplorerPlayers[0].player_id);
+  }, [explorerLeaderboardLoading, playerId, rankedExplorerPlayers, view]);
   const clubMatches = useMemo(
     () => [...matches]
       .filter((match) => match.home_team_id === clubId || match.away_team_id === clubId)
@@ -942,7 +1013,16 @@ export function App() {
           />
         ) : (
           <PlayersView
-            players={filteredPlayers}
+            players={rankedExplorerPlayers}
+            rankingRows={qualifiedExplorerRows}
+            rankingMetrics={explorerLeaderboardMetrics}
+            rankingMetricCode={explorerMetricCode}
+            setRankingMetricCode={setExplorerMetricCode}
+            rankingQualification={explorerQualification}
+            rankingMinimum={explorerMinimum}
+            setRankingMinimum={(value) => setExplorerMinimums((current) => ({ ...current, [explorerMetricCode]: value }))}
+            rankingLoading={explorerLeaderboardLoading}
+            rankingError={explorerLeaderboardError}
             allPlayersCount={players.length}
             selectedPlayer={selectedPlayer}
             selectPlayer={setPlayerId}
@@ -1319,6 +1399,15 @@ function LeaderboardQualificationFilter({
 
 function PlayersView({
   players,
+  rankingRows,
+  rankingMetrics,
+  rankingMetricCode,
+  setRankingMetricCode,
+  rankingQualification,
+  rankingMinimum,
+  setRankingMinimum,
+  rankingLoading,
+  rankingError,
   allPlayersCount,
   selectedPlayer,
   selectPlayer,
@@ -1348,6 +1437,15 @@ function PlayersView({
   detailLoading,
 }: {
   players: SeasonPlayer[];
+  rankingRows: PlayerLeaderboardRow[];
+  rankingMetrics: LeaderboardMetricOption[];
+  rankingMetricCode: string;
+  setRankingMetricCode: (code: string) => void;
+  rankingQualification: LeaderboardQualification | null;
+  rankingMinimum: number;
+  setRankingMinimum: (value: number) => void;
+  rankingLoading: boolean;
+  rankingError: string | null;
   allPlayersCount: number;
   selectedPlayer?: SeasonPlayer;
   selectPlayer: (id: string) => void;
@@ -1378,6 +1476,9 @@ function PlayersView({
 }) {
   const [attributeQuery, setAttributeQuery] = useState("");
   const metric = metrics.find((item) => item.chartKey === metricCode);
+  const rankingByPlayerId = new Map(rankingRows.map((row) => [row.player_id, row]));
+  const seasonRankingMetrics = rankingMetrics.filter((item) => item.kind === "season");
+  const matchRankingMetrics = rankingMetrics.filter((item) => item.kind === "match");
   const selectedPosition = selectedPlayer ? playerPositionDetail(selectedPlayer) : null;
   const attributeGroups = useMemo(() => {
     const normalizedQuery = attributeQuery.trim().toLowerCase();
@@ -1455,15 +1556,35 @@ function PlayersView({
 
       <div className="player-workspace">
         <aside className="surface player-directory">
-          <div className="rail-heading"><strong>{numberFormatter.format(players.length)} results</strong><span>Min · G · A</span></div>
+          <div className="rail-heading player-ranking-heading">
+            <strong>{numberFormatter.format(players.length)} results</strong>
+            <label className="player-ranking-select">
+              <span>Rank by</span>
+              <select aria-label="Rank players by" value={rankingMetricCode} onChange={(event) => setRankingMetricCode(event.target.value)}>
+                <optgroup label="Season summary">{seasonRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
+                <optgroup label="Match metrics">{matchRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
+              </select>
+            </label>
+          </div>
+          {rankingQualification && (
+            <div className="directory-qualification">
+              <LeaderboardQualificationFilter qualification={rankingQualification} minimum={rankingMinimum} setMinimum={setRankingMinimum} qualifiedCount={players.length} loading={rankingLoading} />
+            </div>
+          )}
           <div className="player-list">
-            {players.map((player) => (
-              <button className={player.player_id === selectedPlayer?.player_id ? "active" : ""} key={player.player_id} type="button" onClick={() => selectPlayer(player.player_id)}>
-                <span className="avatar">{initials(player.display_name)}</span>
-                <span className="player-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "Free agent")} · {playerPositionDetail(player).code}</small></span>
-                <span className="player-numbers"><strong>{numberFormatter.format(Math.round(Number(player.minutes)))}</strong><small>{formatNumber(player.goals)} · {formatNumber(player.assists)}</small></span>
-              </button>
-            ))}
+            {rankingLoading ? <InlineLoading /> : rankingError ? <EmptyState text="Player ranking data could not be loaded." /> : players.length ? players.map((player) => {
+              const ranking = rankingByPlayerId.get(player.player_id);
+              return (
+                <button className={player.player_id === selectedPlayer?.player_id ? "active" : ""} key={player.player_id} type="button" onClick={() => selectPlayer(player.player_id)}>
+                  <span className="avatar">{initials(player.display_name)}</span>
+                  <span className="player-copy"><strong>{player.display_name}</strong><small>{cleanTeamName(player.team_name ?? "Free agent")} · {playerPositionDetail(player).code}</small></span>
+                  <span className="player-numbers">
+                    <strong>{ranking ? formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value) : "-"}</strong>
+                    <small>{ranking ? explorerRankingSampleLabel(ranking, player, rankingQualification) : ""}</small>
+                  </span>
+                </button>
+              );
+            }) : <EmptyState text={rankingQualification ? "No players meet the current minimum sample." : "No players are available for this metric."} />}
           </div>
         </aside>
 
@@ -1984,6 +2105,19 @@ function leaderboardSampleLabel(
   return qualification?.source === "minutes"
     ? `${row.aggregation} · ${numberFormatter.format(minutesByPlayer.get(row.player_id) ?? 0)} minutes`
     : `${row.aggregation} · ${row.sample_size} matches`;
+}
+
+function explorerRankingSampleLabel(
+  row: PlayerLeaderboardRow,
+  player: SeasonPlayer,
+  qualification: LeaderboardQualification | null,
+) {
+  if (qualification?.source === "minutes") return `${numberFormatter.format(Math.round(Number(player.minutes)))} min`;
+  if (qualification?.source === "denominator") {
+    return `${numberFormatter.format(Math.round(Number(row.denominator_value ?? 0)))} ${qualification.unit}`;
+  }
+  if (qualification?.source === "matches") return `${numberFormatter.format(row.sample_size)} matches`;
+  return row.aggregation === "total" ? "Season total" : `${numberFormatter.format(row.sample_size)} matches`;
 }
 
 function leaderboardSourceMetricCode(metricCode: string) {
