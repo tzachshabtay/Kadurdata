@@ -85,3 +85,10 @@ jobs:
 
       - name: Load Supabase
         run: python scripts/load_365scores_to_supabase.py
+
+      - name: Populate Hebrew player names
+        run: |
+          python scripts/backfill_hebrew_player_names.py \
+            --allow-fetch-failures \
+            --retries 4 \
+            --sleep 0.25

@@ -26,6 +26,8 @@ Verified endpoints:
   `https://webws.365scores.com/web/game/?appTypeId=5&langId=1&timezoneName=Asia/Jerusalem&userCountryId=6&gameId={gameId}&topBookmaker=14`
 - Match team statistics:
   `https://webws.365scores.com/web/game/stats/?appTypeId=5&langId=1&timezoneName=Asia/Jerusalem&userCountryId=6&games={gameId}`
+- Hebrew player names:
+  `https://webws.365scores.com/web/athletes/?appTypeId=5&langId=2&timezoneName=Asia/Jerusalem&userCountryId=6&athletes={athleteIds}`
 
 Observed data:
 
@@ -44,6 +46,7 @@ Observed data:
   - player heatmap URL for many players
 - Match team stats: possession, total shots, shots on target, big chances, corners, and more.
 - Aggregate player stats currently exposed for the league include: goals, xG, assists, xA, goals+assists, xG+xA, 365 ratings, penalties, tackles won per game, interceptions per game, cards, clean sheets, goals conceded per game, saves per game, penalties saved.
+- Source-authored Hebrew player names are available in batches keyed by 365Scores athlete ID.
 
 Pros:
 
