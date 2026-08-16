@@ -2687,13 +2687,22 @@ const hebrewTeamNames: Record<string, string> = {
   "bnei yehuda tel aviv": "בני יהודה תל אביב",
   "israel": "ישראל",
   "israel (w)": "נבחרת ישראל נשים",
+  "israel national team": "ישראל",
+  "israel national team (w)": "נבחרת ישראל נשים",
   "israel u17": "נבחרת ישראל עד גיל 17",
+  "israel u17 national team": "נבחרת ישראל עד גיל 17",
   "israel u18": "נבחרת ישראל עד גיל 18",
+  "israel u18 national team": "נבחרת ישראל עד גיל 18",
   "israel u19": "נבחרת ישראל עד גיל 19",
+  "israel u19 national team": "נבחרת ישראל עד גיל 19",
   "israel u20": "נבחרת ישראל עד גיל 20",
+  "israel u20 national team": "נבחרת ישראל עד גיל 20",
   "israel u21": "נבחרת ישראל עד גיל 21",
+  "israel u21 national team": "נבחרת ישראל עד גיל 21",
   "israel u23": "הנבחרת האולימפית של ישראל",
+  "israel u23 national team": "הנבחרת האולימפית של ישראל",
   "israel women": "נבחרת ישראל נשים",
+  "israel women national team": "נבחרת ישראל נשים",
 };
 
 function hebrewCompetitionName(name: string) {
