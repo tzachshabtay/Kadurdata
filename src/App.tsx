@@ -2299,7 +2299,7 @@ function LegionnairesView({
                       <small className="legionnaire-player-meta">
                         <bdi dir="ltr">{playerPositionDetail(player).code}</bdi>
                         <span aria-hidden="true">·</span>
-                        <span className="legionnaire-minutes">
+                        <span className="legionnaire-minutes" dir={language === "he" ? "rtl" : "ltr"}>
                           <bdi dir="ltr">{numberFormatter.format(Number(player.minutes))}</bdi>
                           <span>{text.minShort}</span>
                         </span>

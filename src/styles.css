@@ -2119,8 +2119,11 @@ tr:last-child td {
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
-  direction: ltr;
   white-space: nowrap;
+}
+
+.legionnaire-player small.legionnaire-player-meta {
+  direction: ltr;
 }
 
 .legionnaire-league {
