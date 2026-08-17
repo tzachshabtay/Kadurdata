@@ -1597,10 +1597,10 @@ export function App() {
       </header>
 
       <main className="page-shell">
-        {error && <div className="error-banner"><strong>{text.dataLoadError}</strong><span>{error}</span></div>}
+        {error && view !== "legionnaires" && <div className="error-banner"><strong>{text.dataLoadError}</strong><span>{error}</span></div>}
         {!hasSupabaseConfig && <div className="demo-banner">{text.demoPreview}</div>}
 
-        {loading || seasonLoading ? (
+        {loading || (seasonLoading && view !== "legionnaires") ? (
           <LoadingState />
         ) : view === "overview" ? (
           <OverviewView
