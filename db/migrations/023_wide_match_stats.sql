@@ -262,7 +262,8 @@ begin
     from pg_proc procedure
     join pg_namespace namespace on namespace.oid = procedure.pronamespace
     where namespace.nspname = 'public'
-      and pg_get_functiondef(procedure.oid) like '%obs.stat_observations%'
+      and procedure.prokind = 'f'
+      and procedure.prosrc like '%obs.stat_observations%'
   loop
     definition := replace(
       pg_get_functiondef(dependent.oid),
