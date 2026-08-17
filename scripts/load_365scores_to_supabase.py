@@ -1553,14 +1553,17 @@ def load_legionnaire_roster(
                 player_id,
             ),
         )
+        is_current = str(row.get("is_current") or "").strip().lower() in {"1", "true", "yes"}
         metadata = Jsonb(
             {
                 "discovery": "365scores_legionnaires",
-                "is_current": True,
+                "is_current": is_current,
                 "source_athlete_id": athlete_id,
                 "source_club_id": club_source_id,
                 "source_competition_id": competition_source_id,
+                "source_club_country_id": to_int(row.get("club_country_id")),
                 "formation_position": empty_to_none(row.get("formation_position")),
+                "observed_at": empty_to_none(row.get("observed_at")),
             }
         )
         existing = execute_one(

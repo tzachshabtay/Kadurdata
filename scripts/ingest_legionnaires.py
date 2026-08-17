@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,8 @@ try:
         ensure_dir,
         flatten_player_match_rows,
         flatten_team_stats,
+        game_date,
+        game_is_in_window,
         normalize_competition,
         team_logo_url,
         team_name,
@@ -55,6 +58,8 @@ except ImportError:
         ensure_dir,
         flatten_player_match_rows,
         flatten_team_stats,
+        game_date,
+        game_is_in_window,
         normalize_competition,
         team_logo_url,
         team_name,
@@ -77,6 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--raw-dir", type=Path, default=Path("data/raw/365scores/legionnaires"))
     parser.add_argument("--processed-dir", type=Path, default=Path("data/processed/legionnaires"))
     parser.add_argument("--profile-batch-size", type=int, default=100)
+    parser.add_argument("--athlete-game-limit", type=int, default=100)
     parser.add_argument("--limit", type=int, default=0, help="Limit matches per foreign club.")
     parser.add_argument("--walk-pages", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--max-fixture-pages", type=int, default=50)
@@ -205,6 +211,15 @@ def discover_legionnaires(
                 }
             )
             continue
+        if competition.get("currentSeasonNum") is None:
+            failures.append(
+                {
+                    "athlete_id": athlete.get("id"),
+                    "club_id": club_id,
+                    "kind": "missing_current_season",
+                }
+            )
+            continue
 
         position = athlete.get("position") or {}
         formation = athlete.get("formationPosition") or {}
@@ -225,11 +240,208 @@ def discover_legionnaires(
                 "competition_id": competition.get("id"),
                 "competition_name": competition.get("longName") or competition.get("name"),
                 "season_num": competition.get("currentSeasonNum"),
+                "is_current": True,
             }
         )
 
     rows.sort(key=lambda row: (row.get("player_name") or "", row.get("athlete_id") or 0))
     return rows, failures
+
+
+def foreign_club_for_game(wrapper: dict[str, Any]) -> dict[str, Any] | None:
+    game = wrapper.get("game") or {}
+    related_id = wrapper.get("relatedCompetitor")
+    for key in ("homeCompetitor", "awayCompetitor"):
+        competitor = game.get(key) or {}
+        if competitor.get("id") != related_id:
+            continue
+        if competitor.get("type") == 1 and competitor.get("countryId") != ISRAEL_COUNTRY_ID:
+            return competitor
+    return None
+
+
+def is_domestic_league(competition: dict[str, Any] | None) -> bool:
+    if not competition or competition.get("isInternational") is True:
+        return False
+    if competition.get("hasBrackets") is True:
+        return False
+    name = str(competition.get("name") or "").lower()
+    return not any(token in name for token in ("cup", "copa", "coupe", "friendly"))
+
+
+def collect_athlete_games(
+    args: argparse.Namespace,
+    athlete_ids: list[int],
+) -> tuple[dict[int, list[dict[str, Any]]], dict[int, dict[str, Any]], list[dict[str, Any]]]:
+    games_by_athlete: dict[int, list[dict[str, Any]]] = {}
+    competitions: dict[int, dict[str, Any]] = {}
+    failures: list[dict[str, Any]] = []
+
+    def fetch(athlete_id: int) -> tuple[int, dict[str, Any]]:
+        payload = cached_fetch(
+            build_url(
+                "/web/athletes/games/",
+                {
+                    "appTypeId": args.app_type_id,
+                    "langId": args.lang_id,
+                    "timezoneName": args.timezone,
+                    "userCountryId": args.user_country_id,
+                    "athleteId": athlete_id,
+                    "lastMatchLimit": args.athlete_game_limit,
+                },
+            ),
+            args.raw_dir / "athlete_games" / f"{athlete_id}.json",
+            retries=args.retries,
+            sleep_seconds=args.sleep,
+            refresh=args.refresh,
+        )
+        return athlete_id, payload
+
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as executor:
+        pending = {executor.submit(fetch, athlete_id): athlete_id for athlete_id in athlete_ids}
+        for future in as_completed(pending):
+            athlete_id = pending[future]
+            try:
+                _, payload = future.result()
+            except RuntimeError as exc:
+                if not args.allow_fetch_failures:
+                    raise
+                failures.append({"athlete_id": athlete_id, "kind": "athlete_games", "error": str(exc)})
+                continue
+            games_by_athlete[athlete_id] = payload.get("games") or []
+            competitions.update(
+                {
+                    int(item["id"]): item
+                    for item in payload.get("competitions") or []
+                    if item.get("id") is not None
+                }
+            )
+
+    return games_by_athlete, competitions, failures
+
+
+def collect_competitor_profiles(
+    args: argparse.Namespace,
+    competitor_ids: set[int],
+) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str, Any]], list[dict[str, Any]]]:
+    competitors: dict[int, dict[str, Any]] = {}
+    competitions: dict[int, dict[str, Any]] = {}
+    failures: list[dict[str, Any]] = []
+    for batch in chunked(sorted(competitor_ids), max(1, args.profile_batch_size)):
+        batch_key = hashlib.sha1(",".join(map(str, batch)).encode("ascii")).hexdigest()[:12]
+        try:
+            payload = cached_fetch(
+                build_url(
+                    "/web/competitors/",
+                    {
+                        "appTypeId": args.app_type_id,
+                        "langId": args.lang_id,
+                        "timezoneName": args.timezone,
+                        "userCountryId": args.user_country_id,
+                        "competitors": ",".join(map(str, batch)),
+                    },
+                ),
+                args.raw_dir / "competitor_profiles" / f"{batch_key}.json",
+                retries=args.retries,
+                sleep_seconds=args.sleep,
+                refresh=args.refresh,
+            )
+        except RuntimeError as exc:
+            if not args.allow_fetch_failures:
+                raise
+            failures.append({"competitor_ids": batch, "kind": "competitor_profiles", "error": str(exc)})
+            continue
+        competitors.update(
+            {
+                int(item["id"]): item
+                for item in payload.get("competitors") or []
+                if item.get("id") is not None
+            }
+        )
+        competitions.update(
+            {
+                int(item["id"]): item
+                for item in payload.get("competitions") or []
+                if item.get("id") is not None
+            }
+        )
+    return competitors, competitions, failures
+
+
+def discover_historical_affiliations(
+    current_rows: list[dict[str, Any]],
+    athletes: list[dict[str, Any]],
+    games_by_athlete: dict[int, list[dict[str, Any]]],
+    competitors: dict[int, dict[str, Any]],
+    competitions: dict[int, dict[str, Any]],
+    start_date: str,
+    end_date: str,
+) -> list[dict[str, Any]]:
+    rows_by_key: dict[tuple[int, int, int, int], dict[str, Any]] = {}
+    athletes_by_id = {
+        int(athlete["id"]): athlete
+        for athlete in athletes
+        if athlete.get("id") is not None
+    }
+    current_athlete_ids = {int(row["athlete_id"]) for row in current_rows}
+
+    for row in current_rows:
+        key = (
+            int(row["athlete_id"]),
+            int(row["club_id"]),
+            int(row["competition_id"]),
+            int(row["season_num"]),
+        )
+        rows_by_key[key] = {**row, "is_current": True}
+
+    for athlete_id in sorted(current_athlete_ids):
+        athlete = athletes_by_id.get(athlete_id) or {}
+        position = athlete.get("position") or {}
+        formation = athlete.get("formationPosition") or {}
+        for wrapper in games_by_athlete.get(athlete_id, []):
+            game = wrapper.get("game") or {}
+            if not game_is_in_window(game, start_date, end_date):
+                continue
+            embedded_club = foreign_club_for_game(wrapper)
+            if not embedded_club or game.get("seasonNum") is None:
+                continue
+            club = competitors.get(int(embedded_club["id"])) or embedded_club
+            competition_id = game.get("competitionId")
+            competition = competitions.get(int(competition_id)) if competition_id is not None else None
+            if not is_domestic_league(competition):
+                continue
+
+            key = (athlete_id, int(club["id"]), int(competition_id), int(game["seasonNum"]))
+            if key in rows_by_key:
+                continue
+            rows_by_key[key] = {
+                "athlete_id": athlete_id,
+                "player_name": athlete.get("name"),
+                "country_id": athlete.get("nationalityId"),
+                "position_name": position.get("name"),
+                "formation_position": formation.get("name"),
+                "club_id": club.get("id"),
+                "club_name": team_name(club),
+                "club_country_id": club.get("countryId"),
+                "club_logo_url": team_logo_url(club),
+                "club_image_version": club.get("imageVersion"),
+                "club_primary_color": club.get("color"),
+                "club_secondary_color": club.get("awayColor"),
+                "competition_id": competition.get("id"),
+                "competition_name": competition.get("longName") or competition.get("name"),
+                "season_num": game.get("seasonNum"),
+                "is_current": False,
+                "observed_at": game_date(game),
+            }
+
+    return sorted(
+        rows_by_key.values(),
+        key=lambda row: (
+            row.get("player_name") or "",
+            str(row.get("season_num") or ""),
+            row.get("club_name") or "",
+        ),
+    )
 
 
 def main() -> int:
@@ -246,17 +458,63 @@ def main() -> int:
     print(f"resolving current clubs for {len(athlete_ids)} known Israeli players", flush=True)
 
     athletes, competitors, source_competitions = collect_athlete_profiles(args, athlete_ids)
-    roster_rows, failures = discover_legionnaires(athletes, competitors, source_competitions)
-    print(f"discovered {len(roster_rows)} active foreign-club affiliations", flush=True)
+    current_roster_rows, failures = discover_legionnaires(athletes, competitors, source_competitions)
+    current_athlete_ids = sorted({int(row["athlete_id"]) for row in current_roster_rows})
+    print(f"discovered {len(current_roster_rows)} active foreign-club affiliations", flush=True)
+
+    games_by_athlete, athlete_competitions, athlete_failures = collect_athlete_games(
+        args,
+        current_athlete_ids,
+    )
+    failures.extend(athlete_failures)
+    source_competitions.update(athlete_competitions)
+    historical_club_ids = {
+        int(club["id"])
+        for wrappers in games_by_athlete.values()
+        for wrapper in wrappers
+        if (club := foreign_club_for_game(wrapper)) is not None
+    }
+    historical_competitors, historical_competitions, competitor_failures = collect_competitor_profiles(
+        args,
+        historical_club_ids,
+    )
+    failures.extend(competitor_failures)
+    competitors.update(historical_competitors)
+    source_competitions.update(historical_competitions)
+    roster_rows = discover_historical_affiliations(
+        current_roster_rows,
+        athletes,
+        games_by_athlete,
+        competitors,
+        source_competitions,
+        args.start_date,
+        args.end_date,
+    )
+    historical_count = len(roster_rows) - len(current_roster_rows)
+    print(f"discovered {historical_count} historical foreign club-season affiliations", flush=True)
 
     rows_by_club: dict[int, list[dict[str, Any]]] = {}
     for row in roster_rows:
         rows_by_club.setdefault(int(row["club_id"]), []).append(row)
 
     games_by_id: dict[int, dict[str, Any]] = {}
+    for wrappers in games_by_athlete.values():
+        for wrapper in wrappers:
+            game = wrapper.get("game") or {}
+            club = foreign_club_for_game(wrapper)
+            club_profile = competitors.get(int(club["id"])) if club else None
+            if not club_profile or not game_is_in_window(game, args.start_date, args.end_date):
+                continue
+            competition_id = game.get("competitionId")
+            competition = source_competitions.get(int(competition_id)) if competition_id is not None else None
+            if not is_domestic_league(competition):
+                continue
+            if game.get("id") is not None:
+                games_by_id[int(game["id"])] = game
+
     fixture_pages: list[dict[str, Any]] = []
     for club_id, club_rows in sorted(rows_by_club.items()):
-        competition_id = int(club_rows[0]["competition_id"])
+        competition_ids = {int(row["competition_id"]) for row in club_rows}
         try:
             club_games, page_payload = collect_fixture_feed(
                 args,
@@ -271,7 +529,7 @@ def main() -> int:
             failures.append(failure)
             continue
 
-        league_games = [game for game in club_games if game.get("competitionId") == competition_id]
+        league_games = [game for game in club_games if game.get("competitionId") in competition_ids]
         if args.limit:
             league_games = league_games[: args.limit]
         games_by_id.update(
@@ -280,7 +538,7 @@ def main() -> int:
         fixture_pages.append(
             {
                 "club_id": club_id,
-                "competition_id": competition_id,
+                "competition_ids": sorted(competition_ids),
                 "page_count": len(page_payload.get("pages") or []),
                 "selected_game_count": len(league_games),
                 "pages": page_payload.get("pages") or [],
@@ -309,7 +567,11 @@ def main() -> int:
             "competitorsType": 0,
             "hasStats": True,
         }
-        competition = {**normalize_competition(source_competition), "scope": "foreign_club"}
+        competition = {
+            **normalize_competition(source_competition),
+            "scope": "foreign_club",
+            "legionnaire_league": True,
+        }
         competition_games = [game for game in games if game.get("competitionId") == competition_id]
         competition_manifests.append(
             {**competition, "seasons": competition_seasons(competition, competition_games, []), "source_history_seasons": []}
@@ -353,7 +615,7 @@ def main() -> int:
         "player_stat_keys": stat_names,
         "fixture_pages": fixture_pages,
         "failures": failures,
-        "note": "Players are discovered from known Israeli 365Scores profiles; only each foreign club's main league is ingested.",
+        "note": "Current Israeli players abroad are discovered from profiles; their historical clubs and domestic leagues are recovered from player-specific games.",
     }
     write_json(args.processed_dir / "365scores_manifest.json", manifest)
     print(

@@ -2281,7 +2281,7 @@ function LegionnairesView({
           <div className="legionnaire-table-head" role="row">
             <span>#</span>
             <span>{text.player}</span>
-            <span>{text.currentClub}</span>
+            <span>{text.club}</span>
             <span>{text.league}</span>
             <span>{selectedMetric?.name ?? text.value}</span>
           </div>
