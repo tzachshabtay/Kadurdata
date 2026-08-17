@@ -85,6 +85,7 @@ type DeepLinkState = {
   positionFilter: string;
   clubFilter: string;
   clubTournamentScope: ClubTournamentScope;
+  clubQuery: string;
   playerQuery: string;
   attributeQuery: string;
 };
@@ -374,6 +375,7 @@ function readDeepLinkState(): DeepLinkState {
     positionFilter: params.get("position") ?? "All",
     clubFilter: params.get("clubFilter") ?? "all",
     clubTournamentScope: params.get("clubTournaments") === "all" ? "all" : "selected",
+    clubQuery: params.get("clubSearch") ?? "",
     playerQuery: params.get("playerSearch") ?? "",
     attributeQuery: params.get("attributeSearch") ?? "",
   };
@@ -412,6 +414,7 @@ function writeDeepLinkState(state: DeepLinkState) {
   setString("position", state.positionFilter);
   setString("clubFilter", state.clubFilter);
   setString("clubTournaments", state.clubTournamentScope);
+  setString("clubSearch", state.clubQuery);
   setString("playerSearch", state.playerQuery);
   setString("attributeSearch", state.attributeQuery);
 
@@ -471,6 +474,7 @@ export function App() {
   const [positionFilter, setPositionFilter] = useState(initialDeepLink.positionFilter);
   const [clubFilter, setClubFilter] = useState(initialDeepLink.clubFilter);
   const [clubTournamentScope, setClubTournamentScope] = useState<ClubTournamentScope>(initialDeepLink.clubTournamentScope);
+  const [clubQuery, setClubQuery] = useState(initialDeepLink.clubQuery);
   const [playerQuery, setPlayerQuery] = useState(initialDeepLink.playerQuery);
   const [attributeQuery, setAttributeQuery] = useState(initialDeepLink.attributeQuery);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -484,6 +488,8 @@ export function App() {
   const [explorerLeaderboardLoading, setExplorerLeaderboardLoading] = useState(false);
   const [explorerLeaderboardError, setExplorerLeaderboardError] = useState<string | null>(null);
   const [allTournamentClubMatches, setAllTournamentClubMatches] = useState<Match[]>([]);
+  const [allTournamentClubs, setAllTournamentClubs] = useState<Club[]>([]);
+  const [allTournamentClubsLoading, setAllTournamentClubsLoading] = useState(false);
   const [clubMatchesLoading, setClubMatchesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -571,6 +577,7 @@ export function App() {
       setPositionFilter(next.positionFilter);
       setClubFilter(next.clubFilter);
       setClubTournamentScope(next.clubTournamentScope);
+      setClubQuery(next.clubQuery);
       setPlayerQuery(next.playerQuery);
       setAttributeQuery(next.attributeQuery);
     };
@@ -895,6 +902,64 @@ export function App() {
         .slice(0, 7),
     [currentRound, matches, roundMatches],
   );
+  const allTournamentSeasonIds = useMemo(() => {
+    const domesticClubCompetitionIds = new Set(competitions
+      .filter((competition) => (competition.scope || "domestic") === "domestic" && competition.participant_type === "club")
+      .map((competition) => competition.competition_id));
+    return seasons
+      .filter((season) => season.season_name === currentSeason.season_name && domesticClubCompetitionIds.has(season.competition_id))
+      .map((season) => season.season_id);
+  }, [competitions, currentSeason.season_name, seasons]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAllTournamentClubs() {
+      if (view !== "clubs" || clubTournamentScope !== "all") {
+        setAllTournamentClubs([]);
+        setAllTournamentClubsLoading(false);
+        return;
+      }
+
+      if (!hasSupabaseConfig || !supabase) {
+        setAllTournamentClubs(demoClubs);
+        setAllTournamentClubsLoading(false);
+        return;
+      }
+
+      if (!allTournamentSeasonIds.length) {
+        setAllTournamentClubs([]);
+        setAllTournamentClubsLoading(false);
+        return;
+      }
+
+      setAllTournamentClubsLoading(true);
+      const [clubResult, teamAssetResult] = await Promise.all([
+        supabase.from("api_clubs").select("*").in("season_id", allTournamentSeasonIds).limit(2000),
+        supabase.from("api_team_assets").select("*"),
+      ]);
+      if (cancelled) return;
+      const firstError = clubResult.error ?? teamAssetResult.error;
+      if (firstError) {
+        setError(firstError.message);
+        setAllTournamentClubs([]);
+        setAllTournamentClubsLoading(false);
+        return;
+      }
+
+      const assets = (teamAssetResult.data ?? []) as TeamAsset[];
+      const assetByTeamId = new Map(assets.map((asset) => [asset.team_id, asset]));
+      const clubByTeamId = new Map<string, Club>();
+      ((clubResult.data ?? []) as Omit<Club, "logo_url">[]).forEach((club) => {
+        const withLogo = { ...club, logo_url: assetByTeamId.get(club.team_id)?.logo_url ?? null };
+        if (!clubByTeamId.has(club.team_id) || club.season_id === seasonId) clubByTeamId.set(club.team_id, withLogo);
+      });
+      setAllTournamentClubs([...clubByTeamId.values()]);
+      setAllTournamentClubsLoading(false);
+    }
+
+    void loadAllTournamentClubs();
+    return () => { cancelled = true; };
+  }, [allTournamentSeasonIds, clubTournamentScope, refreshToken, seasonId, view]);
   useEffect(() => {
     let cancelled = false;
 
@@ -947,7 +1012,8 @@ export function App() {
     return () => { cancelled = true; };
   }, [clubId, clubTournamentScope, currentSeason.season_name, refreshToken, view]);
   const selectedMatch = matches.find((match) => match.match_id === matchId);
-  const selectedClub = clubs.find((club) => club.team_id === clubId);
+  const selectedClub = (clubTournamentScope === "all" ? allTournamentClubs.find((club) => club.team_id === clubId) : undefined)
+    ?? clubs.find((club) => club.team_id === clubId);
   const selectedPlayer = players.find((player) => player.player_id === playerId);
   const playerMetrics = useMemo(
     () => metrics.filter((metric) => metric.subject_type === "player_match"),
@@ -1179,6 +1245,7 @@ export function App() {
       positionFilter,
       clubFilter,
       clubTournamentScope,
+      clubQuery,
       playerQuery,
       attributeQuery,
     });
@@ -1186,6 +1253,7 @@ export function App() {
     attributeQuery,
     clubFilter,
     clubId,
+    clubQuery,
     clubTournamentScope,
     competitionId,
     explorerMetricCode,
@@ -1376,9 +1444,12 @@ export function App() {
           />
         ) : view === "clubs" ? (
           <ClubsView
-            clubs={standings}
+            clubs={showingAllTournaments ? allTournamentClubs : standings}
             selectedClub={selectedClub}
             setClubId={setClubId}
+            clubsLoading={allTournamentClubsLoading}
+            query={clubQuery}
+            setQuery={setClubQuery}
             matches={clubMatches}
             matchesLoading={clubMatchesLoading}
             allTournaments={showingAllTournaments}
@@ -1705,6 +1776,9 @@ function ClubsView({
   clubs,
   selectedClub,
   setClubId,
+  clubsLoading,
+  query,
+  setQuery,
   matches,
   matchesLoading,
   allTournaments,
@@ -1727,6 +1801,9 @@ function ClubsView({
   clubs: Club[];
   selectedClub?: Club;
   setClubId: (id: string) => void;
+  clubsLoading: boolean;
+  query: string;
+  setQuery: (query: string) => void;
   matches: Match[];
   matchesLoading: boolean;
   allTournaments: boolean;
@@ -1752,20 +1829,28 @@ function ClubsView({
   const squadByPlayerId = new Map(squad.map((player) => [player.player_id, player]));
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleClubs = (allTournaments ? [...clubs].sort((a, b) => localizedClubName(a, language).localeCompare(localizedClubName(b, language), localeCode(language))) : clubs)
+    .filter((club) => !normalizedQuery || [localizedClubName(club, language), club.team_name, club.team_name_he, club.city]
+      .filter(Boolean)
+      .some((value) => value!.toLowerCase().includes(normalizedQuery)));
   return (
     <>
       <PageHeading eyebrow={allTournaments ? `${text.allTournaments} · ${seasonName}` : text.seasonDirectory} title={text.clubs} description={allTournaments ? text.allTournamentsClubDescription : text.clubsDescription} />
       <div className={`club-workspace${allTournaments ? " all-tournaments" : ""}`}>
-        {!allTournaments && <aside className="surface club-directory">
-          <div className="club-table-head"><span>#</span><span>{text.club}</span><span>{text.playedShort}</span><span>{text.pointsShort}</span></div>
-          {clubs.map((club, index) => (
-            <button className={club.team_id === selectedClub?.team_id ? "active" : ""} key={club.team_id} type="button" onClick={() => setClubId(club.team_id)}>
-              <span>{index + 1}</span>
-              <span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span>
-              <span>{club.played}</span><strong>{club.points}</strong>
+        <aside className={`surface club-directory${allTournaments ? " all-tournaments" : ""}`}>
+          {allTournaments ? (
+            <label className="club-search">
+              <Search size={15} aria-hidden="true" />
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.searchClubs} aria-label={text.searchClubs} />
+            </label>
+          ) : <div className="club-table-head"><span>#</span><span>{text.club}</span><span>{text.playedShort}</span><span>{text.pointsShort}</span></div>}
+          {clubsLoading ? <InlineLoading /> : visibleClubs.length ? visibleClubs.map((club, index) => (
+            <button className={`${club.team_id === selectedClub?.team_id ? "active" : ""}${allTournaments ? " all-tournament-club-row" : ""}`} key={club.team_id} type="button" onClick={() => setClubId(club.team_id)}>
+              {allTournaments ? <span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span> : <><span>{index + 1}</span><span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span><span>{club.played}</span><strong>{club.points}</strong></>}
             </button>
-          ))}
-        </aside>}
+          )) : <EmptyState text={text.noClubsFound} />}
+        </aside>
 
         <section className="club-detail">
           {displayClub ? (
@@ -2794,6 +2879,7 @@ const hebrewCompetitionNames: Record<string, string> = {
   "uefa women's europa cup": "גביע אירופה לנשים",
   "uefa youth league": "ליגת האלופות לנוער",
   "women u17 world cup": "גביע העולם לנשים עד גיל 17",
+  "women's premier league": "ליגת העל לנשים",
   "women's world cup": "גביע העולם לנשים",
   "world cup playoff tournament": "פלייאוף גביע העולם",
   "world cup women u20": "גביע העולם לנשים עד גיל 20",

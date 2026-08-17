@@ -1656,7 +1656,6 @@ tr:last-child td {
   gap: 18px;
 }
 
-.club-workspace.all-tournaments,
 .club-detail-grid.all-tournaments {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1664,6 +1663,36 @@ tr:last-child td {
 .club-directory {
   max-height: 720px;
   overflow-y: auto;
+}
+
+.club-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 8px 13px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-deep);
+}
+
+.club-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  outline: 0;
+  background: var(--raised);
+  font: inherit;
+}
+
+.club-search input:focus {
+  border-color: var(--teal);
 }
 
 .club-table-head,
@@ -1708,6 +1737,10 @@ tr:last-child td {
 
 .club-directory > button.active {
   border-inline-start-color: var(--teal);
+}
+
+.club-directory > button.all-tournament-club-row {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .club-detail {
