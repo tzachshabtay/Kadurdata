@@ -2114,6 +2114,15 @@ tr:last-child td {
   font-size: 8px;
 }
 
+.legionnaire-player small.legionnaire-player-meta,
+.legionnaire-minutes {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  direction: ltr;
+  white-space: nowrap;
+}
+
 .legionnaire-league {
   color: var(--soft);
 }

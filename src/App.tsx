@@ -2294,7 +2294,17 @@ function LegionnairesView({
                   <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
                   <span className="legionnaire-player">
                     <span className="avatar">{initials(displayName)}</span>
-                    <span><strong>{displayName}</strong><small>{playerPositionDetail(player).code} · {numberFormatter.format(Number(player.minutes))} {text.minShort}</small></span>
+                    <span>
+                      <strong>{displayName}</strong>
+                      <small className="legionnaire-player-meta">
+                        <bdi dir="ltr">{playerPositionDetail(player).code}</bdi>
+                        <span aria-hidden="true">·</span>
+                        <span className="legionnaire-minutes">
+                          <bdi dir="ltr">{numberFormatter.format(Number(player.minutes))}</bdi>
+                          <span>{text.minShort}</span>
+                        </span>
+                      </small>
+                    </span>
                   </span>
                   <span className="legionnaire-club"><ClubBadge name={player.team_name ?? text.freeAgent} logoUrl={player.team_logo_url} size="small" /><strong>{player.team_name ?? text.freeAgent}</strong></span>
                   <span className="legionnaire-league">{competitionName}</span>
