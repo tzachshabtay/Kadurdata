@@ -123,6 +123,17 @@ def completed_games(games: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [game for game in games if game.get("statusGroup") == 4]
 
 
+def filter_legionnaire_player_rows(
+    rows: list[dict[str, Any]],
+    athlete_ids: set[int],
+) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if row.get("athlete_id") is not None and int(row["athlete_id"]) in athlete_ids
+    ]
+
+
 def collect_athlete_profiles(
     args: argparse.Namespace,
     athlete_ids: list[int],
@@ -318,7 +329,11 @@ def main() -> int:
         failures.extend(payload_failures)
 
     fixture_rows = [base_game_row(game) for game in games]
-    player_rows, stat_names = flatten_player_match_rows(details)
+    all_player_rows, stat_names = flatten_player_match_rows(details)
+    player_rows = filter_legionnaire_player_rows(
+        all_player_rows,
+        {int(row["athlete_id"]) for row in roster_rows},
+    )
     team_stat_rows = flatten_team_stats(stats)
     write_csv(args.processed_dir / "365scores_fixtures.csv", fixture_rows)
     write_csv(args.processed_dir / "365scores_player_match_stats.csv", player_rows)

@@ -1,6 +1,11 @@
 import unittest
 
-from scripts.ingest_legionnaires import chunked, completed_games, discover_legionnaires
+from scripts.ingest_legionnaires import (
+    chunked,
+    completed_games,
+    discover_legionnaires,
+    filter_legionnaire_player_rows,
+)
 
 
 class LegionnaireDiscoveryTests(unittest.TestCase):
@@ -10,6 +15,17 @@ class LegionnaireDiscoveryTests(unittest.TestCase):
     def test_completed_games_do_not_depend_on_catalog_stat_flags(self):
         games = [{"id": 1, "statusGroup": 4}, {"id": 2, "statusGroup": 1}]
         self.assertEqual(completed_games(games), [{"id": 1, "statusGroup": 4}])
+
+    def test_only_discovered_israeli_athletes_are_written(self):
+        rows = [
+            {"athlete_id": 10, "player_name": "Israeli Abroad"},
+            {"athlete_id": 20, "player_name": "League Opponent"},
+            {"athlete_id": None, "player_name": "Unknown"},
+        ]
+        self.assertEqual(
+            filter_legionnaire_player_rows(rows, {10}),
+            [{"athlete_id": 10, "player_name": "Israeli Abroad"}],
+        )
 
     def test_discovery_keeps_only_israelis_at_foreign_clubs(self):
         athletes = [
