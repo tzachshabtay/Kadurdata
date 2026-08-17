@@ -1416,6 +1416,107 @@ def load_player_rows(
     print(f"processed {len(valid_rows)} player rows; wrote {written_stats} player stat observations", flush=True)
 
 
+def event_minute(value: Any) -> Optional[int]:
+    text = empty_to_none(value)
+    if text is None:
+        return None
+    match = re.match(r"^(\d+)(?:\+(\d+))?", text)
+    if not match:
+        return None
+    return int(match.group(1)) + int(match.group(2) or 0)
+
+
+def load_shot_events(
+    conn: psycopg.Connection,
+    cur: psycopg.Cursor,
+    source_id: str,
+    rows: list[dict[str, str]],
+    indexes: dict[str, Any],
+) -> int:
+    source_player_ids = sorted(
+        {
+            value
+            for row in rows
+            if (value := empty_to_none(row.get("player_source_id"))) is not None
+        }
+    )
+    player_ids: dict[str, str] = {}
+    if source_player_ids:
+        cur.execute(
+            """
+            select source_entity_id, canonical_id
+            from source.source_entity_ids
+            where source_id = %s
+              and entity_type = 'player'
+              and source_entity_id = any(%s)
+            """,
+            (source_id, source_player_ids),
+        )
+        player_ids = {
+            row["source_entity_id"]: row["canonical_id"]
+            for row in cur.fetchall()
+        }
+
+    params: list[tuple[Any, ...]] = []
+    for row in rows:
+        match_id = indexes["matches"].get(row.get("game_id"))
+        if not match_id:
+            continue
+        source_player_id_value = empty_to_none(row.get("player_source_id"))
+        params.append(
+            (
+                source_id,
+                match_id,
+                empty_to_none(row.get("source_event_id")),
+                event_minute(row.get("event_time")),
+                empty_to_none(row.get("event_time")),
+                indexes["teams"].get(row.get("team_id")),
+                player_ids.get(source_player_id_value) if source_player_id_value else None,
+                to_float(row.get("shot_x")),
+                to_float(row.get("shot_y")),
+                to_float(row.get("xg")),
+                to_float(row.get("xgot")),
+                empty_to_none(row.get("outcome")),
+                empty_to_none(row.get("body_part")),
+                empty_to_none(row.get("situation")),
+                to_float(row.get("goal_mouth_x")),
+                to_float(row.get("goal_mouth_y")),
+                empty_to_none(row.get("goal_description")),
+            )
+        )
+
+    if params:
+        cur.executemany(
+            """
+            insert into obs.events (
+              source_id, match_id, source_event_id, event_type, minute, event_time,
+              team_id, player_id, x, y, value, xgot, outcome, body_part,
+              situation, goal_mouth_x, goal_mouth_y, goal_description
+            )
+            values (%s, %s, %s, 'shot', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            on conflict on constraint events_source_event_key do update
+              set match_id = excluded.match_id,
+                  minute = excluded.minute,
+                  event_time = excluded.event_time,
+                  team_id = excluded.team_id,
+                  player_id = excluded.player_id,
+                  x = excluded.x,
+                  y = excluded.y,
+                  value = excluded.value,
+                  xgot = excluded.xgot,
+                  outcome = excluded.outcome,
+                  body_part = excluded.body_part,
+                  situation = excluded.situation,
+                  goal_mouth_x = excluded.goal_mouth_x,
+                  goal_mouth_y = excluded.goal_mouth_y,
+                  goal_description = excluded.goal_description
+            """,
+            params,
+        )
+        conn.commit()
+    return len(params)
+
+
 def team_metric_code(source_stat_name: str) -> str:
     return f"team_{slugify(source_stat_name)}"
 
@@ -1647,6 +1748,8 @@ def main() -> int:
 
     fixture_rows = read_csv(args.processed_dir / "365scores_fixtures.csv")
     player_rows = read_csv(args.processed_dir / "365scores_player_match_stats.csv")
+    shot_path = args.processed_dir / "365scores_shot_events.csv"
+    shot_rows = read_csv(shot_path) if shot_path.exists() else []
     team_stat_rows = read_csv(args.processed_dir / "365scores_team_match_stats.csv")
     roster_path = args.processed_dir / "365scores_legionnaires.csv"
     legionnaire_rows = read_csv(roster_path) if roster_path.exists() else []
@@ -1668,6 +1771,12 @@ def main() -> int:
         key = game_groups.get(row.get("game_id") or "")
         if key:
             player_groups.setdefault(key, []).append(row)
+
+    shot_groups: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for row in shot_rows:
+        key = game_groups.get(row.get("game_id") or "")
+        if key:
+            shot_groups.setdefault(key, []).append(row)
 
     team_stat_groups: dict[tuple[str, str], list[dict[str, str]]] = {}
     for row in team_stat_rows:
@@ -1731,6 +1840,15 @@ def main() -> int:
                     player_groups.get((competition_source_id, season_num), []),
                     indexes,
                 )
+                loaded_shots = load_shot_events(
+                    conn,
+                    cur,
+                    source_id,
+                    shot_groups.get((competition_source_id, season_num), []),
+                    indexes,
+                )
+                if loaded_shots:
+                    print(f"loaded {loaded_shots} shot events", flush=True)
                 load_team_stats(
                     conn,
                     cur,
@@ -1754,6 +1872,7 @@ def main() -> int:
         "loaded "
         f"{len(fixture_rows)} fixtures, "
         f"{len(player_rows)} player-match rows, "
+        f"{len(shot_rows)} shot events, "
         f"{len(team_stat_rows)} team-stat rows"
     )
     return 0

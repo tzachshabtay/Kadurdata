@@ -834,6 +834,59 @@ def flatten_player_match_rows(details: Dict[int, Dict[str, Any]]) -> Tuple[List[
     return rows, sorted(stat_names)
 
 
+def flatten_shot_events(details: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+
+    for game_id, payload in details.items():
+        match = payload.get("game") or {}
+        chart = match.get("chartEvents") or {}
+        events = chart.get("events") or []
+        subtypes = {
+            item.get("value"): item.get("name")
+            for item in chart.get("eventSubTypes") or []
+            if item.get("value") is not None
+        }
+        members = member_by_lineup_id(match)
+        home = match.get("homeCompetitor") or {}
+        away = match.get("awayCompetitor") or {}
+
+        for index, event in enumerate(events, start=1):
+            lineup_member_id = event.get("playerId")
+            member = members.get(int(lineup_member_id), {}) if lineup_member_id is not None else {}
+            competitor_num = event.get("competitorNum")
+            team = home if competitor_num == 1 else away if competitor_num == 2 else {}
+            if not team and member.get("competitorId") == home.get("id"):
+                team = home
+            elif not team and member.get("competitorId") == away.get("id"):
+                team = away
+            outcome = event.get("outcome") or {}
+
+            rows.append(
+                {
+                    "game_id": match.get("id") or game_id,
+                    "source_event_id": event.get("key") or f"{game_id}:{index}",
+                    "team_id": team.get("id"),
+                    "team_side": "home" if team.get("id") == home.get("id") else "away" if team.get("id") == away.get("id") else None,
+                    "player_source_id": member.get("athleteId") or lineup_member_id,
+                    "lineup_member_id": lineup_member_id,
+                    "player_name": member.get("name"),
+                    "event_time": event.get("time"),
+                    "shot_x": event.get("side"),
+                    "shot_y": event.get("line"),
+                    "outcome": outcome.get("name"),
+                    "body_part": event.get("bodyPart"),
+                    "situation": subtypes.get(event.get("subType")),
+                    "xg": event.get("xg"),
+                    "xgot": event.get("xgot"),
+                    "goal_mouth_x": outcome.get("x"),
+                    "goal_mouth_y": outcome.get("y"),
+                    "goal_description": event.get("goalDescription"),
+                }
+            )
+
+    return rows
+
+
 def flatten_team_stats(stats_payloads: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for game_id, payload in stats_payloads.items():
@@ -1101,10 +1154,12 @@ def main() -> int:
     games = sorted(all_games.values(), key=lambda game: game.get("startTime") or "")
     fixture_rows = flatten_fixtures(games)
     player_rows, stat_names = flatten_player_match_rows(details)
+    shot_rows = flatten_shot_events(details)
     team_stat_rows = flatten_team_stats(stats)
 
     write_csv(args.processed_dir / "365scores_fixtures.csv", fixture_rows)
     write_csv(args.processed_dir / "365scores_player_match_stats.csv", player_rows)
+    write_csv(args.processed_dir / "365scores_shot_events.csv", shot_rows)
     write_csv(args.processed_dir / "365scores_team_match_stats.csv", team_stat_rows)
 
     manifest = {
@@ -1121,6 +1176,7 @@ def main() -> int:
         "match_detail_count": len(details),
         "match_team_stats_count": len(stats),
         "player_match_row_count": len(player_rows),
+        "shot_event_count": len(shot_rows),
         "team_stat_row_count": len(team_stat_rows),
         "season_nums": summarize(fixture_rows, "season_num"),
         "stage_nums": summarize(fixture_rows, "stage_num"),

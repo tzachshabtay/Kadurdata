@@ -3,6 +3,7 @@ from argparse import Namespace
 
 from scripts.ingest_365scores import (
     competition_seasons,
+    flatten_shot_events,
     game_has_country_participant,
     game_season_num,
     inferred_season_name,
@@ -13,6 +14,48 @@ from scripts.ingest_365scores import (
 
 
 class CompetitionCatalogTests(unittest.TestCase):
+    def test_flattens_shot_chart_coordinates_and_player_mapping(self) -> None:
+        rows = flatten_shot_events(
+            {
+                4702029: {
+                    "game": {
+                        "id": 4702029,
+                        "homeCompetitor": {"id": 562, "name": "Home"},
+                        "awayCompetitor": {"id": 579, "name": "Away"},
+                        "members": [
+                            {"id": 501686, "athleteId": 7519, "name": "Player", "competitorId": 562}
+                        ],
+                        "chartEvents": {
+                            "eventSubTypes": [{"value": 4, "name": "Regular Play"}],
+                            "events": [
+                                {
+                                    "key": "14702029",
+                                    "competitorNum": 1,
+                                    "playerId": 501686,
+                                    "time": "8'",
+                                    "line": 32.1,
+                                    "side": 80.0,
+                                    "subType": 4,
+                                    "bodyPart": "Left foot",
+                                    "outcome": {"name": "Blocked", "x": 83.4, "y": 38.4},
+                                    "xg": "0.03",
+                                    "xgot": "0.00",
+                                }
+                            ],
+                        },
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["source_event_id"], "14702029")
+        self.assertEqual(rows[0]["player_source_id"], 7519)
+        self.assertEqual(rows[0]["team_id"], 562)
+        self.assertEqual(rows[0]["shot_x"], 80.0)
+        self.assertEqual(rows[0]["shot_y"], 32.1)
+        self.assertEqual(rows[0]["situation"], "Regular Play")
+
     def test_normalizes_competition_shape(self) -> None:
         competition = normalize_competition(
             {

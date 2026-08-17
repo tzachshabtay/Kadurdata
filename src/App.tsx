@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowRight,
   ArrowUpRight,
   BarChart3,
   CalendarDays,
@@ -46,7 +47,9 @@ import type {
   Competition,
   Legionnaire,
   Match,
+  MatchPlayerHeatmap,
   MatchPlayerStat,
+  MatchShot,
   MatchTeamStat,
   Metric,
   PlayerLeaderboardRow,
@@ -61,6 +64,7 @@ type View = "overview" | "matches" | "clubs" | "players" | "legionnaires";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerHistoryRange = "latest" | "all";
 type ClubTournamentScope = "selected" | "all";
+type ShotSideFilter = "all" | "home" | "away";
 type DeepLinkState = {
   language: Language | null;
   view: View;
@@ -70,6 +74,8 @@ type DeepLinkState = {
   matchId: string;
   matchPlayerId: string;
   matchSide: "home" | "away";
+  shotSide: ShotSideFilter;
+  shotPlayerId: string;
   clubId: string;
   playerId: string;
   metricCode: string;
@@ -348,6 +354,7 @@ function readDeepLinkState(): DeepLinkState {
   const params = new URLSearchParams(window.location.search);
   const language = params.get("lang");
   const side = params.get("side");
+  const shotSide = params.get("shotSide");
   const history = params.get("history");
   const role = params.get("role") as RoleFilter | null;
   const readNumber = (key: string, fallback: number | null) => {
@@ -366,6 +373,8 @@ function readDeepLinkState(): DeepLinkState {
     matchId: params.get("match") ?? "",
     matchPlayerId: params.get("matchPlayer") ?? "",
     matchSide: side === "away" ? "away" : "home",
+    shotSide: shotSide === "home" || shotSide === "away" ? shotSide : "all",
+    shotPlayerId: params.get("shotPlayer") ?? "all",
     clubId: params.get("club") ?? "",
     playerId: params.get("player") ?? "",
     metricCode: params.get("metric") ?? "",
@@ -410,6 +419,8 @@ function writeDeepLinkState(state: DeepLinkState) {
   setString("match", state.matchId);
   setString("matchPlayer", state.matchPlayerId);
   setString("side", state.matchSide);
+  setString("shotSide", state.shotSide);
+  setString("shotPlayer", state.shotPlayerId);
   setString("club", state.clubId);
   setString("player", state.playerId);
   setString("metric", state.metricCode);
@@ -466,6 +477,8 @@ export function App() {
   const [playerHistory, setPlayerHistory] = useState<PlayerHistory[]>([]);
   const [matchPlayerStats, setMatchPlayerStats] = useState<MatchPlayerStat[]>([]);
   const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
+  const [matchPlayerHeatmaps, setMatchPlayerHeatmaps] = useState<MatchPlayerHeatmap[]>([]);
+  const [matchShots, setMatchShots] = useState<MatchShot[]>([]);
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [explorerLeaderboardRows, setExplorerLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
@@ -490,6 +503,8 @@ export function App() {
   const [squadRatingMinimumMinutes, setSquadRatingMinimumMinutes] = useState(initialDeepLink.squadRatingMinimumMinutes);
   const [explorerRatingMinimumMinutes, setExplorerRatingMinimumMinutes] = useState(initialDeepLink.explorerRatingMinimumMinutes);
   const [matchSide, setMatchSide] = useState<"home" | "away">(initialDeepLink.matchSide);
+  const [shotSide, setShotSide] = useState<ShotSideFilter>(initialDeepLink.shotSide);
+  const [shotPlayerId, setShotPlayerId] = useState(initialDeepLink.shotPlayerId);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>(initialDeepLink.roleFilter);
   const [positionFilter, setPositionFilter] = useState(initialDeepLink.positionFilter);
   const [clubFilter, setClubFilter] = useState(initialDeepLink.clubFilter);
@@ -589,6 +604,8 @@ export function App() {
       setMatchId(next.matchId);
       setMatchPlayerId(next.matchPlayerId);
       setMatchSide(next.matchSide);
+      setShotSide(next.shotSide);
+      setShotPlayerId(next.shotPlayerId);
       setClubId(next.clubId);
       setPlayerId(next.playerId);
       if (next.metricCode) setMetricCode(next.metricCode);
@@ -752,11 +769,13 @@ export function App() {
       if (!matchId) {
         setMatchPlayerStats([]);
         setMatchTeamStats([]);
+        setMatchPlayerHeatmaps([]);
+        setMatchShots([]);
         return;
       }
       if (!hasSupabaseConfig || !supabase) return;
       setDetailLoading(true);
-      const [playersResult, teamsResult] = await Promise.all([
+      const [playersResult, teamsResult, heatmapsResult, shotsResult] = await Promise.all([
         supabase
           .from("api_match_player_stats")
           .select("*")
@@ -764,11 +783,15 @@ export function App() {
           .in("metric_code", matchPlayerMetrics)
           .limit(1000),
         supabase.from("api_match_team_stats").select("*").eq("match_id", matchId).limit(500),
+        supabase.from("api_match_player_heatmaps").select("*").eq("match_id", matchId).limit(100),
+        supabase.from("api_match_shots").select("*").eq("match_id", matchId).order("minute").limit(500),
       ]);
       const firstError = playersResult.error ?? teamsResult.error;
       if (firstError) setError(firstError.message);
       setMatchPlayerStats((playersResult.data ?? []) as MatchPlayerStat[]);
       setMatchTeamStats((teamsResult.data ?? []) as MatchTeamStat[]);
+      setMatchPlayerHeatmaps((heatmapsResult.data ?? []) as MatchPlayerHeatmap[]);
+      setMatchShots((shotsResult.data ?? []) as MatchShot[]);
       setDetailLoading(false);
     }
 
@@ -1406,6 +1429,8 @@ export function App() {
       matchId,
       matchPlayerId,
       matchSide,
+      shotSide,
+      shotPlayerId,
       clubId,
       playerId,
       metricCode,
@@ -1455,6 +1480,8 @@ export function App() {
     matchId,
     matchPlayerId,
     matchSide,
+    shotPlayerId,
+    shotSide,
     metricCode,
     playerHistoryRange,
     playerId,
@@ -1634,7 +1661,7 @@ export function App() {
             setRoundId={setRoundId}
             matches={roundMatches}
             selectedMatch={selectedMatch}
-            selectMatch={(id) => { setMatchId(id); setMatchPlayerId(""); setMatchSide("home"); }}
+            selectMatch={(id) => { setMatchId(id); setMatchPlayerId(""); setMatchSide("home"); setShotPlayerId("all"); }}
             matchSide={matchSide}
             setMatchSide={setMatchSide}
             selectedMatchPlayerId={matchPlayerId}
@@ -1643,6 +1670,12 @@ export function App() {
             seasonPlayers={players}
             metrics={metrics}
             comparisons={teamComparisons}
+            heatmaps={matchPlayerHeatmaps}
+            shots={matchShots}
+            shotSide={shotSide}
+            setShotSide={setShotSide}
+            shotPlayerId={shotPlayerId}
+            setShotPlayerId={setShotPlayerId}
             detailLoading={detailLoading}
             openPlayer={openPlayer}
           />
@@ -1897,6 +1930,12 @@ function MatchesView({
   seasonPlayers,
   metrics,
   comparisons,
+  heatmaps,
+  shots,
+  shotSide,
+  setShotSide,
+  shotPlayerId,
+  setShotPlayerId,
   detailLoading,
   openPlayer,
 }: {
@@ -1915,6 +1954,12 @@ function MatchesView({
   seasonPlayers: SeasonPlayer[];
   metrics: Metric[];
   comparisons: Array<{ code: string; label: string; home: number; away: number; valueType: string }>;
+  heatmaps: MatchPlayerHeatmap[];
+  shots: MatchShot[];
+  shotSide: ShotSideFilter;
+  setShotSide: (side: ShotSideFilter) => void;
+  shotPlayerId: string;
+  setShotPlayerId: (id: string) => void;
   detailLoading: boolean;
   openPlayer: (id: string) => void;
 }) {
@@ -1924,6 +1969,10 @@ function MatchesView({
   const NextIcon = language === "he" ? ChevronLeft : ChevronRight;
   const selectedMatchPlayer = players.find((player) => player.player_id === selectedMatchPlayerId);
   const selectedMatchSeasonPlayer = seasonPlayers.find((player) => player.player_id === selectedMatchPlayerId);
+  const selectedMatchHeatmap = heatmaps.find((heatmap) =>
+    heatmap.appearance_id === selectedMatchPlayer?.appearance_id
+    || heatmap.player_id === selectedMatchPlayerId
+  );
   useEffect(() => {
     if (!detailLoading && selectedMatchPlayerId && !selectedMatchPlayer) setSelectedMatchPlayerId("");
   }, [detailLoading, selectedMatchPlayer, selectedMatchPlayerId, setSelectedMatchPlayerId]);
@@ -1977,6 +2026,15 @@ function MatchesView({
                   {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} inspectPlayer={setSelectedMatchPlayerId} />}
                 </div>
               </div>
+              <MatchShotMap
+                match={selectedMatch}
+                shots={shots}
+                sideFilter={shotSide}
+                setSideFilter={setShotSide}
+                playerFilter={shotPlayerId}
+                setPlayerFilter={setShotPlayerId}
+                loading={detailLoading}
+              />
             </>
           ) : <EmptyState text={text.selectMatch} />}
         </section>
@@ -1986,6 +2044,7 @@ function MatchesView({
           match={selectedMatch}
           player={selectedMatchPlayer}
           seasonPlayer={selectedMatchSeasonPlayer}
+          heatmap={selectedMatchHeatmap}
           metrics={metrics}
           onClose={() => setSelectedMatchPlayerId("")}
           openPlayer={openPlayer}
@@ -2694,6 +2753,103 @@ function ComparisonBar({ label, home, away, valueType }: { label: string; home: 
   );
 }
 
+function MatchShotMap({
+  match,
+  shots,
+  sideFilter,
+  setSideFilter,
+  playerFilter,
+  setPlayerFilter,
+  loading,
+}: {
+  match: Match;
+  shots: MatchShot[];
+  sideFilter: ShotSideFilter;
+  setSideFilter: (side: ShotSideFilter) => void;
+  playerFilter: string;
+  setPlayerFilter: (id: string) => void;
+  loading: boolean;
+}) {
+  const { language, text } = useLocale();
+  const sideShots = shots.filter((shot) => sideFilter === "all" || shot.side === sideFilter);
+  const playerOptions = Array.from(new Map(
+    sideShots
+      .filter((shot) => shot.player_id)
+      .map((shot) => [shot.player_id as string, localizedShotPlayer(shot, language)]),
+  ).entries()).sort((left, right) => left[1].localeCompare(right[1], language));
+  const filteredShots = sideShots.filter((shot) => playerFilter === "all" || shot.player_id === playerFilter);
+  const outcomes = ["Goal", "Saved", "Blocked", "Missed", "Post"];
+
+  useEffect(() => {
+    if (playerFilter !== "all" && !playerOptions.some(([id]) => id === playerFilter)) setPlayerFilter("all");
+  }, [playerFilter, playerOptions, setPlayerFilter]);
+
+  return (
+    <section className="shot-map-panel">
+      <div className="shot-map-heading">
+        <SectionHeading eyebrow={text.spatialAnalysis} title={text.shotMap} />
+        <span>{filteredShots.length} {text.shots.toLowerCase()}</span>
+      </div>
+      <div className="shot-map-controls">
+        <div className="segmented compact-segmented" aria-label={text.team}>
+          <button className={sideFilter === "all" ? "active" : ""} type="button" onClick={() => setSideFilter("all")}>{text.allShots}</button>
+          <button className={sideFilter === "home" ? "active" : ""} type="button" onClick={() => setSideFilter("home")}>{localizedMatchTeam(match, "home", language)}</button>
+          <button className={sideFilter === "away" ? "active" : ""} type="button" onClick={() => setSideFilter("away")}>{localizedMatchTeam(match, "away", language)}</button>
+        </div>
+        <label className="shot-player-filter">
+          <span>{text.player}</span>
+          <select value={playerFilter} onChange={(event) => setPlayerFilter(event.target.value)}>
+            <option value="all">{text.allPlayers}</option>
+            {playerOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </label>
+      </div>
+      {loading ? <InlineLoading /> : shots.length ? (
+        <div className="shot-map-content">
+          <div className="shot-pitch" dir="ltr">
+            <span className="pitch-center-line" />
+            <span className="pitch-center-circle" />
+            <span className="pitch-box pitch-box-left" />
+            <span className="pitch-box pitch-box-right" />
+            <span className="pitch-six pitch-six-left" />
+            <span className="pitch-six pitch-six-right" />
+            <span className="pitch-goal pitch-goal-left" />
+            <span className="pitch-goal pitch-goal-right" />
+            <span className="attack-direction" title={text.attackingDirection}><ArrowRight size={15} aria-hidden="true" /></span>
+            {filteredShots.map((shot) => {
+              const xg = Number(shot.xg ?? 0);
+              const size = Math.min(22, 9 + Math.sqrt(Math.max(xg, 0)) * 16);
+              const playerName = localizedShotPlayer(shot, language);
+              const outcome = localizedShotOutcome(shot.outcome, text);
+              const label = `${playerName} · ${shot.event_time ?? shot.minute ?? "-"} · ${outcome} · xG ${xg.toFixed(2)}`;
+              return (
+                <button
+                  className={`shot-point ${shotOutcomeClass(shot.outcome)} ${shot.side ?? "unknown"}`}
+                  key={shot.event_id}
+                  type="button"
+                  style={{
+                    left: `${clampCoordinate(shot.x)}%`,
+                    top: `${clampCoordinate(shot.y)}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                  }}
+                  title={label}
+                  aria-label={label}
+                />
+              );
+            })}
+          </div>
+          <div className="shot-map-legend">
+            {outcomes.map((outcome) => (
+              <span key={outcome}><i className={shotOutcomeClass(outcome)} />{localizedShotOutcome(outcome, text)}</span>
+            ))}
+          </div>
+        </div>
+      ) : <EmptyState text={text.noShotMap} />}
+    </section>
+  );
+}
+
 function PlayerMatchTable({
   players,
   seasonPlayers,
@@ -2741,6 +2897,7 @@ function PlayerMatchInspector({
   match,
   player,
   seasonPlayer,
+  heatmap,
   metrics,
   onClose,
   openPlayer,
@@ -2748,6 +2905,7 @@ function PlayerMatchInspector({
   match: Match;
   player: PlayerPivot;
   seasonPlayer?: SeasonPlayer;
+  heatmap?: MatchPlayerHeatmap;
   metrics: Metric[];
   onClose: () => void;
   openPlayer: (id: string) => void;
@@ -2830,6 +2988,12 @@ function PlayerMatchInspector({
           <span><small>{text.match}</small><strong>{formatScore(match.home_score, match.away_score)}</strong></span>
         </div>
         <div className="match-player-dialog-body">
+          {heatmap?.heatmap_url ? (
+            <section className="player-heatmap-panel">
+              <h3>{text.playerHeatmap}</h3>
+              <div><img src={heatmap.heatmap_url} alt={`${displayName} · ${text.playerHeatmap}`} /></div>
+            </section>
+          ) : null}
           {loading ? <InlineLoading /> : loadError ? <EmptyState text={loadError} /> : attributeGroups.length ? attributeGroups.map((group) => (
             <section className="match-attribute-group" key={group.category}>
               <h3>{categoryName(group.category, language)}</h3>
@@ -3123,6 +3287,31 @@ function ratioComponentLabel(code: string | null | undefined, language: Language
 
 function humanizeMetricCode(code: string) {
   return code.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function localizedShotPlayer(shot: MatchShot, language: Language) {
+  return language === "he" ? shot.display_name_he || shot.display_name || textByLanguage.he.unknownPlayer : shot.display_name || textByLanguage.en.unknownPlayer;
+}
+
+function localizedShotOutcome(
+  outcome: string | null,
+  text: Pick<ReturnType<typeof useLocale>["text"], "shotGoal" | "shotSaved" | "shotBlocked" | "shotMissed" | "shotPost">,
+) {
+  if (outcome === "Goal") return text.shotGoal;
+  if (outcome === "Saved") return text.shotSaved;
+  if (outcome === "Blocked") return text.shotBlocked;
+  if (outcome === "Missed") return text.shotMissed;
+  if (outcome === "Post") return text.shotPost;
+  return outcome ?? "-";
+}
+
+function shotOutcomeClass(outcome: string | null) {
+  return `outcome-${(outcome ?? "unknown").toLowerCase().replace(/[^a-z]+/g, "-")}`;
+}
+
+function clampCoordinate(value: number | null) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.min(98.5, Math.max(1.5, numeric)) : 50;
 }
 
 function specificPositionDetail(position?: string | null): PlayerPositionDetail | null {

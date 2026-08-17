@@ -30,6 +30,7 @@ try:
         competition_seasons,
         ensure_dir,
         flatten_player_match_rows,
+        flatten_shot_events,
         flatten_team_stats,
         game_date,
         game_is_in_window,
@@ -57,6 +58,7 @@ except ImportError:
         competition_seasons,
         ensure_dir,
         flatten_player_match_rows,
+        flatten_shot_events,
         flatten_team_stats,
         game_date,
         game_is_in_window,
@@ -619,9 +621,16 @@ def main() -> int:
         all_player_rows,
         {int(row["athlete_id"]) for row in roster_rows},
     )
+    legionnaire_ids = {str(row["athlete_id"]) for row in roster_rows}
+    shot_rows = [
+        row
+        for row in flatten_shot_events(details)
+        if str(row.get("player_source_id") or "") in legionnaire_ids
+    ]
     team_stat_rows = flatten_team_stats(stats)
     write_csv(args.processed_dir / "365scores_fixtures.csv", fixture_rows)
     write_csv(args.processed_dir / "365scores_player_match_stats.csv", player_rows)
+    write_csv(args.processed_dir / "365scores_shot_events.csv", shot_rows)
     write_csv(args.processed_dir / "365scores_team_match_stats.csv", team_stat_rows)
     write_csv(args.processed_dir / "365scores_legionnaires.csv", roster_rows)
 
@@ -633,6 +642,7 @@ def main() -> int:
         "fixture_count": len(fixture_rows),
         "match_detail_count": len(details),
         "player_match_row_count": len(player_rows),
+        "shot_event_count": len(shot_rows),
         "team_stat_row_count": len(team_stat_rows),
         "legionnaire_count": len(roster_rows),
         "player_stat_keys": stat_names,

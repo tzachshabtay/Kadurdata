@@ -247,3 +247,47 @@ export type MatchTeamStat = {
   value_numeric: number | null;
   raw_value: string | null;
 };
+
+export type MatchPlayerHeatmap = {
+  match_id: string;
+  appearance_id: string;
+  player_id: string;
+  display_name: string;
+  display_name_he: string | null;
+  team_id: string;
+  team_name: string;
+  team_name_he: string | null;
+  heatmap_url: string;
+  source_id: string;
+  source_code: string;
+  source_name: string;
+  observed_at: string;
+};
+
+export type MatchShot = {
+  match_id: string;
+  event_id: string;
+  source_event_id: string | null;
+  minute: number | null;
+  event_time: string | null;
+  team_id: string | null;
+  team_name: string | null;
+  team_name_he: string | null;
+  side: "home" | "away" | null;
+  player_id: string | null;
+  display_name: string | null;
+  display_name_he: string | null;
+  x: number | null;
+  y: number | null;
+  xg: number | null;
+  xgot: number | null;
+  outcome: string | null;
+  body_part: string | null;
+  situation: string | null;
+  goal_mouth_x: number | null;
+  goal_mouth_y: number | null;
+  goal_description: string | null;
+  source_id: string;
+  source_code: string;
+  source_name: string;
+};
