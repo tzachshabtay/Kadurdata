@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -26,6 +26,7 @@ import {
   YAxis,
 } from "recharts";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
+import { renderSeasonHeatmap } from "./lib/seasonHeatmap";
 import {
   LocaleContext,
   categoryName,
@@ -54,6 +55,7 @@ import type {
   Metric,
   PlayerLeaderboardRow,
   PlayerHistory,
+  PlayerSeasonHeatmap,
   Round,
   Season,
   SeasonPlayer,
@@ -478,6 +480,7 @@ export function App() {
   const [matchPlayerStats, setMatchPlayerStats] = useState<MatchPlayerStat[]>([]);
   const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
   const [matchPlayerHeatmaps, setMatchPlayerHeatmaps] = useState<MatchPlayerHeatmap[]>([]);
+  const [playerSeasonHeatmaps, setPlayerSeasonHeatmaps] = useState<PlayerSeasonHeatmap[]>([]);
   const [matchShots, setMatchShots] = useState<MatchShot[]>([]);
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
@@ -521,6 +524,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [playerHeatmapLoading, setPlayerHeatmapLoading] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [squadLeaderboardLoading, setSquadLeaderboardLoading] = useState(false);
@@ -848,6 +852,54 @@ export function App() {
     void loadPlayerDetail();
     return () => { cancelled = true; };
   }, [competitionId, playerId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPlayerSeasonHeatmaps() {
+      if (!playerId || !seasonId) {
+        setPlayerSeasonHeatmaps([]);
+        setPlayerHeatmapLoading(false);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) {
+        setPlayerSeasonHeatmaps([]);
+        setPlayerHeatmapLoading(false);
+        return;
+      }
+
+      setPlayerHeatmapLoading(true);
+      let result = await supabase
+        .from("api_player_season_heatmaps")
+        .select("*")
+        .eq("season_id", seasonId)
+        .eq("player_id", playerId)
+        .order("scheduled_at")
+        .limit(100);
+
+      if (isSchemaCacheMiss(result.error)) {
+        const matchById = new Map(matches.map((match) => [match.match_id, match]));
+        const fallback = await supabase
+          .from("api_match_player_heatmaps")
+          .select("*")
+          .eq("player_id", playerId)
+          .limit(500);
+        result = {
+          ...fallback,
+          data: (fallback.data ?? []).flatMap((row) => {
+            const match = matchById.get(row.match_id);
+            return match ? [{ ...row, season_id: seasonId, scheduled_at: match.scheduled_at, minutes_played: null }] : [];
+          }),
+        } as typeof result;
+      }
+      if (cancelled) return;
+      setPlayerSeasonHeatmaps((result.error ? [] : result.data ?? []) as PlayerSeasonHeatmap[]);
+      setPlayerHeatmapLoading(false);
+    }
+
+    void loadPlayerSeasonHeatmaps();
+    return () => { cancelled = true; };
+  }, [matches, playerId, refreshToken, seasonId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1741,6 +1793,9 @@ export function App() {
             rankingError={explorerLeaderboardError}
             allPlayersCount={players.length}
             selectedPlayer={selectedPlayer}
+            season={currentSeason}
+            seasonHeatmaps={playerSeasonHeatmaps}
+            seasonHeatmapLoading={playerHeatmapLoading}
             selectPlayer={setPlayerId}
             roles={roleFilters}
             roleFilter={roleFilter}
@@ -2378,6 +2433,80 @@ function LegionnairesView({
   );
 }
 
+function SeasonHeatmapPanel({
+  appearances,
+  heatmaps,
+  loading,
+  playerName,
+  seasonName,
+}: {
+  appearances: number;
+  heatmaps: PlayerSeasonHeatmap[];
+  loading: boolean;
+  playerName: string;
+  seasonName: string;
+}) {
+  const { text } = useLocale();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [rendering, setRendering] = useState(false);
+  const [renderedMatches, setRenderedMatches] = useState(0);
+  const [renderFailed, setRenderFailed] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const controller = new AbortController();
+    setRenderFailed(false);
+    if (!canvas || !heatmaps.length) {
+      setRendering(false);
+      setRenderedMatches(0);
+      return () => controller.abort();
+    }
+
+    setRendering(true);
+    void renderSeasonHeatmap(canvas, heatmaps, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setRenderedMatches(result.matchCount);
+        setRenderFailed(result.matchCount === 0);
+        setRendering(false);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
+        setRenderedMatches(0);
+        setRenderFailed(true);
+        setRendering(false);
+      });
+
+    return () => controller.abort();
+  }, [heatmaps]);
+
+  const coverageTotal = Math.max(appearances, renderedMatches);
+  const showEmpty = !loading && (!heatmaps.length || renderFailed);
+  return (
+    <section className="season-heatmap-panel">
+      <header>
+        <div><span>{text.spatialAnalysis}</span><h3>{text.seasonHeatmap}</h3></div>
+        <div className="season-heatmap-meta">
+          <strong>{seasonName}</strong>
+          <span>{renderedMatches || heatmaps.length} / {coverageTotal || appearances} {text.heatmapMatches}</span>
+        </div>
+      </header>
+      {showEmpty ? <EmptyState text={text.noSeasonHeatmap} /> : (
+        <div className={`season-heatmap-frame${rendering || loading ? " loading" : ""}`}>
+          <canvas ref={canvasRef} role="img" aria-label={`${playerName} · ${text.seasonHeatmap} · ${seasonName}`} />
+          {(rendering || loading) && <span className="season-heatmap-loading"><Loader2 size={18} /> {text.calculatingSeasonHeatmap}</span>}
+        </div>
+      )}
+      {!showEmpty && !rendering && !loading && (
+        <footer>
+          <span>{text.positionDensity}</span>
+          <span className="season-heatmap-scale"><i /> <small>{text.low}</small><small>{text.high}</small></span>
+        </footer>
+      )}
+    </section>
+  );
+}
+
 function PlayersView({
   players,
   rankingRows,
@@ -2393,6 +2522,9 @@ function PlayersView({
   rankingError,
   allPlayersCount,
   selectedPlayer,
+  season,
+  seasonHeatmaps,
+  seasonHeatmapLoading,
   selectPlayer,
   roles,
   roleFilter,
@@ -2435,6 +2567,9 @@ function PlayersView({
   rankingError: string | null;
   allPlayersCount: number;
   selectedPlayer?: SeasonPlayer;
+  season: Season;
+  seasonHeatmaps: PlayerSeasonHeatmap[];
+  seasonHeatmapLoading: boolean;
   selectPlayer: (id: string) => void;
   roles: RoleFilter[];
   roleFilter: RoleFilter;
@@ -2599,6 +2734,13 @@ function PlayersView({
                 <Stat label={text.goalsAssists} value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} ${text.goals.toLowerCase()} · ${formatNumber(selectedPlayer.assists)} ${text.assists}`} />
                 <Stat label={metric?.name ?? text.average} value={summaryValue} note={summaryNote} accent />
               </section>
+              <SeasonHeatmapPanel
+                appearances={Number(selectedPlayer.appearances)}
+                heatmaps={seasonHeatmaps}
+                loading={seasonHeatmapLoading}
+                playerName={localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)}
+                seasonName={season.season_name}
+              />
               <section className="player-attributes">
                 <div className="attribute-heading">
                   <div><span>{text.playerAttributes}</span><h3>{metrics.length} {text.chartableMetrics}</h3></div>

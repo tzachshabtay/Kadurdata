@@ -264,6 +264,12 @@ export type MatchPlayerHeatmap = {
   observed_at: string;
 };
 
+export type PlayerSeasonHeatmap = MatchPlayerHeatmap & {
+  season_id: string;
+  scheduled_at: string | null;
+  minutes_played: number | null;
+};
+
 export type MatchShot = {
   match_id: string;
   event_id: string;
