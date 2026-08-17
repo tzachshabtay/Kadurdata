@@ -770,7 +770,7 @@ export function App() {
 
   useEffect(() => {
     async function loadMatchDetail() {
-      if (!matchId) {
+      if (view !== "matches" || !matchId) {
         setMatchPlayerStats([]);
         setMatchTeamStats([]);
         setMatchPlayerHeatmaps([]);
@@ -800,13 +800,13 @@ export function App() {
     }
 
     void loadMatchDetail();
-  }, [matchId]);
+  }, [matchId, view]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPlayerDetail() {
-      if (!competitionId || !playerId) {
+      if (view !== "players" || !competitionId || !playerId) {
         setPlayerHistory([]);
         setDetailLoading(false);
         return;
@@ -851,13 +851,13 @@ export function App() {
 
     void loadPlayerDetail();
     return () => { cancelled = true; };
-  }, [competitionId, playerId]);
+  }, [competitionId, playerId, view]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPlayerSeasonHeatmaps() {
-      if (!playerId || !seasonId) {
+      if (view !== "players" || !playerId || !seasonId) {
         setPlayerSeasonHeatmaps([]);
         setPlayerHeatmapLoading(false);
         return;
@@ -899,13 +899,13 @@ export function App() {
 
     void loadPlayerSeasonHeatmaps();
     return () => { cancelled = true; };
-  }, [matches, playerId, refreshToken, seasonId]);
+  }, [matches, playerId, refreshToken, seasonId, view]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadLeaderboard() {
-      if (!seasonId || !leaderMetricCode) {
+      if (view !== "overview" || !seasonId || !leaderMetricCode) {
         setLeaderboardRows([]);
         return;
       }
@@ -942,7 +942,7 @@ export function App() {
 
     void loadLeaderboard();
     return () => { cancelled = true; };
-  }, [leaderMetricCode, leaderRatingMinimumMinutes, players, seasonId]);
+  }, [leaderMetricCode, leaderRatingMinimumMinutes, players, seasonId, view]);
 
   useEffect(() => {
     let cancelled = false;
