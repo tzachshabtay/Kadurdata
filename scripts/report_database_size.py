@@ -110,16 +110,36 @@ def main() -> int:
 
             cur.execute(
                 """
+                with facts as (
+                  select
+                    source.code as source_code,
+                    'player_match'::text as subject_type,
+                    stats.metric_count,
+                    appearance.match_id,
+                    appearance.player_id
+                  from obs.player_match_stats stats
+                  join source.sources source on source.id = stats.source_id
+                  join core.player_match_appearances appearance on appearance.id = stats.appearance_id
+                  union all
+                  select
+                    source.code,
+                    'team_match'::text,
+                    stats.metric_count,
+                    match_team.match_id,
+                    null::uuid
+                  from obs.team_match_stats stats
+                  join source.sources source on source.id = stats.source_id
+                  join core.match_teams match_team on match_team.id = stats.match_team_id
+                )
                 select
-                  source.code,
-                  observation.subject_type,
-                  count(*) as observations,
-                  count(distinct observation.match_id) as matches,
-                  count(distinct observation.player_id) as players,
-                  count(distinct observation.metric_id) as metrics
-                from obs.stat_observations observation
-                join source.sources source on source.id = observation.source_id
-                group by source.code, observation.subject_type
+                  source_code,
+                  subject_type,
+                  sum(metric_count) as observations,
+                  count(distinct match_id) as matches,
+                  count(distinct player_id) as players,
+                  null::bigint as metrics
+                from facts
+                group by source_code, subject_type
                 order by observations desc
                 """
             )
@@ -132,51 +152,27 @@ def main() -> int:
             cur.execute(
                 """
                 select
-                  count(*) as observations,
-                  round(avg(pg_column_size(observation)), 1) as average_row_bytes,
-                  pg_size_pretty(sum(pg_column_size(observation))) as logical_row_size,
-                  round(avg(length(observation.source_metric_name)), 1) as average_metric_name_chars,
-                  round(avg(length(observation.raw_value)), 1) as average_raw_value_chars
-                from obs.stat_observations observation
-                """
-            )
-            print("\nStat observation row payload")
-            print_table(
-                ("observations", "avg row bytes", "logical rows", "avg metric chars", "avg raw chars"),
-                cur.fetchall(),
-            )
-
-            cur.execute(
-                """
-                with packed_facts as (
-                  select
-                    observation.subject_type,
-                    observation.source_id,
-                    observation.subject_id,
-                    count(*) as metric_count,
-                    pg_column_size(
-                      array_agg(observation.value_numeric order by observation.metric_id)
-                    ) as packed_numeric_bytes
-                  from obs.stat_observations observation
-                  group by
-                    observation.subject_type,
-                    observation.source_id,
-                    observation.subject_id
-                )
-                select
-                  subject_type,
+                  'player_match'::text as subject,
                   count(*) as fact_rows,
                   sum(metric_count) as observations,
                   round(avg(metric_count), 1) as average_metrics,
                   max(metric_count) as maximum_metrics,
-                  round(avg(packed_numeric_bytes), 1) as average_packed_numeric_bytes,
-                  pg_size_pretty(sum(packed_numeric_bytes)) as packed_numeric_size
-                from packed_facts
-                group by subject_type
-                order by fact_rows desc
+                  round(avg(pg_column_size(stats)), 1) as average_row_bytes,
+                  pg_size_pretty(sum(pg_column_size(stats))) as logical_row_size
+                from obs.player_match_stats stats
+                union all
+                select
+                  'team_match'::text,
+                  count(*),
+                  sum(metric_count),
+                  round(avg(metric_count), 1),
+                  max(metric_count),
+                  round(avg(pg_column_size(stats)), 1),
+                  pg_size_pretty(sum(pg_column_size(stats)))
+                from obs.team_match_stats stats
                 """
             )
-            print("\nPacked fact density")
+            print("\nWide stat fact density")
             print_table(
                 (
                     "subject",
@@ -184,8 +180,8 @@ def main() -> int:
                     "observations",
                     "avg metrics",
                     "max metrics",
-                    "avg numeric bytes",
-                    "numeric payload",
+                    "avg row bytes",
+                    "logical rows",
                 ),
                 cur.fetchall(),
             )

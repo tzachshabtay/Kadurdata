@@ -207,7 +207,15 @@ def main() -> int:
                 )
                 conn.commit()
                 season_players = player_groups.get(season_num, [])
-                load_player_rows(conn, cur, source_id, season_id, season_players, indexes)
+                load_player_rows(
+                    conn,
+                    cur,
+                    source_id,
+                    country_id,
+                    season_id,
+                    season_players,
+                    indexes,
+                )
                 conn.commit()
                 print(
                     f"loaded FotMob {manifest_season(manifest, season_num).get('name', season_num)}: "

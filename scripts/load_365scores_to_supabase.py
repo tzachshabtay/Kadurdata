@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -28,24 +29,6 @@ COUNTRY_ISRAEL = {"name": "Israel", "iso2": "IL", "iso3": "ISR"}
 COMPETITION_SOURCE_ID = "42"
 COMPETITION_NAME = "Israeli Premier League"
 STAT_BATCH_SIZE = 1000
-STAT_OBSERVATION_SQL = """
-insert into obs.stat_observations (
-  source_id, metric_id, subject_type, subject_id, match_id, team_id,
-  player_id, season_id, source_subject_id, source_metric_name,
-  value_numeric, raw_value
-)
-values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-on conflict (source_id, subject_type, subject_id, metric_id) do update
-  set match_id = excluded.match_id,
-      team_id = excluded.team_id,
-      player_id = excluded.player_id,
-      season_id = excluded.season_id,
-      source_subject_id = excluded.source_subject_id,
-      source_metric_name = excluded.source_metric_name,
-      value_numeric = excluded.value_numeric,
-      raw_value = excluded.raw_value,
-      observed_at = now()
-"""
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -731,129 +714,122 @@ def upsert_appearance(
     return appearance["id"]
 
 
-def replace_stat_observation(
+def ensure_wide_metric_columns(
     cur: psycopg.Cursor,
-    source_id: str,
-    metric_id: str,
     subject_type: str,
-    subject_id: str,
-    source_subject_id: str,
-    source_metric_name: str,
-    value: Optional[float],
-    raw_value: Optional[str],
-    match_id: Optional[str] = None,
-    team_id: Optional[str] = None,
-    player_id: Optional[str] = None,
-    season_id: Optional[str] = None,
-) -> None:
-    if value is None and raw_value is None:
-        return
-    cur.execute(STAT_OBSERVATION_SQL, stat_observation_params(
-        source_id,
-        metric_id,
-        subject_type,
-        subject_id,
-        source_subject_id,
-        source_metric_name,
-        value,
-        raw_value,
-        match_id,
-        team_id,
-        player_id,
-        season_id,
-    ))
+    metric_codes: Iterable[str],
+) -> list[str]:
+    table_name = "player_match_stats" if subject_type == "player_match" else "team_match_stats"
+    base_columns = {
+        "source_id",
+        "appearance_id",
+        "match_team_id",
+        "metric_count",
+        "observed_at",
+    }
+    requested = sorted(set(metric_codes))
+    for code in requested:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", code):
+            raise ValueError(f"invalid metric code for a database column: {code}")
 
-
-def stat_observation_params(
-    source_id: str,
-    metric_id: str,
-    subject_type: str,
-    subject_id: str,
-    source_subject_id: str,
-    source_metric_name: str,
-    value: Optional[float],
-    raw_value: Optional[str],
-    match_id: Optional[str] = None,
-    team_id: Optional[str] = None,
-    player_id: Optional[str] = None,
-    season_id: Optional[str] = None,
-) -> Optional[tuple[Any, ...]]:
-    if value is None and raw_value is None:
-        return None
-    return (
-        source_id,
-        metric_id,
-        subject_type,
-        subject_id,
-        match_id,
-        team_id,
-        player_id,
-        season_id,
-        source_subject_id,
-        source_metric_name,
-        value,
-        raw_value,
-    )
-
-
-def flush_stat_batch(cur: psycopg.Cursor, batch: list[tuple[Any, ...]]) -> int:
-    if not batch:
-        return 0
     cur.execute(
         """
-        create temp table if not exists stat_observation_stage (
+        select column_name
+        from information_schema.columns
+        where table_schema = 'obs' and table_name = %s
+        """,
+        (table_name,),
+    )
+    existing = {row["column_name"] for row in cur.fetchall()}
+    missing = [code for code in requested if code not in existing]
+    for code in missing:
+        cur.execute(
+            sql.SQL("alter table {} add column if not exists {} numeric(18,6)").format(
+                sql.Identifier("obs", table_name),
+                sql.Identifier(code),
+            )
+        )
+    if missing:
+        cur.execute("select obs.refresh_stat_values_view()")
+    return sorted((existing | set(missing)) - base_columns)
+
+
+def flush_wide_stat_batch(
+    cur: psycopg.Cursor,
+    subject_type: str,
+    batch: list[tuple[str, str, dict[str, float]]],
+) -> int:
+    if not batch:
+        return 0
+
+    table_name = "player_match_stats" if subject_type == "player_match" else "team_match_stats"
+    subject_column = "appearance_id" if subject_type == "player_match" else "match_team_id"
+    requested_codes = {code for _, _, metrics in batch for code in metrics}
+    metric_codes = ensure_wide_metric_columns(cur, subject_type, requested_codes)
+
+    cur.execute(
+        """
+        create temp table if not exists wide_stat_stage (
           source_id uuid not null,
-          metric_id uuid not null,
-          subject_type text not null,
-          subject_id uuid,
-          match_id uuid,
-          team_id uuid,
-          player_id uuid,
-          season_id uuid,
-          source_subject_id text,
-          source_metric_name text,
-          value_numeric numeric(18,6),
-          raw_value text
+          subject_id uuid not null,
+          metrics jsonb not null
         ) on commit preserve rows
         """
     )
-    cur.execute("truncate stat_observation_stage")
-    with cur.copy(
-        """
-        copy stat_observation_stage (
-          source_id, metric_id, subject_type, subject_id, match_id, team_id,
-          player_id, season_id, source_subject_id, source_metric_name,
-          value_numeric, raw_value
-        ) from stdin
-        """
-    ) as copy:
-        for row in batch:
-            copy.write_row(row)
-    cur.execute(
-        """
-        insert into obs.stat_observations (
-          source_id, metric_id, subject_type, subject_id, match_id, team_id,
-          player_id, season_id, source_subject_id, source_metric_name,
-          value_numeric, raw_value
-        )
-        select
-          source_id, metric_id, subject_type, subject_id, match_id, team_id,
-          player_id, season_id, source_subject_id, source_metric_name,
-          value_numeric, raw_value
-        from stat_observation_stage
-        on conflict (source_id, subject_type, subject_id, metric_id) do update
-          set match_id = excluded.match_id,
-              team_id = excluded.team_id,
-              player_id = excluded.player_id,
-              season_id = excluded.season_id,
-              source_subject_id = excluded.source_subject_id,
-              source_metric_name = excluded.source_metric_name,
-              value_numeric = excluded.value_numeric,
-              raw_value = excluded.raw_value,
-              observed_at = now()
-        """
+    cur.execute("truncate wide_stat_stage")
+    with cur.copy("copy wide_stat_stage (source_id, subject_id, metrics) from stdin") as copy:
+        for source_id, subject_id, metrics in batch:
+            copy.write_row((source_id, subject_id, Jsonb(metrics)))
+
+    metric_identifiers = [sql.Identifier(code) for code in metric_codes]
+    insert_columns = sql.SQL(", ").join(
+        [
+            sql.Identifier("source_id"),
+            sql.Identifier(subject_column),
+            sql.Identifier("metric_count"),
+            sql.Identifier("observed_at"),
+            *metric_identifiers,
+        ]
     )
-    count = len(batch)
+    selected_values = sql.SQL(", ").join(
+        [
+            sql.Identifier("source_id"),
+            sql.Identifier("subject_id"),
+            sql.SQL("jsonb_object_length(metrics)"),
+            sql.SQL("now()"),
+            *[
+                sql.SQL("(metrics ->> {})::numeric(18,6)").format(sql.Literal(code))
+                for code in metric_codes
+            ],
+        ]
+    )
+    updates = sql.SQL(", ").join(
+        [
+            sql.SQL("metric_count = excluded.metric_count"),
+            sql.SQL("observed_at = excluded.observed_at"),
+            *[
+                sql.SQL("{} = excluded.{}").format(identifier, identifier)
+                for identifier in metric_identifiers
+            ],
+        ]
+    )
+    cur.execute(
+        sql.SQL(
+            """
+            insert into {} ({})
+            select {} from wide_stat_stage
+            on conflict (source_id, {}) do update set {}
+            """
+        ).format(
+            sql.Identifier("obs", table_name),
+            insert_columns,
+            selected_values,
+            sql.Identifier(subject_column),
+            updates,
+        )
+    )
+
+    count = sum(len(metrics) for _, _, metrics in batch)
     batch.clear()
     return count
 
@@ -1304,10 +1280,11 @@ def load_player_rows(
     indexes: dict[str, Any],
 ) -> None:
     valid_rows = valid_player_rows(rows, indexes)
-    metric_ids = ensure_metrics(cur, collect_player_stat_metric_specs([item["row"] for item in valid_rows]))
+    metric_specs = collect_player_stat_metric_specs([item["row"] for item in valid_rows])
+    ensure_metrics(cur, metric_specs)
     player_ids = ensure_players(cur, source_id, israel_country_id, valid_rows)
     appearance_ids = ensure_appearances(cur, source_id, valid_rows, player_ids)
-    stat_batch: list[tuple[Any, ...]] = []
+    stat_batch: list[tuple[str, str, dict[str, float]]] = []
     written_stats = 0
 
     print(
@@ -1323,100 +1300,37 @@ def load_player_rows(
         if not player_id or not appearance_id:
             continue
 
-        source_subject_id = f"{row['game_id']}:{player_source_id}:{row['team_id']}"
+        metrics: dict[str, float] = {}
         normalized_rating = rating_value(row.get("rating"))
         if normalized_rating is not None:
-            params = stat_observation_params(
-                source_id,
-                metric_ids["rating_365"],
-                "player_match",
-                appearance_id,
-                source_subject_id,
-                "365 rating",
-                normalized_rating,
-                row.get("rating"),
-                item["match_id"],
-                item["team_id"],
-                player_id,
-                season_id,
-            )
-            if params:
-                stat_batch.append(params)
+            metrics["rating_365"] = normalized_rating
 
         stat_bases = sorted({metric_from_stat_column(column) for column in row.keys() if metric_from_stat_column(column)})
         for base in stat_bases:
-            raw_value = empty_to_none(row.get(f"stat_{base}_raw"))
             value = to_float(row.get(f"stat_{base}_value"))
             attempted = to_float(row.get(f"stat_{base}_attempted"))
             percentage = to_float(row.get(f"stat_{base}_percentage"))
-            if raw_value is None and value is None and attempted is None and percentage is None:
-                continue
-
-            if value is not None or raw_value is not None:
-                params = stat_observation_params(
-                    source_id,
-                    metric_ids[base],
-                    "player_match",
-                    appearance_id,
-                    source_subject_id,
-                    base,
-                    value,
-                    raw_value,
-                    item["match_id"],
-                    item["team_id"],
-                    player_id,
-                    season_id,
-                )
-                if params:
-                    stat_batch.append(params)
+            if value is not None:
+                metrics[base] = value
 
             if attempted is not None:
-                attempted_code = attempted_metric_code(base)
-                params = stat_observation_params(
-                    source_id,
-                    metric_ids[attempted_code],
-                    "player_match",
-                    appearance_id,
-                    source_subject_id,
-                    f"{base}_attempted",
-                    attempted,
-                    raw_value,
-                    item["match_id"],
-                    item["team_id"],
-                    player_id,
-                    season_id,
-                )
-                if params:
-                    stat_batch.append(params)
+                metrics[attempted_metric_code(base)] = attempted
 
             if percentage is not None:
-                percentage_code = percentage_metric_code(base)
-                params = stat_observation_params(
-                    source_id,
-                    metric_ids[percentage_code],
-                    "player_match",
-                    appearance_id,
-                    source_subject_id,
-                    f"{base}_percentage",
-                    percentage,
-                    raw_value,
-                    item["match_id"],
-                    item["team_id"],
-                    player_id,
-                    season_id,
-                )
-                if params:
-                    stat_batch.append(params)
+                metrics[percentage_metric_code(base)] = percentage
+
+        if metrics:
+            stat_batch.append((source_id, appearance_id, metrics))
 
         if len(stat_batch) >= STAT_BATCH_SIZE:
-            written_stats += flush_stat_batch(cur, stat_batch)
+            written_stats += flush_wide_stat_batch(cur, "player_match", stat_batch)
         if index % 500 == 0:
-            written_stats += flush_stat_batch(cur, stat_batch)
+            written_stats += flush_wide_stat_batch(cur, "player_match", stat_batch)
             conn.commit()
-            print(f"processed {index}/{len(valid_rows)} player rows; wrote {written_stats} stat observations", flush=True)
+            print(f"processed {index}/{len(valid_rows)} player rows; wrote {written_stats} stat values", flush=True)
 
-    written_stats += flush_stat_batch(cur, stat_batch)
-    print(f"processed {len(valid_rows)} player rows; wrote {written_stats} player stat observations", flush=True)
+    written_stats += flush_wide_stat_batch(cur, "player_match", stat_batch)
+    print(f"processed {len(valid_rows)} player rows; wrote {written_stats} player stat values", flush=True)
 
 
 def event_minute(value: Any) -> Optional[int]:
@@ -1543,9 +1457,9 @@ def load_team_stats(
     rows: list[dict[str, str]],
     indexes: dict[str, Any],
 ) -> None:
-    metric_ids = ensure_metrics(cur, collect_team_stat_metric_specs(rows))
-    stat_batch: list[tuple[Any, ...]] = []
-    written_stats = 0
+    metric_specs = collect_team_stat_metric_specs(rows)
+    ensure_metrics(cur, metric_specs)
+    facts: dict[str, dict[str, float]] = {}
     for row in rows:
         match_id = indexes["matches"].get(row["game_id"])
         team_id = indexes["teams"].get(row["team_id"])
@@ -1553,27 +1467,22 @@ def load_team_stats(
         if not match_id or not team_id or not match_team_id or not row.get("stat_name"):
             continue
         code = team_metric_code(row["stat_name"])
-        value, raw = parse_team_stat_value(row.get("value", ""), row.get("value_percentage", ""))
-        params = stat_observation_params(
-            source_id,
-            metric_ids[code],
-            "team_match",
-            match_team_id,
-            f"{row['game_id']}:{row['team_id']}",
-            row["stat_name"],
-            value,
-            raw,
-            match_id=match_id,
-            team_id=team_id,
-            season_id=season_id,
-        )
-        if params:
-            stat_batch.append(params)
-        if len(stat_batch) >= STAT_BATCH_SIZE:
-            written_stats += flush_stat_batch(cur, stat_batch)
-    written_stats += flush_stat_batch(cur, stat_batch)
+        value, _ = parse_team_stat_value(row.get("value", ""), row.get("value_percentage", ""))
+        if value is not None:
+            facts.setdefault(match_team_id, {})[code] = value
+
+    stat_batch = [
+        (source_id, match_team_id, metrics)
+        for match_team_id, metrics in facts.items()
+        if metrics
+    ]
+    written_stats = 0
+    while stat_batch:
+        chunk = stat_batch[:STAT_BATCH_SIZE]
+        del stat_batch[:STAT_BATCH_SIZE]
+        written_stats += flush_wide_stat_batch(cur, "team_match", chunk)
     conn.commit()
-    print(f"processed {len(rows)} team-stat rows; wrote {written_stats} team stat observations", flush=True)
+    print(f"processed {len(rows)} team-stat rows; wrote {written_stats} team stat values", flush=True)
 
 
 def load_legionnaire_roster(
