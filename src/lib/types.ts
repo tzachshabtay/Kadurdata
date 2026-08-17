@@ -15,7 +15,7 @@ export type Competition = {
   season_count: number;
   latest_season_id: string | null;
   latest_season_name: string | null;
-  scope: "domestic" | "european_club" | "national_team" | "national_youth";
+  scope: "domestic" | "european_club" | "national_team" | "national_youth" | "foreign_club";
   gender: string;
   age_group: string;
   participant_type: string;
@@ -133,6 +133,12 @@ export type SeasonPlayer = {
   goals: number;
   assists: number;
   average_rating: number | null;
+};
+
+export type Legionnaire = SeasonPlayer & {
+  competition_name: string;
+  competition_name_he: string | null;
+  team_logo_url: string | null;
 };
 
 export type PlayerLeaderboardRow = {

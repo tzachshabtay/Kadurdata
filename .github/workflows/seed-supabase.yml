@@ -89,6 +89,36 @@ jobs:
       - name: Load Supabase
         run: python scripts/load_365scores_to_supabase.py
 
+      - name: Fetch and flatten legionnaire data
+        run: |
+          args=(
+            --allow-fetch-failures
+            --retries 4
+            --page-retries 1
+            --sleep 0.25
+            --workers 8
+          )
+          if [ "$SEED_MODE" = "fixtures" ]; then
+            args+=(--fixtures-only)
+          elif [ "$SEED_MODE" = "recent" ]; then
+            args+=(
+              --start-date "$(date -u -d '14 days ago' +%F)"
+              --end-date "$(date -u -d '370 days' +%F)"
+            )
+          else
+            args+=(
+              --start-date "$(date -u -d '900 days ago' +%F)"
+              --end-date "$(date -u -d '370 days' +%F)"
+            )
+          fi
+          if [ "${SEED_LIMIT:-0}" != "0" ]; then
+            args+=(--limit "$SEED_LIMIT" --max-fixture-pages 5)
+          fi
+          python scripts/ingest_legionnaires.py "${args[@]}"
+
+      - name: Load legionnaire data
+        run: python scripts/load_365scores_to_supabase.py --processed-dir data/processed/legionnaires
+
       - name: Populate Hebrew player names
         run: |
           python scripts/backfill_hebrew_player_names.py \

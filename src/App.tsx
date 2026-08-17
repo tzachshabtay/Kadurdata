@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Globe2,
   LayoutDashboard,
   ListFilter,
   Loader2,
@@ -43,6 +44,7 @@ import {
 import type {
   Club,
   Competition,
+  Legionnaire,
   Match,
   MatchPlayerStat,
   MatchTeamStat,
@@ -55,7 +57,7 @@ import type {
   TeamAsset,
 } from "./lib/types";
 
-type View = "overview" | "matches" | "clubs" | "players";
+type View = "overview" | "matches" | "clubs" | "players" | "legionnaires";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerHistoryRange = "latest" | "all";
 type ClubTournamentScope = "selected" | "all";
@@ -88,6 +90,11 @@ type DeepLinkState = {
   clubQuery: string;
   playerQuery: string;
   attributeQuery: string;
+  legionnaireSeasonName: string;
+  legionnaireMetricCode: string;
+  legionnaireMinimum: number | null;
+  legionnaireRatingMinimumMinutes: number;
+  legionnaireQuery: string;
 };
 type PlayerPivot = MatchPlayerStat & { values: Record<string, number> };
 type LeaderboardMetricOption = Pick<Metric, "code" | "name" | "value_type" | "denominator_metric_code"> & { kind: "season" | "match" };
@@ -191,6 +198,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }>
   { id: "matches", label: "Matches", icon: CalendarDays },
   { id: "clubs", label: "Clubs", icon: Shield },
   { id: "players", label: "Players", icon: Users },
+  { id: "legionnaires", label: "Legionnaires", icon: Globe2 },
 ];
 
 const demoCompetition: Competition = {
@@ -378,6 +386,11 @@ function readDeepLinkState(): DeepLinkState {
     clubQuery: params.get("clubSearch") ?? "",
     playerQuery: params.get("playerSearch") ?? "",
     attributeQuery: params.get("attributeSearch") ?? "",
+    legionnaireSeasonName: params.get("legionSeason") ?? "",
+    legionnaireMetricCode: params.get("legionMetric") ?? "season_minutes",
+    legionnaireMinimum: readNumber("legionMin", null),
+    legionnaireRatingMinimumMinutes: readNumber("legionRatingMin", 60) ?? 60,
+    legionnaireQuery: params.get("legionSearch") ?? "",
   };
 }
 
@@ -417,6 +430,11 @@ function writeDeepLinkState(state: DeepLinkState) {
   setString("clubSearch", state.clubQuery);
   setString("playerSearch", state.playerQuery);
   setString("attributeSearch", state.attributeQuery);
+  setString("legionSeason", state.legionnaireSeasonName);
+  setString("legionMetric", state.legionnaireMetricCode);
+  setNumber("legionMin", state.legionnaireMinimum);
+  setNumber("legionRatingMin", state.legionnaireRatingMinimumMinutes);
+  setString("legionSearch", state.legionnaireQuery);
 
   const search = params.size ? `?${params.toString()}` : "";
   window.history.replaceState(window.history.state, "", `${window.location.pathname}${search}#${state.view}`);
@@ -451,6 +469,8 @@ export function App() {
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [explorerLeaderboardRows, setExplorerLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
+  const [legionnaires, setLegionnaires] = useState<Legionnaire[]>([]);
+  const [legionnaireLeaderboardRows, setLegionnaireLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [competitionId, setCompetitionId] = useState(initialDeepLink.competitionId);
   const [seasonId, setSeasonId] = useState(initialDeepLink.seasonId);
   const [roundId, setRoundId] = useState(initialDeepLink.roundId);
@@ -477,6 +497,11 @@ export function App() {
   const [clubQuery, setClubQuery] = useState(initialDeepLink.clubQuery);
   const [playerQuery, setPlayerQuery] = useState(initialDeepLink.playerQuery);
   const [attributeQuery, setAttributeQuery] = useState(initialDeepLink.attributeQuery);
+  const [legionnaireSeasonName, setLegionnaireSeasonName] = useState(initialDeepLink.legionnaireSeasonName);
+  const [legionnaireMetricCode, setLegionnaireMetricCode] = useState(initialDeepLink.legionnaireMetricCode);
+  const [legionnaireMinimums, setLegionnaireMinimums] = useState<Record<string, number>>(() => minimumMap(initialDeepLink.legionnaireMetricCode, initialDeepLink.legionnaireMinimum));
+  const [legionnaireRatingMinimumMinutes, setLegionnaireRatingMinimumMinutes] = useState(initialDeepLink.legionnaireRatingMinimumMinutes);
+  const [legionnaireQuery, setLegionnaireQuery] = useState(initialDeepLink.legionnaireQuery);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -487,6 +512,10 @@ export function App() {
   const [squadLeaderboardError, setSquadLeaderboardError] = useState<string | null>(null);
   const [explorerLeaderboardLoading, setExplorerLeaderboardLoading] = useState(false);
   const [explorerLeaderboardError, setExplorerLeaderboardError] = useState<string | null>(null);
+  const [legionnaireLoading, setLegionnaireLoading] = useState(false);
+  const [legionnaireError, setLegionnaireError] = useState<string | null>(null);
+  const [legionnaireLeaderboardLoading, setLegionnaireLeaderboardLoading] = useState(false);
+  const [legionnaireLeaderboardError, setLegionnaireLeaderboardError] = useState<string | null>(null);
   const [allTournamentClubMatches, setAllTournamentClubMatches] = useState<Match[]>([]);
   const [allTournamentClubs, setAllTournamentClubs] = useState<Club[]>([]);
   const [allTournamentClubsLoading, setAllTournamentClubsLoading] = useState(false);
@@ -580,6 +609,11 @@ export function App() {
       setClubQuery(next.clubQuery);
       setPlayerQuery(next.playerQuery);
       setAttributeQuery(next.attributeQuery);
+      setLegionnaireSeasonName(next.legionnaireSeasonName);
+      setLegionnaireMetricCode(next.legionnaireMetricCode);
+      setLegionnaireMinimums((current) => applyMinimumToMap(current, next.legionnaireMetricCode, next.legionnaireMinimum));
+      setLegionnaireRatingMinimumMinutes(next.legionnaireRatingMinimumMinutes);
+      setLegionnaireQuery(next.legionnaireQuery);
     };
 
     window.addEventListener("popstate", restoreDeepLink);
@@ -598,6 +632,30 @@ export function App() {
     () => latestSeasonWithData(availableSeasons),
     [availableSeasons],
   );
+  const legionnaireSeasonOptions = useMemo(() => {
+    const foreignCompetitionIds = new Set(competitions
+      .filter((competition) => competition.scope === "foreign_club")
+      .map((competition) => competition.competition_id));
+    const grouped = new Map<string, { name: string; latestAt: number; hasData: boolean }>();
+    seasons
+      .filter((season) => foreignCompetitionIds.has(season.competition_id))
+      .forEach((season) => {
+        const current = grouped.get(season.season_name);
+        const latestAt = Math.max(dateValue(season.latest_match_at), dateValue(season.start_date));
+        grouped.set(season.season_name, {
+          name: season.season_name,
+          latestAt: Math.max(current?.latestAt ?? 0, latestAt),
+          hasData: Boolean(current?.hasData || Number(season.player_count) > 0 || Number(season.completed_match_count) > 0),
+        });
+      });
+    return [...grouped.values()].sort((a, b) => Number(b.hasData) - Number(a.hasData) || b.latestAt - a.latestAt);
+  }, [competitions, seasons]);
+
+  useEffect(() => {
+    if (loading || !legionnaireSeasonOptions.length) return;
+    if (legionnaireSeasonOptions.some((season) => season.name === legionnaireSeasonName)) return;
+    setLegionnaireSeasonName(legionnaireSeasonOptions[0].name);
+  }, [legionnaireSeasonName, legionnaireSeasonOptions, loading]);
 
   useEffect(() => {
     if (loading || !competitionId || !availableSeasons.length || availableSeasons.some((season) => season.season_id === seasonId)) return;
@@ -891,6 +949,45 @@ export function App() {
     return () => { cancelled = true; };
   }, [explorerMetricCode, explorerRatingMinimumMinutes, players, seasonId, view]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLegionnaires() {
+      if (view !== "legionnaires" || !legionnaireSeasonName) return;
+      setLegionnaireLoading(true);
+      setLegionnaireError(null);
+
+      if (!hasSupabaseConfig || !supabase) {
+        setLegionnaires(demoPlayers.map((player) => ({
+          ...player,
+          competition_name: "Eredivisie",
+          competition_name_he: null,
+          team_logo_url: null,
+        })));
+        setLegionnaireLoading(false);
+        return;
+      }
+
+      let result = await supabase.rpc("api_legionnaires", { p_season_name: legionnaireSeasonName });
+      for (const delayMs of [500, 1500, 3000]) {
+        if (!isSchemaCacheMiss(result.error)) break;
+        await delay(delayMs);
+        result = await supabase.rpc("api_legionnaires", { p_season_name: legionnaireSeasonName });
+      }
+      if (cancelled) return;
+      if (result.error) {
+        setLegionnaireError(result.error.message);
+        setLegionnaires([]);
+      } else {
+        setLegionnaires((result.data ?? []) as Legionnaire[]);
+      }
+      setLegionnaireLoading(false);
+    }
+
+    void loadLegionnaires();
+    return () => { cancelled = true; };
+  }, [legionnaireSeasonName, refreshToken, view]);
+
   const currentCompetition = competitions.find((competition) => competition.competition_id === competitionId);
   const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
   const currentRound = rounds.find((round) => round.round_id === roundId);
@@ -1100,13 +1197,94 @@ export function App() {
     if (explorerLeaderboardMetrics.some((metric) => metric.code === explorerMetricCode)) return;
     setExplorerMetricCode("season_minutes");
   }, [explorerLeaderboardMetrics, explorerMetricCode, loading, metrics.length]);
+  useEffect(() => {
+    if (loading || !metrics.length) return;
+    if (leaderboardMetrics.some((metric) => metric.code === legionnaireMetricCode)) return;
+    setLegionnaireMetricCode("season_minutes");
+  }, [leaderboardMetrics, legionnaireMetricCode, loading, metrics.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLegionnaireLeaderboard() {
+      if (view !== "legionnaires" || !legionnaireSeasonName || !legionnaireMetricCode) return;
+      setLegionnaireLeaderboardLoading(true);
+      setLegionnaireLeaderboardError(null);
+
+      if (legionnaireMetricCode.startsWith("season_")) {
+        setLegionnaireLeaderboardRows(makeSeasonSummaryLeaderboard(
+          legionnaires,
+          legionnaires[0]?.season_id ?? legionnaireSeasonName,
+          legionnaireMetricCode,
+        ));
+        setLegionnaireLeaderboardLoading(false);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) {
+        setLegionnaireLeaderboardRows(makeDemoLeaderboard(
+          legionnaires,
+          legionnaires[0]?.season_id ?? "demo-season",
+          legionnaireMetricCode,
+        ));
+        setLegionnaireLeaderboardLoading(false);
+        return;
+      }
+
+      const result = await supabase.rpc("api_legionnaire_leaderboard", {
+        p_season_name: legionnaireSeasonName,
+        p_metric_code: leaderboardSourceMetricCode(legionnaireMetricCode),
+        p_min_minutes: isRatingMetricCode(legionnaireMetricCode) ? legionnaireRatingMinimumMinutes : 0,
+      });
+      if (cancelled) return;
+      if (result.error) {
+        setLegionnaireLeaderboardError(result.error.message);
+        setLegionnaireLeaderboardRows([]);
+      } else {
+        setLegionnaireLeaderboardRows(prepareLeaderboardRows(
+          (result.data ?? []) as PlayerLeaderboardRow[],
+          legionnaires,
+          legionnaireMetricCode,
+        ));
+      }
+      setLegionnaireLeaderboardLoading(false);
+    }
+
+    void loadLegionnaireLeaderboard();
+    return () => { cancelled = true; };
+  }, [legionnaireMetricCode, legionnaireRatingMinimumMinutes, legionnaireSeasonName, legionnaires, view]);
   const leaderQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === leaderMetricCode));
   const squadQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === squadMetricCode));
   const explorerQualification = getLeaderboardQualification(explorerLeaderboardMetrics.find((metric) => metric.code === explorerMetricCode));
+  const legionnaireQualification = getLeaderboardQualification(leaderboardMetrics.find((metric) => metric.code === legionnaireMetricCode));
   const leaderMinimum = leaderQualification ? leaderMinimums[leaderMetricCode] ?? leaderQualification.defaultValue : 0;
   const squadMinimum = squadQualification ? squadMinimums[squadMetricCode] ?? squadQualification.defaultValue : 0;
   const explorerMinimum = explorerQualification ? explorerMinimums[explorerMetricCode] ?? explorerQualification.defaultValue : 0;
+  const legionnaireMinimum = legionnaireQualification ? legionnaireMinimums[legionnaireMetricCode] ?? legionnaireQualification.defaultValue : 0;
   const qualifiedLeaderboardRows = filterLeaderboardRows(leaderboardRows, players, leaderQualification, leaderMinimum);
+  const filteredLegionnaires = useMemo(() => {
+    const query = legionnaireQuery.trim().toLowerCase();
+    return legionnaires.filter((player) => !query || [
+      player.display_name,
+      player.display_name_he,
+      player.team_name,
+      player.competition_name,
+      player.competition_name_he,
+      player.primary_position,
+      player.specific_position,
+    ].filter(Boolean).some((value) => value!.toLowerCase().includes(query)));
+  }, [legionnaireQuery, legionnaires]);
+  const filteredLegionnaireIds = new Set(filteredLegionnaires.map((player) => player.player_id));
+  const qualifiedLegionnaireRows = filterLeaderboardRows(
+    legionnaireLeaderboardRows.filter((row) => filteredLegionnaireIds.has(row.player_id)),
+    legionnaires,
+    legionnaireQualification,
+    legionnaireMinimum,
+  );
+  const legionnaireById = new Map(legionnaires.map((player) => [player.player_id, player]));
+  const rankedLegionnaires = qualifiedLegionnaireRows.flatMap((row) => {
+    const player = legionnaireById.get(row.player_id);
+    return player ? [{ player, ranking: row }] : [];
+  });
 
   const standings = useMemo(
     () => [...clubs].sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference),
@@ -1248,6 +1426,11 @@ export function App() {
       clubQuery,
       playerQuery,
       attributeQuery,
+      legionnaireSeasonName,
+      legionnaireMetricCode,
+      legionnaireMinimum,
+      legionnaireRatingMinimumMinutes,
+      legionnaireQuery,
     });
   }, [
     attributeQuery,
@@ -1263,6 +1446,11 @@ export function App() {
     leaderMetricCode,
     leaderMinimum,
     leaderRatingMinimumMinutes,
+    legionnaireMetricCode,
+    legionnaireMinimum,
+    legionnaireQuery,
+    legionnaireRatingMinimumMinutes,
+    legionnaireSeasonName,
     loading,
     matchId,
     matchPlayerId,
@@ -1304,6 +1492,13 @@ export function App() {
     navigate("players");
   }
 
+  function openLegionnaire(player: Legionnaire) {
+    setCompetitionId(player.competition_id);
+    setSeasonId(player.season_id);
+    setPlayerId(player.player_id);
+    navigate("players");
+  }
+
   function openClub(nextClubId: string) {
     setClubId(nextClubId);
     setClubTournamentScope("all");
@@ -1311,6 +1506,7 @@ export function App() {
   }
 
   const showingAllTournaments = view === "clubs" && clubTournamentScope === "all";
+  const showingLegionnaires = view === "legionnaires";
 
   return (
     <LocaleContext.Provider value={{ language, text }}>
@@ -1348,12 +1544,13 @@ export function App() {
         <div className="context-bar">
           <div className="context-copy">
             <span>{text.viewing}</span>
-            <strong>{showingAllTournaments ? text.allTournaments : localizedCompetition(competitions.find((item) => item.competition_id === competitionId), language)}</strong>
+            <strong>{showingLegionnaires ? text.allForeignLeagues : showingAllTournaments ? text.allTournaments : localizedCompetition(competitions.find((item) => item.competition_id === competitionId), language)}</strong>
           </div>
           <label className="context-select">
             <span>{text.competition}</span>
             <select
-              value={showingAllTournaments ? allTournamentsValue : competitionId}
+              value={showingLegionnaires ? "foreign-leagues" : showingAllTournaments ? allTournamentsValue : competitionId}
+              disabled={showingLegionnaires}
               onChange={(event) => {
                 if (event.target.value === allTournamentsValue) {
                   setClubTournamentScope("all");
@@ -1363,12 +1560,14 @@ export function App() {
                 setCompetitionId(event.target.value);
               }}
             >
-              {view === "clubs" && <option value={allTournamentsValue}>{text.allTournaments}</option>}
-              {([
+              {showingLegionnaires && <option value="foreign-leagues">{text.allForeignLeagues}</option>}
+              {!showingLegionnaires && view === "clubs" && <option value={allTournamentsValue}>{text.allTournaments}</option>}
+              {!showingLegionnaires && ([
                 ["domestic", text.domesticCompetitions],
                 ["european_club", text.europeanClubCompetitions],
                 ["national_team", text.nationalTeamCompetitions],
                 ["national_youth", text.nationalYouthCompetitions],
+                ["foreign_club", text.foreignLeagueCompetitions],
               ] as const).map(([scope, label]) => {
                 const scopedCompetitions = competitions.filter((competition) => (competition.scope || "domestic") === scope);
                 return scopedCompetitions.length ? (
@@ -1383,8 +1582,13 @@ export function App() {
           </label>
           <label className="context-select">
             <span>{text.season}</span>
-            <select value={seasonId} onChange={(event) => setSeasonId(event.target.value)}>
-              {availableSeasons.map((season) => (
+            <select
+              value={showingLegionnaires ? legionnaireSeasonName : seasonId}
+              onChange={(event) => showingLegionnaires ? setLegionnaireSeasonName(event.target.value) : setSeasonId(event.target.value)}
+            >
+              {showingLegionnaires ? legionnaireSeasonOptions.map((season, index) => (
+                <option key={season.name} value={season.name}>{season.name}{index === 0 ? ` · ${text.latest}` : ""}</option>
+              )) : availableSeasons.map((season) => (
                 <option key={season.season_id} value={season.season_id}>{season.season_name}{season.season_id === latestDataSeason?.season_id ? ` · ${text.latest}` : ""}</option>
               ))}
             </select>
@@ -1468,6 +1672,25 @@ export function App() {
             leaderboardError={squadLeaderboardError}
             openMatch={openMatch}
             openPlayer={openPlayer}
+          />
+        ) : view === "legionnaires" ? (
+          <LegionnairesView
+            seasonName={legionnaireSeasonName}
+            players={rankedLegionnaires}
+            totalPlayers={legionnaires.length}
+            metrics={leaderboardMetrics}
+            metricCode={legionnaireMetricCode}
+            setMetricCode={setLegionnaireMetricCode}
+            qualification={legionnaireQualification}
+            minimum={legionnaireMinimum}
+            setMinimum={(value) => setLegionnaireMinimums((current) => ({ ...current, [legionnaireMetricCode]: value }))}
+            ratingMinimumMinutes={legionnaireRatingMinimumMinutes}
+            setRatingMinimumMinutes={setLegionnaireRatingMinimumMinutes}
+            query={legionnaireQuery}
+            setQuery={setLegionnaireQuery}
+            loading={legionnaireLoading || legionnaireLeaderboardLoading}
+            error={legionnaireError ?? legionnaireLeaderboardError}
+            openPlayer={openLegionnaire}
           />
         ) : (
           <PlayersView
@@ -1976,6 +2199,113 @@ function LeaderboardQualificationFilter({
         </label>
       )}
     </div>
+  );
+}
+
+function LegionnairesView({
+  seasonName,
+  players,
+  totalPlayers,
+  metrics,
+  metricCode,
+  setMetricCode,
+  qualification,
+  minimum,
+  setMinimum,
+  ratingMinimumMinutes,
+  setRatingMinimumMinutes,
+  query,
+  setQuery,
+  loading,
+  error,
+  openPlayer,
+}: {
+  seasonName: string;
+  players: Array<{ player: Legionnaire; ranking: PlayerLeaderboardRow }>;
+  totalPlayers: number;
+  metrics: LeaderboardMetricOption[];
+  metricCode: string;
+  setMetricCode: (code: string) => void;
+  qualification: LeaderboardQualification | null;
+  minimum: number;
+  setMinimum: (value: number) => void;
+  ratingMinimumMinutes: number;
+  setRatingMinimumMinutes: (value: number) => void;
+  query: string;
+  setQuery: (value: string) => void;
+  loading: boolean;
+  error: string | null;
+  openPlayer: (player: Legionnaire) => void;
+}) {
+  const { language, text } = useLocale();
+  const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
+  const matchMetrics = metrics.filter((metric) => metric.kind === "match");
+  const selectedMetric = metrics.find((metric) => metric.code === metricCode);
+  return (
+    <>
+      <PageHeading
+        eyebrow={`${seasonName || text.latestSeasonWithData} · ${numberFormatter.format(totalPlayers)} ${text.legionnairesFound}`}
+        title={text.legionnairesTitle}
+        description={text.legionnairesDescription}
+      />
+      <section className="surface legionnaires-board">
+        <div className="legionnaires-toolbar">
+          <div>
+            <span>{text.playerLeaderboard}</span>
+            <h2>{selectedMetric?.name ?? text.performance}</h2>
+          </div>
+          <label className="search-field legionnaire-search">
+            <Search size={17} />
+            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.searchPlayers} />
+          </label>
+          <label className="player-ranking-select legionnaire-metric-select">
+            <span>{text.rankBy}</span>
+            <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
+              <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+              <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+            </select>
+          </label>
+        </div>
+        {qualification && (
+          <LeaderboardQualificationFilter
+            qualification={qualification}
+            minimum={minimum}
+            setMinimum={setMinimum}
+            qualifiedCount={players.length}
+            loading={loading}
+            ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null}
+            setRatingMinimumMinutes={setRatingMinimumMinutes}
+          />
+        )}
+        <div className="legionnaire-table" role="table">
+          <div className="legionnaire-table-head" role="row">
+            <span>#</span>
+            <span>{text.player}</span>
+            <span>{text.currentClub}</span>
+            <span>{text.league}</span>
+            <span>{selectedMetric?.name ?? text.value}</span>
+          </div>
+          <div className="legionnaire-table-body">
+            {loading ? <InlineLoading /> : error ? <EmptyState text={text.legionnaireLoadError} /> : players.length ? players.map(({ player, ranking }, index) => {
+              const displayName = localizedPlayerName(player, player.display_name, language);
+              const competitionName = language === "he" ? player.competition_name_he || player.competition_name : player.competition_name;
+              return (
+                <button className="legionnaire-row" key={player.player_id} type="button" onClick={() => openPlayer(player)}>
+                  <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="legionnaire-player">
+                    <span className="avatar">{initials(displayName)}</span>
+                    <span><strong>{displayName}</strong><small>{playerPositionDetail(player).code} · {numberFormatter.format(Number(player.minutes))} {text.minShort}</small></span>
+                  </span>
+                  <span className="legionnaire-club"><ClubBadge name={player.team_name ?? text.freeAgent} logoUrl={player.team_logo_url} size="small" /><strong>{player.team_name ?? text.freeAgent}</strong></span>
+                  <span className="legionnaire-league">{competitionName}</span>
+                  <span className="legionnaire-value"><strong>{formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value)}</strong><small>{explorerRankingSampleLabel(ranking, player, qualification, language)}</small></span>
+                </button>
+              );
+            }) : <EmptyState text={qualification ? text.noMinimumSamplePlayers : text.noLegionnaires} />}
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
 

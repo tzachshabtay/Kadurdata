@@ -1998,6 +1998,135 @@ tr:last-child td {
   gap: 16px;
 }
 
+.legionnaires-board {
+  overflow: hidden;
+}
+
+.legionnaires-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 300px) 230px;
+  align-items: end;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.legionnaires-toolbar > div > span {
+  color: var(--green);
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.legionnaires-toolbar h2 {
+  margin: 4px 0 0;
+  font-size: 19px;
+}
+
+.legionnaire-search {
+  width: 100%;
+}
+
+.legionnaire-metric-select select {
+  width: 100%;
+}
+
+.legionnaires-board > .qualification-filters,
+.legionnaires-board > .qualification-filter {
+  margin: 10px 18px;
+}
+
+.legionnaire-table {
+  overflow-x: auto;
+}
+
+.legionnaire-table-head,
+.legionnaire-row {
+  display: grid;
+  grid-template-columns: 46px minmax(190px, 1.4fr) minmax(170px, 1fr) minmax(150px, .9fr) minmax(118px, .65fr);
+  align-items: center;
+  min-width: 800px;
+}
+
+.legionnaire-table-head {
+  min-height: 38px;
+  padding: 0 16px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-deep);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.legionnaire-row {
+  width: 100%;
+  min-height: 68px;
+  padding: 8px 16px;
+  color: var(--text);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  text-align: start;
+}
+
+.legionnaire-row:hover,
+.legionnaire-row:focus-visible {
+  background: var(--raised);
+}
+
+.legionnaire-player,
+.legionnaire-club {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.legionnaire-player > span:last-child,
+.legionnaire-club strong,
+.legionnaire-league,
+.legionnaire-value {
+  min-width: 0;
+}
+
+.legionnaire-player strong,
+.legionnaire-player small,
+.legionnaire-value strong,
+.legionnaire-value small {
+  display: block;
+}
+
+.legionnaire-player strong,
+.legionnaire-club strong,
+.legionnaire-league {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legionnaire-player small,
+.legionnaire-value small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.legionnaire-league {
+  color: var(--soft);
+}
+
+.legionnaire-value {
+  text-align: end;
+}
+
+.legionnaire-value strong {
+  color: var(--green);
+  font-size: 13px;
+}
+
 .player-directory {
   display: flex;
   flex-direction: column;
@@ -2486,6 +2615,10 @@ html[dir="rtl"] .attribute-grid button.active {
   .search-field {
     grid-column: 1 / -1;
   }
+
+  .legionnaire-search {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 920px) {
@@ -2570,6 +2703,14 @@ html[dir="rtl"] .attribute-grid button.active {
   .form-strip {
     grid-column: 1 / -1;
   }
+
+  .legionnaires-toolbar {
+    grid-template-columns: minmax(0, 1fr) 230px;
+  }
+
+  .legionnaires-toolbar > div {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2617,6 +2758,20 @@ html[dir="rtl"] .attribute-grid button.active {
 
   .page-heading p {
     font-size: 11px;
+  }
+
+  .legionnaires-toolbar {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .legionnaires-toolbar > div {
+    grid-column: auto;
+  }
+
+  .legionnaires-board > .qualification-filters,
+  .legionnaires-board > .qualification-filter {
+    margin-inline: 14px;
   }
 
   .stat-band {

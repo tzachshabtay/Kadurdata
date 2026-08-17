@@ -155,6 +155,8 @@ def percentage_metric_code(base_code: str) -> str:
 
 
 def metric_name(code: str) -> str:
+    if code == "rating_365":
+        return "Rating (365Score)"
     return code.replace("_", " ").title()
 
 
@@ -930,7 +932,12 @@ def valid_player_rows(rows: list[dict[str, str]], indexes: dict[str, Any]) -> li
     return valid
 
 
-def ensure_players(cur: psycopg.Cursor, source_id: str, rows: list[dict[str, Any]]) -> dict[str, str]:
+def ensure_players(
+    cur: psycopg.Cursor,
+    source_id: str,
+    israel_country_id: str,
+    rows: list[dict[str, Any]],
+) -> dict[str, str]:
     unique_players: dict[str, dict[str, Any]] = {}
     for item in rows:
         row = item["row"]
@@ -965,14 +972,16 @@ def ensure_players(cur: psycopg.Cursor, source_id: str, rows: list[dict[str, Any
         """
         update core.players p
         set display_name = s.name,
-            primary_position = coalesce(s.position_name, p.primary_position)
+            primary_position = coalesce(s.position_name, p.primary_position),
+            country_id = case when s.country_id = 6 then coalesce(p.country_id, %s) else p.country_id end,
+            metadata = p.metadata || jsonb_strip_nulls(jsonb_build_object('source_country_id', s.country_id))
         from source.source_entity_ids m
         join player_stage s on s.source_player_id = m.source_entity_id
         where m.source_id = %s
           and m.entity_type = 'player'
           and p.id = m.canonical_id
         """,
-        (source_id,),
+        (israel_country_id, source_id),
     )
     cur.execute(
         """
@@ -986,9 +995,10 @@ def ensure_players(cur: psycopg.Cursor, source_id: str, rows: list[dict[str, Any
           where m.id is null
         ),
         inserted as (
-          insert into core.players (display_name, primary_position, metadata)
+          insert into core.players (display_name, country_id, primary_position, metadata)
           select
             name,
+            case when country_id = 6 then %s::uuid else null end,
             position_name,
             jsonb_build_object(
               'source_country_id', country_id,
@@ -1016,7 +1026,7 @@ def ensure_players(cur: psycopg.Cursor, source_id: str, rows: list[dict[str, Any
               source_name = excluded.source_name,
               last_seen_at = now()
         """,
-        (source_id, source_id),
+        (source_id, israel_country_id, source_id),
     )
     cur.execute(
         """
@@ -1285,13 +1295,14 @@ def load_player_rows(
     conn: psycopg.Connection,
     cur: psycopg.Cursor,
     source_id: str,
+    israel_country_id: str,
     season_id: str,
     rows: list[dict[str, str]],
     indexes: dict[str, Any],
 ) -> None:
     valid_rows = valid_player_rows(rows, indexes)
     metric_ids = ensure_metrics(cur, collect_player_stat_metric_specs([item["row"] for item in valid_rows]))
-    player_ids = ensure_players(cur, source_id, valid_rows)
+    player_ids = ensure_players(cur, source_id, israel_country_id, valid_rows)
     appearance_ids = ensure_appearances(cur, source_id, valid_rows, player_ids)
     stat_batch: list[tuple[Any, ...]] = []
     written_stats = 0
@@ -1461,6 +1472,126 @@ def load_team_stats(
     print(f"processed {len(rows)} team-stat rows; wrote {written_stats} team stat observations", flush=True)
 
 
+def load_legionnaire_roster(
+    cur: psycopg.Cursor,
+    source_id: str,
+    israel_country_id: str,
+    rows: list[dict[str, str]],
+) -> int:
+    if not rows:
+        return 0
+
+    cur.execute(
+        """
+        update core.player_team_stints
+        set metadata = jsonb_set(metadata, '{is_current}', 'false'::jsonb, true)
+        where metadata ->> 'discovery' = '365scores_legionnaires'
+        """
+    )
+    loaded = 0
+    for row in rows:
+        athlete_id = empty_to_none(row.get("athlete_id"))
+        club_source_id = empty_to_none(row.get("club_id"))
+        competition_source_id = empty_to_none(row.get("competition_id"))
+        if not athlete_id or not club_source_id or not competition_source_id:
+            continue
+
+        player_id = get_mapping(cur, source_id, "player", athlete_id)
+        if not player_id:
+            continue
+        team_id = get_or_create_team(
+            cur,
+            source_id,
+            club_source_id,
+            row.get("club_name") or f"Club {club_source_id}",
+            empty_to_none(row.get("club_logo_url")),
+            to_int(row.get("club_image_version")),
+            empty_to_none(row.get("club_primary_color")),
+            empty_to_none(row.get("club_secondary_color")),
+        )
+
+        season_num = empty_to_none(row.get("season_num"))
+        season_id = get_mapping(
+            cur,
+            source_id,
+            "season",
+            f"{competition_source_id}:{season_num}",
+        ) if season_num else None
+        if not season_id:
+            competition_id = get_mapping(cur, source_id, "competition", competition_source_id)
+            if competition_id:
+                latest_season = execute_one(
+                    cur,
+                    """
+                    select id
+                    from core.seasons
+                    where competition_id = %s
+                    order by start_date desc nulls last, end_date desc nulls last
+                    limit 1
+                    """,
+                    (competition_id,),
+                )
+                season_id = latest_season["id"] if latest_season else None
+        if not season_id:
+            continue
+
+        cur.execute(
+            """
+            update core.players
+            set country_id = coalesce(country_id, %s),
+                primary_position = coalesce(%s, primary_position),
+                metadata = metadata || jsonb_strip_nulls(jsonb_build_object(
+                  'source_country_id', 6,
+                  'formation_position', %s
+                ))
+            where id = %s
+            """,
+            (
+                israel_country_id,
+                empty_to_none(row.get("position_name")),
+                empty_to_none(row.get("formation_position")),
+                player_id,
+            ),
+        )
+        metadata = Jsonb(
+            {
+                "discovery": "365scores_legionnaires",
+                "is_current": True,
+                "source_athlete_id": athlete_id,
+                "source_club_id": club_source_id,
+                "source_competition_id": competition_source_id,
+                "formation_position": empty_to_none(row.get("formation_position")),
+            }
+        )
+        existing = execute_one(
+            cur,
+            """
+            select id
+            from core.player_team_stints
+            where player_id = %s and team_id = %s and season_id = %s
+            order by id
+            limit 1
+            """,
+            (player_id, team_id, season_id),
+        )
+        if existing:
+            cur.execute(
+                "update core.player_team_stints set metadata = metadata || %s where id = %s",
+                (metadata, existing["id"]),
+            )
+        else:
+            cur.execute(
+                """
+                insert into core.player_team_stints (player_id, team_id, season_id, metadata)
+                values (%s, %s, %s, %s)
+                """,
+                (player_id, team_id, season_id, metadata),
+            )
+        loaded += 1
+
+    return loaded
+
+
 def manifest_competitions(
     manifest: dict[str, Any],
     fixture_rows: list[dict[str, str]],
@@ -1507,6 +1638,8 @@ def main() -> int:
     fixture_rows = read_csv(args.processed_dir / "365scores_fixtures.csv")
     player_rows = read_csv(args.processed_dir / "365scores_player_match_stats.csv")
     team_stat_rows = read_csv(args.processed_dir / "365scores_team_match_stats.csv")
+    roster_path = args.processed_dir / "365scores_legionnaires.csv"
+    legionnaire_rows = read_csv(roster_path) if roster_path.exists() else []
     manifest = read_manifest(args.processed_dir)
     if not fixture_rows:
         raise SystemExit("processed fixture file contains no rows")
@@ -1583,6 +1716,7 @@ def main() -> int:
                     conn,
                     cur,
                     source_id,
+                    country_id,
                     season_id,
                     player_groups.get((competition_source_id, season_num), []),
                     indexes,
@@ -1595,6 +1729,15 @@ def main() -> int:
                     team_stat_groups.get((competition_source_id, season_num), []),
                     indexes,
                 )
+            if legionnaire_rows:
+                loaded_legionnaires = load_legionnaire_roster(
+                    cur,
+                    source_id,
+                    country_id,
+                    legionnaire_rows,
+                )
+                conn.commit()
+                print(f"loaded {loaded_legionnaires} current legionnaire affiliations", flush=True)
         conn.commit()
 
     print(
