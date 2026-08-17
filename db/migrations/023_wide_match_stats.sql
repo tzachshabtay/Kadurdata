@@ -246,8 +246,8 @@ begin
   loop
     definition := replace(
       pg_get_viewdef(dependent.oid, true),
-      'obs.stat_observations',
-      'obs.stat_values'
+      'stat_observations',
+      'stat_values'
     );
     execute format(
       'create or replace view %I.%I as %s',
@@ -266,8 +266,8 @@ begin
   loop
     definition := replace(
       pg_get_functiondef(dependent.oid),
-      'obs.stat_observations',
-      'obs.stat_values'
+      'stat_observations',
+      'stat_values'
     );
     execute definition;
   end loop;
