@@ -586,7 +586,7 @@ def main() -> int:
             args,
             args.raw_dir,
             payload_games,
-            fetch_team_stats=True,
+            fetch_team_stats=False,
         )
         failures.extend(payload_failures)
 
