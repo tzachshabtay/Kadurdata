@@ -1542,7 +1542,7 @@ def load_legionnaire_roster(
                 primary_position = coalesce(%s, primary_position),
                 metadata = metadata || jsonb_strip_nulls(jsonb_build_object(
                   'source_country_id', 6,
-                  'formation_position', %s
+                  'formation_position', %s::text
                 ))
             where id = %s
             """,

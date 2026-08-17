@@ -119,6 +119,10 @@ def chunked(values: list[int], size: int) -> list[list[int]]:
     return [values[index : index + size] for index in range(0, len(values), size)]
 
 
+def completed_games(games: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [game for game in games if game.get("statusGroup") == 4]
+
+
 def collect_athlete_profiles(
     args: argparse.Namespace,
     athlete_ids: list[int],
@@ -303,16 +307,7 @@ def main() -> int:
     details: dict[int, dict[str, Any]] = {}
     stats: dict[int, dict[str, Any]] = {}
     if not args.fixtures_only:
-        stats_competitions = {
-            int(item["id"])
-            for item in competition_manifests
-            if item.get("has_stats")
-        }
-        payload_games = [
-            game
-            for game in games
-            if game.get("statusGroup") == 4 and game.get("competitionId") in stats_competitions
-        ]
+        payload_games = completed_games(games)
         print(f"fetching details for {len(payload_games)} completed foreign-league matches", flush=True)
         details, stats, payload_failures = collect_match_payloads(
             args,

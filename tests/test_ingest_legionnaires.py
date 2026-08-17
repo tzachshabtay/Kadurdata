@@ -1,11 +1,15 @@
 import unittest
 
-from scripts.ingest_legionnaires import chunked, discover_legionnaires
+from scripts.ingest_legionnaires import chunked, completed_games, discover_legionnaires
 
 
 class LegionnaireDiscoveryTests(unittest.TestCase):
     def test_chunked_keeps_every_id(self):
         self.assertEqual(chunked([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]])
+
+    def test_completed_games_do_not_depend_on_catalog_stat_flags(self):
+        games = [{"id": 1, "statusGroup": 4}, {"id": 2, "statusGroup": 1}]
+        self.assertEqual(completed_games(games), [{"id": 1, "statusGroup": 4}])
 
     def test_discovery_keeps_only_israelis_at_foreign_clubs(self):
         athletes = [
