@@ -58,6 +58,7 @@ import type {
 type View = "overview" | "matches" | "clubs" | "players";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerHistoryRange = "latest" | "all";
+type ClubTournamentScope = "selected" | "all";
 type DeepLinkState = {
   language: Language | null;
   view: View;
@@ -83,6 +84,7 @@ type DeepLinkState = {
   roleFilter: RoleFilter;
   positionFilter: string;
   clubFilter: string;
+  clubTournamentScope: ClubTournamentScope;
   playerQuery: string;
   attributeQuery: string;
 };
@@ -121,6 +123,7 @@ type PlayerPositionDetail = { code: string; label: string };
 type MatchPlayerAttribute = { code: string; name: string; value: string; category: PlayerAttributeCategory };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
+const allTournamentsValue = "all-tournaments";
 const roleFilters: RoleFilter[] = ["All", "Goalkeepers", "Defenders", "Midfielders", "Attackers"];
 const playerAttributeCategories = ["General", "Attacking", "Passing", "Possession & duels", "Defending", "Discipline", "Goalkeeping"] as const;
 const goalkeeperMetricCodes = new Set([
@@ -370,6 +373,7 @@ function readDeepLinkState(): DeepLinkState {
     roleFilter: role && roleFilters.includes(role) ? role : "All",
     positionFilter: params.get("position") ?? "All",
     clubFilter: params.get("clubFilter") ?? "all",
+    clubTournamentScope: params.get("clubTournaments") === "all" ? "all" : "selected",
     playerQuery: params.get("playerSearch") ?? "",
     attributeQuery: params.get("attributeSearch") ?? "",
   };
@@ -407,6 +411,7 @@ function writeDeepLinkState(state: DeepLinkState) {
   setString("role", state.roleFilter);
   setString("position", state.positionFilter);
   setString("clubFilter", state.clubFilter);
+  setString("clubTournaments", state.clubTournamentScope);
   setString("playerSearch", state.playerQuery);
   setString("attributeSearch", state.attributeQuery);
 
@@ -465,6 +470,7 @@ export function App() {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>(initialDeepLink.roleFilter);
   const [positionFilter, setPositionFilter] = useState(initialDeepLink.positionFilter);
   const [clubFilter, setClubFilter] = useState(initialDeepLink.clubFilter);
+  const [clubTournamentScope, setClubTournamentScope] = useState<ClubTournamentScope>(initialDeepLink.clubTournamentScope);
   const [playerQuery, setPlayerQuery] = useState(initialDeepLink.playerQuery);
   const [attributeQuery, setAttributeQuery] = useState(initialDeepLink.attributeQuery);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -477,6 +483,8 @@ export function App() {
   const [squadLeaderboardError, setSquadLeaderboardError] = useState<string | null>(null);
   const [explorerLeaderboardLoading, setExplorerLeaderboardLoading] = useState(false);
   const [explorerLeaderboardError, setExplorerLeaderboardError] = useState<string | null>(null);
+  const [allTournamentClubMatches, setAllTournamentClubMatches] = useState<Match[]>([]);
+  const [clubMatchesLoading, setClubMatchesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadReferenceData() {
@@ -562,6 +570,7 @@ export function App() {
       setRoleFilter(next.roleFilter);
       setPositionFilter(next.positionFilter);
       setClubFilter(next.clubFilter);
+      setClubTournamentScope(next.clubTournamentScope);
       setPlayerQuery(next.playerQuery);
       setAttributeQuery(next.attributeQuery);
     };
@@ -799,7 +808,7 @@ export function App() {
     let cancelled = false;
 
     async function loadSquadLeaderboard() {
-      if (view !== "clubs" || !seasonId || !squadMetricCode) return;
+      if (view !== "clubs" || clubTournamentScope === "all" || !seasonId || !squadMetricCode) return;
 
       setSquadLeaderboardLoading(true);
       setSquadLeaderboardError(null);
@@ -833,7 +842,7 @@ export function App() {
 
     void loadSquadLeaderboard();
     return () => { cancelled = true; };
-  }, [players, seasonId, squadMetricCode, squadRatingMinimumMinutes, view]);
+  }, [clubTournamentScope, players, seasonId, squadMetricCode, squadRatingMinimumMinutes, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -886,6 +895,57 @@ export function App() {
         .slice(0, 7),
     [currentRound, matches, roundMatches],
   );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAllTournamentClubMatches() {
+      if (view !== "clubs" || clubTournamentScope !== "all" || !clubId || !currentSeason.season_name) {
+        setAllTournamentClubMatches([]);
+        setClubMatchesLoading(false);
+        return;
+      }
+
+      if (!hasSupabaseConfig || !supabase) {
+        setAllTournamentClubMatches(demoMatches
+          .filter((match) => match.season_name === currentSeason.season_name)
+          .filter((match) => match.home_team_id === clubId || match.away_team_id === clubId)
+          .sort((a, b) => dateValue(b.scheduled_at) - dateValue(a.scheduled_at)));
+        return;
+      }
+
+      setClubMatchesLoading(true);
+      const [matchResult, teamAssetResult] = await Promise.all([
+        supabase
+          .from("api_matches")
+          .select("*")
+          .eq("season_name", currentSeason.season_name)
+          .or(`home_team_id.eq.${clubId},away_team_id.eq.${clubId}`)
+          .order("scheduled_at", { ascending: false })
+          .limit(1000),
+        supabase.from("api_team_assets").select("*"),
+      ]);
+      if (cancelled) return;
+      const firstError = matchResult.error ?? teamAssetResult.error;
+      if (firstError) {
+        setError(firstError.message);
+        setAllTournamentClubMatches([]);
+        setClubMatchesLoading(false);
+        return;
+      }
+
+      const assets = (teamAssetResult.data ?? []) as TeamAsset[];
+      const assetByTeamId = new Map(assets.map((asset) => [asset.team_id, asset]));
+      setAllTournamentClubMatches(((matchResult.data ?? []) as Omit<Match, "home_team_logo_url" | "away_team_logo_url">[]).map((match) => ({
+        ...match,
+        home_team_logo_url: assetByTeamId.get(match.home_team_id)?.logo_url ?? null,
+        away_team_logo_url: assetByTeamId.get(match.away_team_id)?.logo_url ?? null,
+      })));
+      setClubMatchesLoading(false);
+    }
+
+    void loadAllTournamentClubMatches();
+    return () => { cancelled = true; };
+  }, [clubId, clubTournamentScope, currentSeason.season_name, refreshToken, view]);
   const selectedMatch = matches.find((match) => match.match_id === matchId);
   const selectedClub = clubs.find((club) => club.team_id === clubId);
   const selectedPlayer = players.find((player) => player.player_id === playerId);
@@ -1030,10 +1090,12 @@ export function App() {
     setPlayerId(rankedExplorerPlayers[0].player_id);
   }, [explorerLeaderboardLoading, playerId, rankedExplorerPlayers, view]);
   const clubMatches = useMemo(
-    () => [...matches]
-      .filter((match) => match.home_team_id === clubId || match.away_team_id === clubId)
-      .sort((a, b) => dateValue(b.scheduled_at) - dateValue(a.scheduled_at)),
-    [clubId, matches],
+    () => clubTournamentScope === "all" && view === "clubs"
+      ? allTournamentClubMatches
+      : [...matches]
+        .filter((match) => match.home_team_id === clubId || match.away_team_id === clubId)
+        .sort((a, b) => dateValue(b.scheduled_at) - dateValue(a.scheduled_at)),
+    [allTournamentClubMatches, clubId, clubTournamentScope, matches, view],
   );
   const clubSquad = useMemo(
     () => players.filter((player) => player.team_id === clubId),
@@ -1116,6 +1178,7 @@ export function App() {
       roleFilter,
       positionFilter,
       clubFilter,
+      clubTournamentScope,
       playerQuery,
       attributeQuery,
     });
@@ -1123,6 +1186,7 @@ export function App() {
     attributeQuery,
     clubFilter,
     clubId,
+    clubTournamentScope,
     competitionId,
     explorerMetricCode,
     explorerMinimum,
@@ -1155,6 +1219,11 @@ export function App() {
   }
 
   function openMatch(match: Match) {
+    if (match.competition_id !== competitionId || match.season_id !== seasonId) {
+      setClubTournamentScope("selected");
+      setCompetitionId(match.competition_id);
+      setSeasonId(match.season_id);
+    }
     if (match.round_id) setRoundId(match.round_id);
     setMatchId(match.match_id);
     setMatchPlayerId("");
@@ -1166,6 +1235,14 @@ export function App() {
     setPlayerId(nextPlayerId);
     navigate("players");
   }
+
+  function openClub(nextClubId: string) {
+    setClubId(nextClubId);
+    setClubTournamentScope("all");
+    navigate("clubs");
+  }
+
+  const showingAllTournaments = view === "clubs" && clubTournamentScope === "all";
 
   return (
     <LocaleContext.Provider value={{ language, text }}>
@@ -1203,11 +1280,22 @@ export function App() {
         <div className="context-bar">
           <div className="context-copy">
             <span>{text.viewing}</span>
-            <strong>{localizedCompetition(competitions.find((item) => item.competition_id === competitionId), language)}</strong>
+            <strong>{showingAllTournaments ? text.allTournaments : localizedCompetition(competitions.find((item) => item.competition_id === competitionId), language)}</strong>
           </div>
           <label className="context-select">
             <span>{text.competition}</span>
-            <select value={competitionId} onChange={(event) => setCompetitionId(event.target.value)}>
+            <select
+              value={showingAllTournaments ? allTournamentsValue : competitionId}
+              onChange={(event) => {
+                if (event.target.value === allTournamentsValue) {
+                  setClubTournamentScope("all");
+                  return;
+                }
+                setClubTournamentScope("selected");
+                setCompetitionId(event.target.value);
+              }}
+            >
+              {view === "clubs" && <option value={allTournamentsValue}>{text.allTournaments}</option>}
               {([
                 ["domestic", text.domesticCompetitions],
                 ["european_club", text.europeanClubCompetitions],
@@ -1262,7 +1350,7 @@ export function App() {
             loading={leaderboardLoading}
             error={leaderboardError}
             openMatch={openMatch}
-            openClub={(id) => { setClubId(id); navigate("clubs"); }}
+            openClub={openClub}
             openPlayer={openPlayer}
             showMatches={() => navigate("matches")}
           />
@@ -1292,6 +1380,9 @@ export function App() {
             selectedClub={selectedClub}
             setClubId={setClubId}
             matches={clubMatches}
+            matchesLoading={clubMatchesLoading}
+            allTournaments={showingAllTournaments}
+            seasonName={currentSeason.season_name}
             squad={clubSquad}
             squadLeaders={clubSquadLeaders}
             metrics={leaderboardMetrics}
@@ -1615,6 +1706,9 @@ function ClubsView({
   selectedClub,
   setClubId,
   matches,
+  matchesLoading,
+  allTournaments,
+  seasonName,
   squad,
   squadLeaders,
   metrics,
@@ -1634,6 +1728,9 @@ function ClubsView({
   selectedClub?: Club;
   setClubId: (id: string) => void;
   matches: Match[];
+  matchesLoading: boolean;
+  allTournaments: boolean;
+  seasonName: string;
   squad: SeasonPlayer[];
   squadLeaders: PlayerLeaderboardRow[];
   metrics: LeaderboardMetricOption[];
@@ -1651,14 +1748,15 @@ function ClubsView({
 }) {
   const { language, text } = useLocale();
   const recent = matches.filter(isCompletedMatch).slice(0, 5);
+  const displayClub = selectedClub && allTournaments ? aggregateClubRecord(selectedClub, matches) : selectedClub;
   const squadByPlayerId = new Map(squad.map((player) => [player.player_id, player]));
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
   return (
     <>
-      <PageHeading eyebrow={text.seasonDirectory} title={text.clubs} description={text.clubsDescription} />
-      <div className="club-workspace">
-        <aside className="surface club-directory">
+      <PageHeading eyebrow={allTournaments ? `${text.allTournaments} · ${seasonName}` : text.seasonDirectory} title={text.clubs} description={allTournaments ? text.allTournamentsClubDescription : text.clubsDescription} />
+      <div className={`club-workspace${allTournaments ? " all-tournaments" : ""}`}>
+        {!allTournaments && <aside className="surface club-directory">
           <div className="club-table-head"><span>#</span><span>{text.club}</span><span>{text.playedShort}</span><span>{text.pointsShort}</span></div>
           {clubs.map((club, index) => (
             <button className={club.team_id === selectedClub?.team_id ? "active" : ""} key={club.team_id} type="button" onClick={() => setClubId(club.team_id)}>
@@ -1667,30 +1765,34 @@ function ClubsView({
               <span>{club.played}</span><strong>{club.points}</strong>
             </button>
           ))}
-        </aside>
+        </aside>}
 
         <section className="club-detail">
-          {selectedClub ? (
+          {displayClub ? (
             <>
               <div className="club-identity">
-                <ClubBadge name={localizedClubName(selectedClub, language)} logoUrl={selectedClub.logo_url} size="large" />
-                <div><span>{text.leaguePosition} {clubs.findIndex((club) => club.team_id === selectedClub.team_id) + 1}</span><h2>{localizedClubName(selectedClub, language)}</h2><p>{language === "he" ? text.israel : selectedClub.city ?? text.israel} · {selectedClub.played} {text.matchesPlayedSuffix}</p></div>
+                <ClubBadge name={localizedClubName(displayClub, language)} logoUrl={displayClub.logo_url} size="large" />
+                <div><span>{allTournaments ? `${text.allTournaments} · ${seasonName}` : `${text.leaguePosition} ${clubs.findIndex((club) => club.team_id === displayClub.team_id) + 1}`}</span><h2>{localizedClubName(displayClub, language)}</h2><p>{language === "he" ? text.israel : displayClub.city ?? text.israel} · {displayClub.played} {text.matchesPlayedSuffix}</p></div>
                 <div className="form-strip" aria-label={text.recentForm}>
-                  {recent.map((match) => <span className={clubResult(match, selectedClub.team_id).toLowerCase()} key={match.match_id}>{localizedResult(clubResult(match, selectedClub.team_id), language)}</span>)}
+                  {recent.map((match) => <span className={clubResult(match, displayClub.team_id).toLowerCase()} key={match.match_id}>{localizedResult(clubResult(match, displayClub.team_id), language)}</span>)}
                 </div>
               </div>
               <section className="stat-band club-stats">
-                <Stat label={text.record} value={`${selectedClub.won}-${selectedClub.drawn}-${selectedClub.lost}`} note={text.winsDrawsLosses} />
-                <Stat label={text.goals} value={`${selectedClub.goals_for}:${selectedClub.goals_against}`} note={text.forAgainst} />
-                <Stat label={text.goalDifference} value={signed(selectedClub.goal_difference)} note={text.seasonTotal} />
-                <Stat label={text.points} value={String(selectedClub.points)} note={`${(selectedClub.points / Math.max(selectedClub.played, 1)).toFixed(2)} ${text.perMatch}`} accent />
+                <Stat label={text.record} value={`${displayClub.won}-${displayClub.drawn}-${displayClub.lost}`} note={text.winsDrawsLosses} />
+                <Stat label={text.goals} value={`${displayClub.goals_for}:${displayClub.goals_against}`} note={text.forAgainst} />
+                <Stat label={text.goalDifference} value={signed(displayClub.goal_difference)} note={text.seasonTotal} />
+                {allTournaments
+                  ? <Stat label={text.fixtures} value={String(matches.length)} note={`${displayClub.played} ${text.completed}`} accent />
+                  : <Stat label={text.points} value={String(displayClub.points)} note={`${(displayClub.points / Math.max(displayClub.played, 1)).toFixed(2)} ${text.perMatch}`} accent />}
               </section>
-              <div className="club-detail-grid">
+              <div className={`club-detail-grid${allTournaments ? " all-tournaments" : ""}`}>
                 <section className="surface club-results">
-                  <SectionHeading eyebrow={text.seasonSchedule} title={text.recentMatches} />
-                  {matches.slice(0, 8).map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />)}
+                  <SectionHeading eyebrow={allTournaments ? text.allTournaments : text.seasonSchedule} title={text.fixturesResults} />
+                  <div className="club-match-list">
+                    {matchesLoading ? <InlineLoading /> : matches.length ? matches.map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} showCompetition={allTournaments} />) : <EmptyState text={text.noClubMatches} />}
+                  </div>
                 </section>
-                <section className="surface squad-panel">
+                {!allTournaments && <section className="surface squad-panel">
                   <div className="squad-leaderboard-heading">
                     <div><span>{squad.length} {text.players.toLowerCase()}</span><h2>{text.seasonSquad}</h2></div>
                     <label className="leader-metric-select squad-metric-select">
@@ -1715,7 +1817,7 @@ function ClubsView({
                       );
                     }) : <EmptyState text={qualification ? text.noSquadMinimumSample : text.noSquadData} />}
                   </div>
-                </section>
+                </section>}
               </div>
             </>
           ) : <EmptyState text={text.selectClub} />}
@@ -2120,12 +2222,12 @@ function Stat({ label, value, note, accent = false }: { label: string; value: st
   return <div className={accent ? "stat accent" : "stat"}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;
 }
 
-function CompactMatch({ match, onClick }: { match: Match; onClick: () => void }) {
+function CompactMatch({ match, onClick, showCompetition = false }: { match: Match; onClick: () => void; showCompetition?: boolean }) {
   const { language } = useLocale();
   const OpenIcon = language === "he" ? ChevronLeft : ChevronRight;
   return (
     <button className="compact-match" type="button" onClick={onClick}>
-      <time>{formatFixtureDate(match.scheduled_at, language)}</time>
+      <time><span>{formatFixtureDate(match.scheduled_at, language)}</span>{showCompetition && <small>{localizedMatchCompetition(match, language)}</small>}</time>
       <span className="compact-club compact-club-home"><strong>{localizedMatchTeam(match, "home", language)}</strong><ClubBadge name={localizedMatchTeam(match, "home", language)} logoUrl={match.home_team_logo_url} size="tiny" /></span>
       <span className="compact-scoreline" aria-label={formatScore(match.home_score, match.away_score)}>
         <span className="compact-score">{displayMatchScore(match.home_score)}</span>
@@ -2771,6 +2873,13 @@ function localizedSeasonCompetition(season: Season, language: Language) {
   return competitionLabel(season.competition_name);
 }
 
+function localizedMatchCompetition(match: Match, language: Language) {
+  if (language === "he") {
+    return match.competition_name_he ?? hebrewCompetitionName(match.competition_name);
+  }
+  return competitionLabel(match.competition_name);
+}
+
 function localizedClubName(club: Club, language: Language) {
   return language === "he" && club.team_name_he
     ? club.team_name_he
@@ -3108,6 +3217,33 @@ function formatScore(home: number | null, away: number | null) {
 
 function isCompletedMatch(match: Match) {
   return normalizedMatchScore(match.home_score) !== null && normalizedMatchScore(match.away_score) !== null;
+}
+
+function aggregateClubRecord(club: Club, matches: Match[]): Club {
+  const record = matches.filter(isCompletedMatch).reduce((totals, match) => {
+    const isHome = match.home_team_id === club.team_id;
+    const goalsFor = Number(isHome ? match.home_score : match.away_score);
+    const goalsAgainst = Number(isHome ? match.away_score : match.home_score);
+    totals.played += 1;
+    totals.goalsFor += goalsFor;
+    totals.goalsAgainst += goalsAgainst;
+    if (goalsFor > goalsAgainst) totals.won += 1;
+    else if (goalsFor < goalsAgainst) totals.lost += 1;
+    else totals.drawn += 1;
+    return totals;
+  }, { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0 });
+
+  return {
+    ...club,
+    played: record.played,
+    won: record.won,
+    drawn: record.drawn,
+    lost: record.lost,
+    goals_for: record.goalsFor,
+    goals_against: record.goalsAgainst,
+    goal_difference: record.goalsFor - record.goalsAgainst,
+    points: 0,
+  };
 }
 
 function normalizedMatchScore(score: number | null) {

@@ -656,6 +656,19 @@ input[type="search"]::-webkit-search-cancel-button {
   text-transform: uppercase;
 }
 
+.compact-match time span,
+.compact-match time small {
+  display: block;
+}
+
+.compact-match time small {
+  margin-top: 4px;
+  color: var(--teal);
+  font-size: 7px;
+  line-height: 1.25;
+  text-transform: none;
+}
+
 .compact-match > svg {
   color: var(--muted);
 }
@@ -1643,6 +1656,11 @@ tr:last-child td {
   gap: 18px;
 }
 
+.club-workspace.all-tournaments,
+.club-detail-grid.all-tournaments {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .club-directory {
   max-height: 720px;
   overflow-y: auto;
@@ -1769,6 +1787,12 @@ tr:last-child td {
 
 .club-results .compact-match {
   grid-template-columns: 75px minmax(90px, 1fr) auto minmax(90px, 1fr) 16px;
+}
+
+.club-match-list {
+  max-height: 720px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .squad-list > button {
