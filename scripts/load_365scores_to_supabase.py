@@ -772,14 +772,17 @@ def flush_wide_stat_batch(
         create temp table if not exists wide_stat_stage (
           source_id uuid not null,
           subject_id uuid not null,
+          metric_count integer not null,
           metrics jsonb not null
         ) on commit preserve rows
         """
     )
     cur.execute("truncate wide_stat_stage")
-    with cur.copy("copy wide_stat_stage (source_id, subject_id, metrics) from stdin") as copy:
+    with cur.copy(
+        "copy wide_stat_stage (source_id, subject_id, metric_count, metrics) from stdin"
+    ) as copy:
         for source_id, subject_id, metrics in batch:
-            copy.write_row((source_id, subject_id, Jsonb(metrics)))
+            copy.write_row((source_id, subject_id, len(metrics), Jsonb(metrics)))
 
     metric_identifiers = [sql.Identifier(code) for code in metric_codes]
     insert_columns = sql.SQL(", ").join(
@@ -795,7 +798,7 @@ def flush_wide_stat_batch(
         [
             sql.Identifier("source_id"),
             sql.Identifier("subject_id"),
-            sql.SQL("jsonb_object_length(metrics)"),
+            sql.Identifier("metric_count"),
             sql.SQL("now()"),
             *[
                 sql.SQL("(metrics ->> {})::numeric(18,6)").format(sql.Literal(code))
