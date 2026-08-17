@@ -87,7 +87,10 @@ def to_float(value: Any) -> Optional[float]:
     text = empty_to_none(value)
     if text is None:
         return None
-    return float(text)
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
 
 
 def season_name(rows: Iterable[dict[str, str]]) -> str:

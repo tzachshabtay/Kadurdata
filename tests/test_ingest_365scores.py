@@ -38,7 +38,7 @@ class CompetitionCatalogTests(unittest.TestCase):
                                     "subType": 4,
                                     "bodyPart": "Left foot",
                                     "outcome": {"name": "Blocked", "x": 83.4, "y": 38.4},
-                                    "xg": "0.03",
+                                    "xg": "-",
                                     "xgot": "0.00",
                                 }
                             ],
@@ -55,6 +55,8 @@ class CompetitionCatalogTests(unittest.TestCase):
         self.assertEqual(rows[0]["shot_x"], 80.0)
         self.assertEqual(rows[0]["shot_y"], 32.1)
         self.assertEqual(rows[0]["situation"], "Regular Play")
+        self.assertIsNone(rows[0]["xg"])
+        self.assertEqual(rows[0]["xgot"], 0.0)
 
     def test_normalizes_competition_shape(self) -> None:
         competition = normalize_competition(
