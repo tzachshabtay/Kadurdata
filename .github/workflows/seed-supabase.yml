@@ -12,6 +12,7 @@ on:
           - full
           - fixtures
           - recent
+          - legionnaires
       seed_limit:
         description: "Matches per competition. Use 0 for every match in the selected window."
         required: false
@@ -58,6 +59,7 @@ jobs:
         run: python scripts/apply_migrations.py
 
       - name: Fetch and flatten 365Scores data
+        if: env.SEED_MODE != 'legionnaires'
         run: |
           args=(
             --all-israeli-competitions
@@ -87,6 +89,7 @@ jobs:
           python scripts/ingest_365scores.py "${args[@]}"
 
       - name: Load Supabase
+        if: env.SEED_MODE != 'legionnaires'
         run: python scripts/load_365scores_to_supabase.py
 
       - name: Fetch and flatten legionnaire data
