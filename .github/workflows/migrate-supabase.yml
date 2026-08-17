@@ -34,3 +34,6 @@ jobs:
 
       - name: Apply database migrations
         run: python scripts/apply_migrations.py
+
+      - name: Report database storage
+        run: python scripts/report_database_size.py
