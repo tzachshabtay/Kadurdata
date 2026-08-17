@@ -263,10 +263,26 @@ def foreign_club_for_game(wrapper: dict[str, Any]) -> dict[str, Any] | None:
 def is_domestic_league(competition: dict[str, Any] | None) -> bool:
     if not competition or competition.get("isInternational") is True:
         return False
+    if competition.get("countryId") in {19, 54}:
+        return False
     if competition.get("hasBrackets") is True:
         return False
     name = str(competition.get("name") or "").lower()
-    return not any(token in name for token in ("cup", "copa", "coupe", "friendly"))
+    return not any(
+        token in name
+        for token in (
+            "cup",
+            "copa",
+            "coupe",
+            "friendly",
+            "uefa",
+            "ucl",
+            "champions league",
+            "europa league",
+            "conference league",
+            "youth league",
+        )
+    )
 
 
 def collect_athlete_games(
@@ -408,7 +424,8 @@ def discover_historical_affiliations(
             club = competitors.get(int(embedded_club["id"])) or embedded_club
             competition_id = game.get("competitionId")
             competition = competitions.get(int(competition_id)) if competition_id is not None else None
-            if not is_domestic_league(competition):
+            is_main_competition = int(competition_id) == club.get("mainCompetitionId")
+            if not is_main_competition and not is_domestic_league(competition):
                 continue
 
             key = (athlete_id, int(club["id"]), int(competition_id), int(game["seasonNum"]))
@@ -496,6 +513,10 @@ def main() -> int:
     rows_by_club: dict[int, list[dict[str, Any]]] = {}
     for row in roster_rows:
         rows_by_club.setdefault(int(row["club_id"]), []).append(row)
+    roster_keys = {
+        (int(row["club_id"]), int(row["competition_id"]), int(row["season_num"]))
+        for row in roster_rows
+    }
 
     games_by_id: dict[int, dict[str, Any]] = {}
     for wrappers in games_by_athlete.values():
@@ -506,8 +527,10 @@ def main() -> int:
             if not club_profile or not game_is_in_window(game, args.start_date, args.end_date):
                 continue
             competition_id = game.get("competitionId")
-            competition = source_competitions.get(int(competition_id)) if competition_id is not None else None
-            if not is_domestic_league(competition):
+            season_num = game.get("seasonNum")
+            if competition_id is None or season_num is None:
+                continue
+            if (int(club["id"]), int(competition_id), int(season_num)) not in roster_keys:
                 continue
             if game.get("id") is not None:
                 games_by_id[int(game["id"])] = game

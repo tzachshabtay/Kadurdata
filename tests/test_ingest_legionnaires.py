@@ -77,6 +77,7 @@ class LegionnaireDiscoveryTests(unittest.TestCase):
         self.assertTrue(is_domestic_league({"name": "Premier League", "currentStageType": 1}))
         self.assertFalse(is_domestic_league({"name": "FA Cup", "currentStageType": 3}))
         self.assertFalse(is_domestic_league({"name": "Champions League", "isInternational": True}))
+        self.assertFalse(is_domestic_league({"name": "UCL", "countryId": 19}))
 
     def test_historical_affiliations_use_the_actual_foreign_league(self):
         athletes = [{

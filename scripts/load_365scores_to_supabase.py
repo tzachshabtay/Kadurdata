@@ -1484,7 +1484,14 @@ def load_legionnaire_roster(
     cur.execute(
         """
         update core.player_team_stints
-        set metadata = jsonb_set(metadata, '{is_current}', 'false'::jsonb, true)
+        set metadata = metadata
+          - 'discovery'
+          - 'is_current'
+          - 'source_athlete_id'
+          - 'source_club_id'
+          - 'source_competition_id'
+          - 'source_club_country_id'
+          - 'observed_at'
         where metadata ->> 'discovery' = '365scores_legionnaires'
         """
     )
@@ -1740,7 +1747,7 @@ def main() -> int:
                     legionnaire_rows,
                 )
                 conn.commit()
-                print(f"loaded {loaded_legionnaires} current legionnaire affiliations", flush=True)
+                print(f"loaded {loaded_legionnaires} legionnaire club-season affiliations", flush=True)
         conn.commit()
 
     print(
