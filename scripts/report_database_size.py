@@ -146,6 +146,50 @@ def main() -> int:
                 cur.fetchall(),
             )
 
+            cur.execute(
+                """
+                with packed_facts as (
+                  select
+                    observation.subject_type,
+                    observation.source_id,
+                    observation.subject_id,
+                    count(*) as metric_count,
+                    pg_column_size(
+                      array_agg(observation.value_numeric order by observation.metric_id)
+                    ) as packed_numeric_bytes
+                  from obs.stat_observations observation
+                  group by
+                    observation.subject_type,
+                    observation.source_id,
+                    observation.subject_id
+                )
+                select
+                  subject_type,
+                  count(*) as fact_rows,
+                  sum(metric_count) as observations,
+                  round(avg(metric_count), 1) as average_metrics,
+                  max(metric_count) as maximum_metrics,
+                  round(avg(packed_numeric_bytes), 1) as average_packed_numeric_bytes,
+                  pg_size_pretty(sum(packed_numeric_bytes)) as packed_numeric_size
+                from packed_facts
+                group by subject_type
+                order by fact_rows desc
+                """
+            )
+            print("\nPacked fact density")
+            print_table(
+                (
+                    "subject",
+                    "fact rows",
+                    "observations",
+                    "avg metrics",
+                    "max metrics",
+                    "avg numeric bytes",
+                    "numeric payload",
+                ),
+                cur.fetchall(),
+            )
+
     return 0
 
 
