@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeftRight,
   ArrowRight,
   ArrowUpRight,
   BarChart3,
@@ -80,6 +81,7 @@ type DeepLinkState = {
   shotPlayerId: string;
   clubId: string;
   playerId: string;
+  comparisonPlayerId: string;
   metricCode: string;
   playerHistoryRange: PlayerHistoryRange;
   leaderMetricCode: string;
@@ -119,6 +121,8 @@ type PlayerChartMetric = Metric & {
 };
 type PlayerChartPoint = {
   match: number;
+  matchId: string;
+  scheduledAt: string | null;
   date: string;
   value: number | null;
   opponent: string;
@@ -128,11 +132,23 @@ type PlayerChartPoint = {
   numerator: number | null;
   denominator: number | null;
 };
+type PlayerComparisonChartPoint = {
+  match: number;
+  primaryPoint: PlayerChartPoint | null;
+  comparisonPoint: PlayerChartPoint | null;
+  primaryValue: number | null;
+  primaryNumerator: number | null;
+  primaryDenominator: number | null;
+  comparisonValue: number | null;
+  comparisonNumerator: number | null;
+  comparisonDenominator: number | null;
+};
 type PlayerAttributeSummary = {
   chartKey: string;
   name: string;
   category: PlayerAttributeCategory;
   value: string;
+  comparisonValue: number | null;
 };
 type PlayerAttributeCategory = (typeof playerAttributeCategories)[number];
 type PlayerPositionDetail = { code: string; label: string };
@@ -152,6 +168,20 @@ const goalkeeperMetricCodes = new Set([
   "penalties_saved",
   "played_sweeper",
   "punches",
+]);
+const lowerIsBetterMetricCodes = new Set([
+  "big_chances_missed",
+  "errors_leading_to_goal",
+  "errors_leading_to_shot",
+  "fouls_committed",
+  "goals_conceded",
+  "offsides",
+  "penalties_committed",
+  "possession_lost",
+  "red_cards",
+  "shots_off_target",
+  "was_dribbled_past",
+  "yellow_cards",
 ]);
 const specificPositionDetails: Record<string, PlayerPositionDetail> = {
   "goalkeeper": { code: "GK", label: "Goalkeeper" },
@@ -352,6 +382,31 @@ function delay(milliseconds: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
+  if (!supabase) return { rows: [] as PlayerHistory[], error: "Supabase is not configured." };
+
+  const rows: PlayerHistory[] = [];
+  const pageSize = 1000;
+  let page = 0;
+  while (true) {
+    const result = await supabase
+      .from("api_player_history")
+      .select("*")
+      .eq("competition_id", competitionId)
+      .eq("player_id", playerId)
+      .order("scheduled_at")
+      .order("match_id")
+      .order("metric_code")
+      .order("source_id")
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    if (result.error) return { rows: [] as PlayerHistory[], error: result.error.message };
+    const pageRows = (result.data ?? []) as PlayerHistory[];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) return { rows, error: null };
+    page += 1;
+  }
+}
+
 function readDeepLinkState(): DeepLinkState {
   const params = new URLSearchParams(window.location.search);
   const language = params.get("lang");
@@ -379,6 +434,7 @@ function readDeepLinkState(): DeepLinkState {
     shotPlayerId: params.get("shotPlayer") ?? "all",
     clubId: params.get("club") ?? "",
     playerId: params.get("player") ?? "",
+    comparisonPlayerId: params.get("comparePlayer") ?? "",
     metricCode: params.get("metric") ?? "",
     playerHistoryRange: history === "all" ? "all" : "latest",
     leaderMetricCode: params.get("leaderMetric") ?? "goals",
@@ -425,6 +481,7 @@ function writeDeepLinkState(state: DeepLinkState) {
   setString("shotPlayer", state.shotPlayerId);
   setString("club", state.clubId);
   setString("player", state.playerId);
+  setString("comparePlayer", state.comparisonPlayerId);
   setString("metric", state.metricCode);
   setString("history", state.playerHistoryRange);
   setString("leaderMetric", state.leaderMetricCode);
@@ -464,6 +521,15 @@ function applyMinimumToMap(current: Record<string, number>, metricCode: string, 
   return next;
 }
 
+function latestHistorySeasonId(rows: PlayerHistory[]) {
+  const latestMatchBySeason = new Map<string, number>();
+  rows.forEach((row) => latestMatchBySeason.set(
+    row.season_id,
+    Math.max(latestMatchBySeason.get(row.season_id) ?? 0, dateValue(row.scheduled_at)),
+  ));
+  return [...latestMatchBySeason].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+}
+
 export function App() {
   const [initialDeepLink] = useState(readDeepLinkState);
   const [language, setLanguage] = useState<Language>(initialDeepLink.language ?? readLanguage);
@@ -477,6 +543,7 @@ export function App() {
   const [players, setPlayers] = useState<SeasonPlayer[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [playerHistory, setPlayerHistory] = useState<PlayerHistory[]>([]);
+  const [comparisonPlayerHistory, setComparisonPlayerHistory] = useState<PlayerHistory[]>([]);
   const [matchPlayerStats, setMatchPlayerStats] = useState<MatchPlayerStat[]>([]);
   const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
   const [matchPlayerHeatmaps, setMatchPlayerHeatmaps] = useState<MatchPlayerHeatmap[]>([]);
@@ -494,6 +561,7 @@ export function App() {
   const [matchPlayerId, setMatchPlayerId] = useState(initialDeepLink.matchPlayerId);
   const [clubId, setClubId] = useState(initialDeepLink.clubId);
   const [playerId, setPlayerId] = useState(initialDeepLink.playerId);
+  const [comparisonPlayerId, setComparisonPlayerId] = useState(initialDeepLink.comparisonPlayerId);
   const [metricCode, setMetricCode] = useState(initialDeepLink.metricCode);
   const [playerHistoryRange, setPlayerHistoryRange] = useState<PlayerHistoryRange>(initialDeepLink.playerHistoryRange);
   const [leaderMetricCode, setLeaderMetricCode] = useState(initialDeepLink.leaderMetricCode);
@@ -524,6 +592,8 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [playerHeatmapLoading, setPlayerHeatmapLoading] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
@@ -612,6 +682,7 @@ export function App() {
       setShotPlayerId(next.shotPlayerId);
       setClubId(next.clubId);
       setPlayerId(next.playerId);
+      setComparisonPlayerId(next.comparisonPlayerId);
       if (next.metricCode) setMetricCode(next.metricCode);
       setPlayerHistoryRange(next.playerHistoryRange);
       setLeaderMetricCode(next.leaderMetricCode);
@@ -817,41 +888,43 @@ export function App() {
         return;
       }
       setDetailLoading(true);
-      const historyRows: PlayerHistory[] = [];
-      const pageSize = 1000;
-      let page = 0;
-
-      while (true) {
-        const result = await client
-          .from("api_player_history")
-          .select("*")
-          .eq("competition_id", competitionId)
-          .eq("player_id", playerId)
-          .order("scheduled_at")
-          .order("match_id")
-          .order("metric_code")
-          .order("source_id")
-          .range(page * pageSize, (page + 1) * pageSize - 1);
-        if (cancelled) return;
-        if (result.error) {
-          setError(result.error.message);
-          setPlayerHistory([]);
-          setDetailLoading(false);
-          return;
-        }
-        const pageRows = (result.data ?? []) as PlayerHistory[];
-        historyRows.push(...pageRows);
-        if (pageRows.length < pageSize) break;
-        page += 1;
-      }
-
-      setPlayerHistory(historyRows);
+      const result = await fetchPlayerHistoryRows(competitionId, playerId);
+      if (cancelled) return;
+      if (result.error) setError(result.error);
+      setPlayerHistory(result.rows);
       setDetailLoading(false);
     }
 
     void loadPlayerDetail();
     return () => { cancelled = true; };
   }, [competitionId, playerId, view]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadComparisonPlayerDetail() {
+      if (view !== "players" || !competitionId || !comparisonPlayerId || comparisonPlayerId === playerId) {
+        setComparisonPlayerHistory([]);
+        setComparisonLoading(false);
+        setComparisonError(null);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) {
+        setComparisonPlayerHistory(demoMetrics.flatMap((metric) => makeDemoHistory(comparisonPlayerId, metric)));
+        return;
+      }
+      setComparisonLoading(true);
+      setComparisonError(null);
+      const result = await fetchPlayerHistoryRows(competitionId, comparisonPlayerId);
+      if (cancelled) return;
+      setComparisonPlayerHistory(result.rows);
+      setComparisonError(result.error);
+      setComparisonLoading(false);
+    }
+
+    void loadComparisonPlayerDetail();
+    return () => { cancelled = true; };
+  }, [comparisonPlayerId, competitionId, playerId, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1187,6 +1260,13 @@ export function App() {
   const selectedClub = (clubTournamentScope === "all" ? allTournamentClubs.find((club) => club.team_id === clubId) : undefined)
     ?? clubs.find((club) => club.team_id === clubId);
   const selectedPlayer = players.find((player) => player.player_id === playerId);
+  const comparisonPlayer = players.find((player) => player.player_id === comparisonPlayerId);
+  useEffect(() => {
+    if (!comparisonPlayerId || loading || seasonLoading || !players.length) return;
+    if (comparisonPlayerId === playerId || !players.some((player) => player.player_id === comparisonPlayerId)) {
+      setComparisonPlayerId("");
+    }
+  }, [comparisonPlayerId, loading, playerId, players, seasonLoading]);
   const playerMetrics = useMemo(
     () => metrics.filter((metric) => metric.subject_type === "player_match"),
     [metrics],
@@ -1224,10 +1304,10 @@ export function App() {
       });
   }, [language, playerMetrics]);
   const playerViewMetrics = useMemo(
-    () => selectedPlayer?.role_group === "Goalkeepers"
+    () => selectedPlayer?.role_group === "Goalkeepers" && (!comparisonPlayer || comparisonPlayer.role_group === "Goalkeepers")
       ? playerChartMetrics
       : playerChartMetrics.filter((metric) => !isGoalkeepingMetricCode(metric.code)),
-    [playerChartMetrics, selectedPlayer?.role_group],
+    [comparisonPlayer, playerChartMetrics, selectedPlayer?.role_group],
   );
   useEffect(() => {
     if (!playerViewMetrics.length) return;
@@ -1426,14 +1506,11 @@ export function App() {
   }, [clubSquad, squadLeaderboardRows]);
   const clubSquadLeaders = filterLeaderboardRows(clubSquadLeaderboardRows, players, squadQualification, squadMinimum);
   const selectedPlayerMetric = playerViewMetrics.find((metric) => metric.chartKey === metricCode);
-  const latestPlayerHistorySeasonId = useMemo(() => {
-    const latestMatchBySeason = new Map<string, number>();
-    playerHistory.forEach((row) => latestMatchBySeason.set(
-      row.season_id,
-      Math.max(latestMatchBySeason.get(row.season_id) ?? 0, dateValue(row.scheduled_at)),
-    ));
-    return [...latestMatchBySeason].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-  }, [playerHistory]);
+  const latestPlayerHistorySeasonId = useMemo(() => latestHistorySeasonId(playerHistory), [playerHistory]);
+  const latestComparisonHistorySeasonId = useMemo(
+    () => latestHistorySeasonId(comparisonPlayerHistory),
+    [comparisonPlayerHistory],
+  );
   const latestPlayerHistorySeason = seasons.find((season) => season.season_id === latestPlayerHistorySeasonId);
   const visiblePlayerHistory = useMemo(
     () => playerHistoryRange === "all"
@@ -1441,9 +1518,18 @@ export function App() {
       : playerHistory.filter((row) => row.season_id === latestPlayerHistorySeasonId),
     [latestPlayerHistorySeasonId, playerHistory, playerHistoryRange],
   );
+  const visibleComparisonPlayerHistory = useMemo(
+    () => playerHistoryRange === "all"
+      ? comparisonPlayerHistory
+      : comparisonPlayerHistory.filter((row) => row.season_id === latestComparisonHistorySeasonId),
+    [comparisonPlayerHistory, latestComparisonHistorySeasonId, playerHistoryRange],
+  );
   const playerHistorySeasonCount = useMemo(
-    () => new Set(playerHistory.map((row) => row.season_id)).size,
-    [playerHistory],
+    () => new Set([
+      ...playerHistory.map((row) => row.season_id),
+      ...comparisonPlayerHistory.map((row) => row.season_id),
+    ]).size,
+    [comparisonPlayerHistory, playerHistory],
   );
   useEffect(() => {
     if (playerHistory.length && playerHistoryRange === "all" && playerHistorySeasonCount <= 1) setPlayerHistoryRange("latest");
@@ -1453,6 +1539,12 @@ export function App() {
       ? aggregatePlayerHistory(visiblePlayerHistory, selectedPlayerMetric, playerHistoryRange === "all", language)
       : [],
     [language, playerHistoryRange, selectedPlayerMetric, visiblePlayerHistory],
+  );
+  const comparisonPlayerChartData = useMemo(
+    () => selectedPlayerMetric && comparisonPlayer
+      ? aggregatePlayerHistory(visibleComparisonPlayerHistory, selectedPlayerMetric, playerHistoryRange === "all", language)
+      : [],
+    [comparisonPlayer, language, playerHistoryRange, selectedPlayerMetric, visibleComparisonPlayerHistory],
   );
   const playerRatioNumerator = playerChartData.reduce((total, point) => total + Number(point.numerator ?? 0), 0);
   const playerRatioDenominator = playerChartData.reduce((total, point) => total + Number(point.denominator ?? 0), 0);
@@ -1485,6 +1577,7 @@ export function App() {
       shotPlayerId,
       clubId,
       playerId,
+      comparisonPlayerId,
       metricCode,
       playerHistoryRange,
       leaderMetricCode,
@@ -1516,6 +1609,7 @@ export function App() {
     clubQuery,
     clubTournamentScope,
     competitionId,
+    comparisonPlayerId,
     explorerMetricCode,
     explorerMinimum,
     explorerRatingMinimumMinutes,
@@ -1567,6 +1661,7 @@ export function App() {
   }
 
   function openPlayer(nextPlayerId: string) {
+    if (nextPlayerId === comparisonPlayerId) setComparisonPlayerId(playerId);
     setPlayerId(nextPlayerId);
     navigate("players");
   }
@@ -1575,6 +1670,7 @@ export function App() {
     setCompetitionId(player.competition_id);
     setSeasonId(player.season_id);
     setPlayerId(player.player_id);
+    setComparisonPlayerId("");
     navigate("players");
   }
 
@@ -1780,6 +1876,7 @@ export function App() {
         ) : (
           <PlayersView
             players={rankedExplorerPlayers}
+            allSeasonPlayers={players}
             rankingRows={qualifiedExplorerRows}
             rankingMetrics={explorerLeaderboardMetrics}
             rankingMetricCode={explorerMetricCode}
@@ -1793,10 +1890,16 @@ export function App() {
             rankingError={explorerLeaderboardError}
             allPlayersCount={players.length}
             selectedPlayer={selectedPlayer}
+            comparisonPlayer={comparisonPlayer}
+            comparisonPlayerId={comparisonPlayerId}
+            setComparisonPlayerId={setComparisonPlayerId}
             season={currentSeason}
             seasonHeatmaps={playerSeasonHeatmaps}
             seasonHeatmapLoading={playerHeatmapLoading}
-            selectPlayer={setPlayerId}
+            selectPlayer={(nextPlayerId) => {
+              if (nextPlayerId === comparisonPlayerId) setComparisonPlayerId(playerId);
+              setPlayerId(nextPlayerId);
+            }}
             roles={roleFilters}
             roleFilter={roleFilter}
             setRoleFilter={(role) => { setRoleFilter(role); setPositionFilter("All"); }}
@@ -1818,11 +1921,15 @@ export function App() {
             latestHistorySeasonLabel={latestPlayerHistorySeason?.season_name ?? text.latestSeasonWithData}
             historySeasonCount={playerHistorySeasonCount}
             historyRows={visiblePlayerHistory}
+            comparisonHistoryRows={visibleComparisonPlayerHistory}
             chartData={playerChartData}
+            comparisonChartData={comparisonPlayerChartData}
             average={playerAverage}
             averageNumerator={playerRatioDenominator > 0 ? playerRatioNumerator : null}
             averageDenominator={playerRatioDenominator > 0 ? playerRatioDenominator : null}
             detailLoading={detailLoading}
+            comparisonLoading={comparisonLoading}
+            comparisonError={comparisonError}
           />
         )}
       </main>
@@ -2509,6 +2616,7 @@ function SeasonHeatmapPanel({
 
 function PlayersView({
   players,
+  allSeasonPlayers,
   rankingRows,
   rankingMetrics,
   rankingMetricCode,
@@ -2522,6 +2630,9 @@ function PlayersView({
   rankingError,
   allPlayersCount,
   selectedPlayer,
+  comparisonPlayer,
+  comparisonPlayerId,
+  setComparisonPlayerId,
   season,
   seasonHeatmaps,
   seasonHeatmapLoading,
@@ -2547,13 +2658,18 @@ function PlayersView({
   latestHistorySeasonLabel,
   historySeasonCount,
   historyRows,
+  comparisonHistoryRows,
   chartData,
+  comparisonChartData,
   average,
   averageNumerator,
   averageDenominator,
   detailLoading,
+  comparisonLoading,
+  comparisonError,
 }: {
   players: SeasonPlayer[];
+  allSeasonPlayers: SeasonPlayer[];
   rankingRows: PlayerLeaderboardRow[];
   rankingMetrics: LeaderboardMetricOption[];
   rankingMetricCode: string;
@@ -2567,6 +2683,9 @@ function PlayersView({
   rankingError: string | null;
   allPlayersCount: number;
   selectedPlayer?: SeasonPlayer;
+  comparisonPlayer?: SeasonPlayer;
+  comparisonPlayerId: string;
+  setComparisonPlayerId: (id: string) => void;
   season: Season;
   seasonHeatmaps: PlayerSeasonHeatmap[];
   seasonHeatmapLoading: boolean;
@@ -2592,11 +2711,15 @@ function PlayersView({
   latestHistorySeasonLabel: string;
   historySeasonCount: number;
   historyRows: PlayerHistory[];
+  comparisonHistoryRows: PlayerHistory[];
   chartData: PlayerChartPoint[];
+  comparisonChartData: PlayerChartPoint[];
   average: number | null;
   averageNumerator: number | null;
   averageDenominator: number | null;
   detailLoading: boolean;
+  comparisonLoading: boolean;
+  comparisonError: string | null;
 }) {
   const { language, text } = useLocale();
   const metric = metrics.find((item) => item.chartKey === metricCode);
@@ -2604,41 +2727,79 @@ function PlayersView({
   const seasonRankingMetrics = rankingMetrics.filter((item) => item.kind === "season");
   const matchRankingMetrics = rankingMetrics.filter((item) => item.kind === "match");
   const selectedPosition = selectedPlayer ? localizedPlayerPosition(selectedPlayer, language) : null;
+  const comparisonPosition = comparisonPlayer ? localizedPlayerPosition(comparisonPlayer, language) : null;
+  const selectedPlayerName = selectedPlayer
+    ? localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)
+    : "";
+  const comparisonPlayerName = comparisonPlayer
+    ? localizedPlayerName(comparisonPlayer, comparisonPlayer.display_name, language)
+    : "";
+  const comparisonOptions = [...allSeasonPlayers]
+    .filter((player) => player.player_id !== selectedPlayer?.player_id)
+    .sort((a, b) => localizedPlayerName(a, a.display_name, language).localeCompare(
+      localizedPlayerName(b, b.display_name, language),
+      localeCode(language),
+    ));
   const attributeGroups = useMemo(() => {
     const normalizedQuery = attributeQuery.trim().toLowerCase();
     const categoryOrder = selectedPlayer?.role_group === "Goalkeepers"
       ? (["Goalkeeping", ...playerAttributeCategories.filter((category) => category !== "Goalkeeping")] as PlayerAttributeCategory[])
       : playerAttributeCategories.filter((category) => category !== "Goalkeeping");
     const attributes = metrics
-      .map((item) => summarizePlayerAttribute(historyRows, item))
+      .map((item) => ({
+        metric: item,
+        primary: summarizePlayerAttribute(historyRows, item),
+        comparison: comparisonPlayer ? summarizePlayerAttribute(comparisonHistoryRows, item) : null,
+      }))
       .filter((attribute) => !normalizedQuery
-        || attribute.name.toLowerCase().includes(normalizedQuery)
-        || attribute.category.toLowerCase().includes(normalizedQuery)
-        || categoryName(attribute.category, language).includes(normalizedQuery));
+        || attribute.primary.name.toLowerCase().includes(normalizedQuery)
+        || attribute.primary.category.toLowerCase().includes(normalizedQuery)
+        || categoryName(attribute.primary.category, language).includes(normalizedQuery));
     return categoryOrder
-      .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.category === category) }))
+      .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.primary.category === category) }))
       .filter((group) => group.attributes.length > 0);
-  }, [attributeQuery, historyRows, language, metrics, selectedPlayer?.role_group]);
+  }, [attributeQuery, comparisonHistoryRows, comparisonPlayer, historyRows, language, metrics, selectedPlayer?.role_group]);
   const isPairedMetric = metric?.chartMode === "paired"
     && Boolean(metric.numerator_metric_code)
     && Boolean(metric.denominator_metric_code);
   const isPer90Metric = metric?.normalization === "per90";
   const numeratorLabel = ratioComponentLabel(metric?.numerator_metric_code, language);
   const denominatorLabel = ratioComponentLabel(metric?.denominator_metric_code, language);
-  const localizedChartData = chartData.map((point) => ({
-    ...point,
-    opponent: localizedClubById(clubs, point.opponentTeamId, point.opponent, language) || text.opponent,
-  }));
-  const plottedChartData = isPer90Metric ? localizedChartData.flatMap((point) => {
-    if (point.minutes === null || point.minutes <= 0) return [];
-    const factor = 90 / point.minutes;
-    return [{
+  const prepareChartData = (points: PlayerChartPoint[]) => {
+    const localized = points.map((point) => ({
       ...point,
-      value: point.value === null ? null : isPairedMetric ? point.value : point.value * factor,
-      numerator: point.numerator === null ? null : point.numerator * factor,
-      denominator: point.denominator === null ? null : point.denominator * factor,
-    }];
-  }) : localizedChartData;
+      opponent: localizedClubById(clubs, point.opponentTeamId, point.opponent, language) || text.opponent,
+    }));
+    return isPer90Metric ? localized.flatMap((point) => {
+      if (point.minutes === null || point.minutes <= 0) return [];
+      const factor = 90 / point.minutes;
+      return [{
+        ...point,
+        value: point.value === null ? null : isPairedMetric ? point.value : point.value * factor,
+        numerator: point.numerator === null ? null : point.numerator * factor,
+        denominator: point.denominator === null ? null : point.denominator * factor,
+      }];
+    }) : localized;
+  };
+  const plottedChartData = prepareChartData(chartData);
+  const plottedComparisonChartData = prepareChartData(comparisonChartData);
+  const playerComparisonChartData = comparisonPlayer
+    ? Array.from({ length: Math.max(plottedChartData.length, plottedComparisonChartData.length) }, (_, index): PlayerComparisonChartPoint => {
+        const primaryPoint = plottedChartData[index] ?? null;
+        const comparisonPoint = plottedComparisonChartData[index] ?? null;
+        return {
+          match: index + 1,
+          primaryPoint,
+          comparisonPoint,
+          primaryValue: primaryPoint?.value ?? null,
+          primaryNumerator: primaryPoint?.numerator ?? null,
+          primaryDenominator: primaryPoint?.denominator ?? null,
+          comparisonValue: comparisonPoint?.value ?? null,
+          comparisonNumerator: comparisonPoint?.numerator ?? null,
+          comparisonDenominator: comparisonPoint?.denominator ?? null,
+        };
+      })
+    : [];
   const totalSampleMinutes = chartData.reduce((total, point) => total + Number(point.minutes ?? 0), 0);
   const per90Value = totalSampleMinutes > 0
     ? chartData.reduce((total, point) => total + Number(point.value ?? 0), 0) * 90 / totalSampleMinutes
@@ -2659,6 +2820,12 @@ function PlayersView({
     : historyRange === "all"
       ? `${chartData.length} ${text.matches.toLowerCase()} · ${historySeasonCount} ${historySeasonCount === 1 ? text.seasonSingular : text.seasons}`
       : `${chartData.length} ${text.matchesSampled}`;
+  const formatChartPointValue = (point: PlayerChartPoint | null) => {
+    if (!point) return "-";
+    return isPer90Metric && isPairedMetric
+      ? `${formatMetric(point.numerator)} / ${formatMetric(point.denominator)}`
+      : formatMetricWithRatio(point.value, metric?.value_type, point.numerator, point.denominator);
+  };
   return (
     <>
       <PageHeading eyebrow={`${numberFormatter.format(allPlayersCount)} ${text.players.toLowerCase()}`} title={text.playerExplorer} description={text.playerExplorerDescription} />
@@ -2722,10 +2889,29 @@ function PlayersView({
           {selectedPlayer ? (
             <>
               <div className="player-profile-head">
-                <span className="avatar large">{initials(localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language))}</span>
+                <span className="avatar large">{initials(selectedPlayerName)}</span>
                 <div>
                   <span className="player-position-line"><b title={selectedPosition?.label}>{selectedPosition?.code}</b><span>{selectedPosition?.label} · {localizedClubById(clubs, selectedPlayer.team_id, selectedPlayer.team_name, language)}</span></span>
-                  <h2>{localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)}</h2>
+                  <h2>{selectedPlayerName}</h2>
+                </div>
+                <div className="compare-player-control">
+                  <label>
+                    <ArrowLeftRight size={15} aria-hidden="true" />
+                    <span>{text.compareWith}</span>
+                    <select aria-label={text.compareWith} value={comparisonPlayerId} onChange={(event) => setComparisonPlayerId(event.target.value)}>
+                      <option value="">{text.selectComparisonPlayer}</option>
+                      {comparisonOptions.map((player) => (
+                        <option key={player.player_id} value={player.player_id}>
+                          {localizedPlayerName(player, player.display_name, language)} · {localizedClubById(clubs, player.team_id, player.team_name, language)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {comparisonPlayer && (
+                    <button aria-label={text.clearComparison} title={text.clearComparison} type="button" onClick={() => setComparisonPlayerId("")}>
+                      <X size={15} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               </div>
               <section className="stat-band player-stats">
@@ -2743,31 +2929,62 @@ function PlayersView({
               />
               <section className="player-attributes">
                 <div className="attribute-heading">
-                  <div><span>{text.playerAttributes}</span><h3>{metrics.length} {text.chartableMetrics}</h3></div>
+                  <div><span>{comparisonPlayer ? text.playerComparison : text.playerAttributes}</span><h3>{metrics.length} {text.chartableMetrics}</h3></div>
                   <label className="attribute-search"><Search size={15} /><input aria-label={text.searchPlayerAttributes} type="search" value={attributeQuery} onChange={(event) => setAttributeQuery(event.target.value)} placeholder={text.findAttribute} /></label>
                 </div>
-                <div className="attribute-scroll">
-                  {attributeGroups.map((group) => (
-                    <section className="attribute-group" key={group.category}>
-                      <h4>{categoryName(group.category, language)}</h4>
-                      <div className="attribute-grid">
-                        {group.attributes.map((attribute) => (
-                          <button
-                            className={attribute.chartKey === metricCode ? "active" : ""}
-                            key={attribute.chartKey}
-                            title={`${text.showMetricMatchByMatch}: ${attribute.name}`}
-                            type="button"
-                            onClick={() => setMetricCode(attribute.chartKey)}
-                          >
-                            <span>{attribute.name}</span>
-                            <strong>{attribute.value}</strong>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                  {!attributeGroups.length && <EmptyState text={text.noMatchingAttributes} />}
-                </div>
+                {comparisonPlayer && (
+                  <div className="comparison-player-headings">
+                    <div><span className="avatar">{initials(selectedPlayerName)}</span><span><strong>{selectedPlayerName}</strong><small>{selectedPosition?.code} · {localizedClubById(clubs, selectedPlayer.team_id, selectedPlayer.team_name, language)}</small></span></div>
+                    <ArrowLeftRight size={16} aria-hidden="true" />
+                    <div><span className="avatar">{initials(comparisonPlayerName)}</span><span><strong>{comparisonPlayerName}</strong><small>{comparisonPosition?.code} · {localizedClubById(clubs, comparisonPlayer.team_id, comparisonPlayer.team_name, language)}</small></span></div>
+                  </div>
+                )}
+                {comparisonLoading ? <InlineLoading /> : comparisonError ? <EmptyState text={text.comparisonLoadError} /> : (
+                  <div className="attribute-scroll">
+                    {attributeGroups.map((group) => (
+                      <section className="attribute-group" key={group.category}>
+                        <h4>{categoryName(group.category, language)}</h4>
+                        {comparisonPlayer ? (
+                          <div className="comparison-attribute-list">
+                            {group.attributes.map((attribute) => {
+                              const primaryClass = playerComparisonClass(attribute.primary.comparisonValue, attribute.comparison?.comparisonValue ?? null, attribute.metric.code);
+                              const comparisonClass = playerComparisonClass(attribute.comparison?.comparisonValue ?? null, attribute.primary.comparisonValue, attribute.metric.code);
+                              return (
+                                <button
+                                  className={attribute.primary.chartKey === metricCode ? "active" : ""}
+                                  key={attribute.primary.chartKey}
+                                  title={`${text.showMetricMatchByMatch}: ${attribute.primary.name}`}
+                                  type="button"
+                                  onClick={() => setMetricCode(attribute.primary.chartKey)}
+                                >
+                                  <strong className={primaryClass}>{attribute.primary.value}</strong>
+                                  <span>{attribute.primary.name}</span>
+                                  <strong className={comparisonClass}>{attribute.comparison?.value ?? "-"}</strong>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="attribute-grid">
+                            {group.attributes.map((attribute) => (
+                              <button
+                                className={attribute.primary.chartKey === metricCode ? "active" : ""}
+                                key={attribute.primary.chartKey}
+                                title={`${text.showMetricMatchByMatch}: ${attribute.primary.name}`}
+                                type="button"
+                                onClick={() => setMetricCode(attribute.primary.chartKey)}
+                              >
+                                <span>{attribute.primary.name}</span>
+                                <strong>{attribute.primary.value}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    ))}
+                    {!attributeGroups.length && <EmptyState text={text.noMatchingAttributes} />}
+                  </div>
+                )}
               </section>
               <div className="trend-heading">
                 <div><span>{text.matchByMatch}</span><h3>{metric?.name ?? text.performanceTrend}</h3></div>
@@ -2785,7 +3002,19 @@ function PlayersView({
                     </button>
                   </div>
                   <div className="trend-keys">
-                    {isPairedMetric ? (
+                    {comparisonPlayer ? isPairedMetric ? (
+                      <>
+                        <span className="trend-key primary"><i /> {selectedPlayerName} · {numeratorLabel}</span>
+                        <span className="trend-key primary denominator"><i /> {selectedPlayerName} · {denominatorLabel}</span>
+                        <span className="trend-key comparison"><i /> {comparisonPlayerName} · {numeratorLabel}</span>
+                        <span className="trend-key comparison denominator"><i /> {comparisonPlayerName} · {denominatorLabel}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="trend-key primary"><i /> {selectedPlayerName}</span>
+                        <span className="trend-key comparison"><i /> {comparisonPlayerName}</span>
+                      </>
+                    ) : isPairedMetric ? (
                       <>
                         <span className="trend-key completed"><i /> {numeratorLabel}</span>
                         <span className="trend-key attempted"><i /> {denominatorLabel}</span>
@@ -2795,7 +3024,43 @@ function PlayersView({
                 </div>
               </div>
               <div className="chart-frame">
-                {detailLoading ? <InlineLoading /> : plottedChartData.length ? (
+                {detailLoading || (comparisonPlayer && comparisonLoading) ? <InlineLoading /> : comparisonPlayer && playerComparisonChartData.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={playerComparisonChartData} margin={{ top: 18, right: 12, bottom: 4, left: -12 }}>
+                      <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
+                      <XAxis dataKey="match" axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} minTickGap={20} />
+                      <YAxis axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} width={54} />
+                      <Tooltip contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }} labelStyle={{ color: "#F4F7FA", fontWeight: 700 }} formatter={(value, _, item) => {
+                        const point = item.payload as PlayerComparisonChartPoint;
+                        const dataKey = String(item.dataKey);
+                        const isPrimary = dataKey.startsWith("primary");
+                        const playerName = isPrimary ? selectedPlayerName : comparisonPlayerName;
+                        const playerPoint = isPrimary ? point.primaryPoint : point.comparisonPoint;
+                        const numerator = isPrimary ? point.primaryNumerator : point.comparisonNumerator;
+                        const denominator = isPrimary ? point.primaryDenominator : point.comparisonDenominator;
+                        const component = dataKey.endsWith("Numerator") ? numeratorLabel : dataKey.endsWith("Denominator") ? denominatorLabel : "";
+                        const formattedValue = isPairedMetric
+                          ? formatMetric(Number(value))
+                          : formatMetricWithRatio(Number(value), metric?.value_type, numerator, denominator);
+                        const context = playerPoint ? `${playerName} · ${playerPoint.date} · ${playerPoint.opponent}` : playerName;
+                        return [formattedValue, component ? `${context} · ${component}` : context];
+                      }} labelFormatter={(label) => `${text.match} ${label}`} />
+                      {isPairedMetric ? (
+                        <>
+                          <Area type="monotone" dataKey="primaryDenominator" connectNulls stroke="#35C9B6" strokeDasharray="6 4" strokeWidth={2} fill="transparent" dot={false} activeDot={{ r: 5, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
+                          <Area type="monotone" dataKey="primaryNumerator" connectNulls stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
+                          <Area type="monotone" dataKey="comparisonDenominator" connectNulls stroke="#F0B35A" strokeDasharray="6 4" strokeWidth={2} fill="transparent" dot={false} activeDot={{ r: 5, fill: "#F0B35A", stroke: "#080D14", strokeWidth: 3 }} />
+                          <Area type="monotone" dataKey="comparisonNumerator" connectNulls stroke="#F0B35A" strokeWidth={3} fill="rgba(240, 179, 90, 0.06)" dot={{ r: 3, fill: "#111923", stroke: "#F0B35A", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#F0B35A", stroke: "#080D14", strokeWidth: 3 }} />
+                        </>
+                      ) : (
+                        <>
+                          <Area type="monotone" dataKey="primaryValue" connectNulls stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
+                          <Area type="monotone" dataKey="comparisonValue" connectNulls stroke="#F0B35A" strokeWidth={3} fill="rgba(240, 179, 90, 0.06)" dot={{ r: 3, fill: "#111923", stroke: "#F0B35A", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#F0B35A", stroke: "#080D14", strokeWidth: 3 }} />
+                        </>
+                      )}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : plottedChartData.length ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={plottedChartData} margin={{ top: 18, right: 12, bottom: 4, left: -12 }}>
                       <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
@@ -2824,8 +3089,16 @@ function PlayersView({
                   </ResponsiveContainer>
                 ) : <EmptyState text={text.noPlayerMetricData} />}
               </div>
-              <div className="history-strip">
-                {plottedChartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{isPer90Metric && isPairedMetric ? `${formatMetric(item.numerator)} / ${formatMetric(item.denominator)}` : formatMetricWithRatio(item.value, metric?.value_type, item.numerator, item.denominator)}</strong><small>{item.score}</small></div>)}
+              <div className={`history-strip${comparisonPlayer ? " comparison-history-strip" : ""}`}>
+                {comparisonPlayer ? playerComparisonChartData.slice(-6).reverse().map((item) => (
+                  <div key={item.match}>
+                    <span>{text.match} {item.match}</span>
+                    <strong className="primary-history-value"><i />{selectedPlayerName}<b>{formatChartPointValue(item.primaryPoint)}</b></strong>
+                    <small>{item.primaryPoint ? `${item.primaryPoint.date} · ${item.primaryPoint.opponent}` : "-"}</small>
+                    <strong className="comparison-history-value"><i />{comparisonPlayerName}<b>{formatChartPointValue(item.comparisonPoint)}</b></strong>
+                    <small>{item.comparisonPoint ? `${item.comparisonPoint.date} · ${item.comparisonPoint.opponent}` : "-"}</small>
+                  </div>
+                )) : plottedChartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatChartPointValue(item)}</strong><small>{item.score}</small></div>)}
               </div>
             </>
           ) : <EmptyState text={text.selectPlayer} />}
@@ -3279,6 +3552,8 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeY
       : metric?.value_type === "count" ? observedValue ?? 0 : observedValue;
     return {
       match: index + 1,
+      matchId: row.match_id,
+      scheduledAt: row.scheduled_at,
       date: formatPlayerHistoryDate(row.scheduled_at, includeYear, language),
       value,
       opponent: cleanTeamName(row.opponent_team_name ?? textByLanguage[language].opponent),
@@ -3293,6 +3568,14 @@ function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeY
 
 function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerChartMetric): PlayerAttributeSummary {
   const points = aggregatePlayerHistory(historyRows, metric);
+  const observedCodes = new Set([
+    metric.code,
+    metric.numerator_metric_code,
+    metric.denominator_metric_code,
+  ].filter((code): code is string => Boolean(code)));
+  const hasObservation = historyRows.some((row) => observedCodes.has(row.metric_code)
+    && row.value_numeric !== null
+    && isUsableMetricValue(row.metric_code, Number(row.value_numeric)));
   const values = points.map((point) => point.value).filter((value): value is number => value !== null && Number.isFinite(value));
   const totalMinutes = points.reduce((total, point) => total + Number(point.minutes ?? 0), 0);
   const totalValue = values.reduce((total, value) => total + value, 0);
@@ -3303,19 +3586,25 @@ function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerCh
     && Boolean(metric.denominator_metric_code);
 
   let value = "-";
-  if (metric.normalization === "per90" && totalMinutes > 0) {
+  let comparisonValue: number | null = null;
+  if (hasObservation && metric.normalization === "per90" && totalMinutes > 0) {
+    comparisonValue = isPaired ? numerator * 90 / totalMinutes : totalValue * 90 / totalMinutes;
     value = isPaired
       ? `${formatMetric(numerator * 90 / totalMinutes)} / ${formatMetric(denominator * 90 / totalMinutes)}`
       : formatMetric(totalValue * 90 / totalMinutes);
-  } else if (isPaired && points.length) {
+  } else if (hasObservation && isPaired && points.length) {
+    comparisonValue = numerator;
     value = `${formatMetric(numerator)} / ${formatMetric(denominator)}`;
-  } else if (metric.value_type === "percentage" && values.length) {
+  } else if (hasObservation && metric.value_type === "percentage" && values.length) {
     const weightedValue = denominator > 0 ? numerator * 100 / denominator : average(values);
+    comparisonValue = weightedValue;
     value = formatMetric(weightedValue, "percentage");
-  } else if (metric.value_type === "count" && points.length) {
+  } else if (hasObservation && metric.value_type === "count" && points.length) {
+    comparisonValue = totalValue;
     value = formatMetric(totalValue);
-  } else if (values.length) {
-    value = formatMetric(average(values), metric.value_type);
+  } else if (hasObservation && values.length) {
+    comparisonValue = average(values);
+    value = formatMetric(comparisonValue, metric.value_type);
   }
 
   return {
@@ -3323,7 +3612,20 @@ function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerCh
     name: metric.name,
     category: playerAttributeCategory(metric),
     value,
+    comparisonValue,
   };
+}
+
+function playerComparisonClass(
+  value: number | null,
+  otherValue: number | null,
+  metricCode: string,
+) {
+  if (value === null || otherValue === null) return "";
+  if (Math.abs(value - otherValue) < 0.000001) return "tie";
+  const lowerIsBetter = lowerIsBetterMetricCodes.has(metricCode);
+  const isBetter = lowerIsBetter ? value < otherValue : value > otherValue;
+  return isBetter ? "better" : "worse";
 }
 
 function playerAttributeCategory(metric: Pick<Metric, "code">): PlayerAttributeCategory {

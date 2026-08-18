@@ -2530,6 +2530,64 @@ tr:last-child td {
   font-size: 24px;
 }
 
+.compare-player-control {
+  display: flex;
+  min-width: min(330px, 46%);
+  align-items: stretch;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.compare-player-control label {
+  display: grid;
+  min-width: 0;
+  height: 38px;
+  flex: 1;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding-inline-start: 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-deep);
+}
+
+.compare-player-control label > span {
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.compare-player-control select {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  color: var(--text);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 10px;
+}
+
+.compare-player-control > button {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-deep);
+}
+
+.compare-player-control > button:hover {
+  color: var(--coral);
+  border-color: var(--coral);
+}
+
 .player-position-line {
   display: flex !important;
   align-items: center;
@@ -2754,6 +2812,51 @@ tr:last-child td {
   overflow-y: auto;
 }
 
+.comparison-player-headings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-block: 1px solid var(--line);
+}
+
+.comparison-player-headings > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.comparison-player-headings > div:last-child {
+  justify-content: flex-end;
+  text-align: end;
+}
+
+.comparison-player-headings > div > span:last-child {
+  min-width: 0;
+}
+
+.comparison-player-headings strong,
+.comparison-player-headings small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-player-headings strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.comparison-player-headings small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
 .attribute-group + .attribute-group {
   margin-top: 15px;
 }
@@ -2818,6 +2921,69 @@ html[dir="rtl"] .attribute-grid button.active {
   white-space: nowrap;
 }
 
+.comparison-attribute-list {
+  display: grid;
+  gap: 5px;
+}
+
+.comparison-attribute-list button {
+  display: grid;
+  min-height: 46px;
+  grid-template-columns: minmax(70px, 1fr) minmax(125px, 1.5fr) minmax(70px, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+}
+
+.comparison-attribute-list button:hover,
+.comparison-attribute-list button.active {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--raised);
+}
+
+.comparison-attribute-list button.active {
+  border-color: var(--green);
+  box-shadow: inset 3px 0 var(--teal);
+}
+
+html[dir="rtl"] .comparison-attribute-list button.active {
+  box-shadow: inset -3px 0 var(--teal);
+}
+
+.comparison-attribute-list span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.comparison-attribute-list strong {
+  color: var(--muted-bright);
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.comparison-attribute-list strong.better {
+  color: var(--teal);
+}
+
+.comparison-attribute-list strong.worse {
+  color: var(--coral);
+}
+
+.comparison-attribute-list strong.tie {
+  color: var(--amber);
+}
+
 .trend-heading {
   display: flex;
   align-items: flex-end;
@@ -2843,6 +3009,8 @@ html[dir="rtl"] .attribute-grid button.active {
   display: inline-flex;
   align-items: center;
   gap: 14px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .trend-actions {
@@ -2866,6 +3034,28 @@ html[dir="rtl"] .attribute-grid button.active {
 
 .trend-key.attempted i {
   background: var(--amber);
+}
+
+.trend-key.primary i {
+  background: var(--teal);
+}
+
+.trend-key.comparison i {
+  background: var(--amber);
+}
+
+.trend-key.denominator i {
+  height: 0;
+  border-top: 2px dashed currentColor;
+  background: transparent;
+}
+
+.trend-key.primary.denominator {
+  color: var(--teal);
+}
+
+.trend-key.comparison.denominator {
+  color: var(--amber);
 }
 
 .chart-frame {
@@ -2892,6 +3082,47 @@ html[dir="rtl"] .attribute-grid button.active {
   min-width: 0;
   padding: 10px;
   background: var(--panel-deep);
+}
+
+.comparison-history-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.comparison-history-strip > div > strong {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  color: var(--muted-bright);
+  font-size: 9px;
+}
+
+.comparison-history-strip > div > strong i {
+  width: 9px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--teal);
+}
+
+.comparison-history-strip > div > strong.comparison-history-value i {
+  background: var(--amber);
+}
+
+.comparison-history-strip > div > strong b {
+  color: var(--text);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.comparison-history-strip > div > small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .history-strip span,
@@ -3363,6 +3594,13 @@ html[dir="rtl"] .attribute-grid button.active {
     grid-template-columns: 58px minmax(0, 1fr);
   }
 
+  .compare-player-control {
+    width: 100%;
+    min-width: 0;
+    grid-column: 1 / -1;
+    margin-inline-start: 0;
+  }
+
   .metric-select {
     grid-column: 1 / -1;
     width: 100%;
@@ -3414,12 +3652,35 @@ html[dir="rtl"] .attribute-grid button.active {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .comparison-player-headings {
+    gap: 6px;
+    padding-inline: 4px;
+  }
+
+  .comparison-player-headings .avatar {
+    display: none;
+  }
+
+  .comparison-attribute-list button {
+    grid-template-columns: minmax(58px, 0.8fr) minmax(100px, 1.4fr) minmax(58px, 0.8fr);
+    gap: 6px;
+    padding-inline: 6px;
+  }
+
+  .comparison-attribute-list strong {
+    font-size: 10px;
+  }
+
   .chart-frame {
     height: 280px;
   }
 
   .history-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .comparison-history-strip {
+    grid-template-columns: 1fr;
   }
 
   .trend-heading {
@@ -3434,6 +3695,10 @@ html[dir="rtl"] .attribute-grid button.active {
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 10px;
+  }
+
+  .trend-keys {
+    justify-content: flex-start;
   }
 
   .history-range {
