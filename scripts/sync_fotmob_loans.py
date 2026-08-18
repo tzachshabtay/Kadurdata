@@ -111,6 +111,10 @@ def source_team_key(source_team_id: Any, team_name: str) -> str:
     return raw if raw and raw != "-1" else f"name:{normalized_name(team_name)}"
 
 
+def current_season_start(today: date) -> date:
+    return date(today.year if today.month >= 7 else today.year - 1, 7, 1)
+
+
 def primary_position(transfer: dict[str, Any]) -> Optional[str]:
     position = transfer.get("position") or {}
     value = f"{position.get('key') or ''} {position.get('label') or ''}".lower()
@@ -466,6 +470,16 @@ def main() -> int:
                 upsert_mapping(cur, fotmob_source_id, "player", source_player_id, "core.players", canonical_id, player_name)
                 player_mapping[source_player_id] = canonical_id
                 return canonical_id
+
+            if not failures:
+                cur.execute(
+                    """
+                    delete from obs.player_loans
+                    where source_id = %s
+                      and coalesce(ended_on, 'infinity'::date) >= %s
+                    """,
+                    (fotmob_source_id, current_season_start(date.today())),
+                )
 
             for loan in fetched_loans.values():
                 player_id = ensure_player(loan, "loan")

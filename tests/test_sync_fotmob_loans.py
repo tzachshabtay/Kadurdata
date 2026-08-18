@@ -2,6 +2,7 @@ import unittest
 from datetime import date
 
 from scripts.sync_fotmob_loans import (
+    current_season_start,
     extract_team_loans,
     extract_team_roster,
     normalized_name,
@@ -12,6 +13,10 @@ from scripts.sync_fotmob_loans import (
 
 
 class FotMobLoanTests(unittest.TestCase):
+    def test_current_season_starts_in_july(self) -> None:
+        self.assertEqual(current_season_start(date(2026, 8, 18)), date(2026, 7, 1))
+        self.assertEqual(current_season_start(date(2026, 3, 1)), date(2025, 7, 1))
+
     def test_selects_exact_team_name_before_search_score(self) -> None:
         suggestions = [
             {"id": "1", "name": "Maccabi Haifa Youth", "score": 999},
