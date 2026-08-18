@@ -10,6 +10,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
+from difflib import SequenceMatcher
 from typing import Any, Iterable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -59,6 +60,15 @@ POSITION_GROUPS = {
     "MIDFIELDER": "Midfielder",
     "FORWARD": "Attacker",
 }
+TEAM_SEARCH_STOP_WORDS = {"as", "fc", "sc", "afc", "cf", "ms", "ironi"}
+TEAM_SEARCH_REPLACEMENTS = {
+    "hertzliya": "herzliya",
+    "kassem": "qasem",
+}
+
+
+class TransfermarktNotFound(RuntimeError):
+    pass
 
 
 def parse_args() -> argparse.Namespace:
@@ -82,6 +92,13 @@ def normalized_team_name(value: str) -> str:
     return " ".join(token for token in tokens if token not in {"fc", "sc", "afc", "cf"})
 
 
+def team_search_terms(value: str) -> list[str]:
+    normalized = normalized_team_name(value)
+    replaced = " ".join(TEAM_SEARCH_REPLACEMENTS.get(token, token) for token in normalized.split())
+    shortened = " ".join(token for token in replaced.split() if token not in TEAM_SEARCH_STOP_WORDS)
+    return list(dict.fromkeys(term for term in (normalized, replaced, shortened) if term))
+
+
 def fetch_json(url: str, retries: int, sleep_seconds: float) -> dict[str, Any]:
     error: Optional[Exception] = None
     for attempt in range(retries + 1):
@@ -100,7 +117,13 @@ def fetch_json(url: str, retries: int, sleep_seconds: float) -> dict[str, Any]:
             if not isinstance(payload, dict) or payload.get("success") is not True or not isinstance(payload.get("data"), (dict, list)):
                 raise RuntimeError(f"unexpected Transfermarkt API response from {url}")
             return payload
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, RuntimeError) as exc:
+        except HTTPError as exc:
+            if exc.code == 404:
+                raise TransfermarktNotFound(f"Transfermarkt has no API record for {url}") from exc
+            error = exc
+            if attempt < retries:
+                time.sleep(sleep_seconds * (attempt + 1))
+        except (URLError, TimeoutError, json.JSONDecodeError, RuntimeError) as exc:
             error = exc
             if attempt < retries:
                 time.sleep(sleep_seconds * (attempt + 1))
@@ -143,7 +166,19 @@ def select_team_suggestion(suggestions: list[dict[str, Any]], team_name: str) ->
     exact = [item for item in suggestions if normalized_team_name(str(item.get("name") or "")) == wanted]
     if exact:
         return exact[0]
-    return suggestions[0] if len(suggestions) == 1 else None
+
+    wanted_tokens = set(wanted.split())
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for item in suggestions:
+        candidate = normalized_team_name(str(item.get("name") or ""))
+        candidate_tokens = set(candidate.split())
+        if not candidate_tokens or "u19" in candidate_tokens or "women" in candidate_tokens:
+            continue
+        overlap = 2 * len(wanted_tokens & candidate_tokens) / max(len(wanted_tokens) + len(candidate_tokens), 1)
+        similarity = SequenceMatcher(None, wanted, candidate).ratio()
+        ranked.append((max(overlap, similarity), item))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return ranked[0][1] if ranked and ranked[0][0] >= 0.72 else None
 
 
 def resolve_transfermarkt_team(team_name: str, retries: int, sleep_seconds: float) -> Optional[dict[str, Any]]:
@@ -151,13 +186,17 @@ def resolve_transfermarkt_team(team_name: str, retries: int, sleep_seconds: floa
     if normalized in KNOWN_TEAM_IDS:
         return {"id": KNOWN_TEAM_IDS[normalized], "name": team_name}
 
-    search = fetch_json(api_url("quick-search", [("term", team_name)]), retries, sleep_seconds)
-    result = search["data"].get("result") if isinstance(search["data"], dict) else None
-    club_ids = result.get("clubIds") if isinstance(result, dict) else None
-    if not isinstance(club_ids, list) or not club_ids:
-        return None
-    clubs = fetch_entities("clubs", club_ids, retries, sleep_seconds, 2)
-    return select_team_suggestion(list(clubs.values()), team_name)
+    suggestions: dict[str, dict[str, Any]] = {}
+    for term in team_search_terms(team_name):
+        search = fetch_json(api_url("quick-search", [("term", term)]), retries, sleep_seconds)
+        result = search["data"].get("result") if isinstance(search["data"], dict) else None
+        club_ids = result.get("clubIds") if isinstance(result, dict) else None
+        if isinstance(club_ids, list) and club_ids:
+            suggestions.update(fetch_entities("clubs", club_ids, retries, sleep_seconds, 2))
+        selected = select_team_suggestion(list(suggestions.values()), team_name)
+        if selected:
+            return selected
+    return None
 
 
 def parse_api_date(value: Any) -> Optional[date]:
@@ -298,6 +337,8 @@ def main() -> int:
         raise SystemExit("SUPABASE_DB_URL is required")
 
     failures: list[dict[str, str]] = []
+    unsupported_teams: list[str] = []
+    unsupported_team_seasons: list[str] = []
     with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as connection:
         with connection.cursor() as cur:
             source_id = get_source(cur)
@@ -315,7 +356,7 @@ def main() -> int:
                         failures.append({"team": str(team["team_name"]), "error": str(exc)})
                         continue
                     if not suggestion:
-                        failures.append({"team": str(team["team_name"]), "error": "no exact Transfermarkt club match"})
+                        unsupported_teams.append(str(team["team_name"]))
                         continue
                     source_team_id = str(suggestion["id"])
                 upsert_mapping(cur, source_id, "team", source_team_id, "core.teams", str(team["canonical_team_id"]), str(team["team_name"]))
@@ -324,13 +365,16 @@ def main() -> int:
 
             seasons = season_start_years(args.lookback_years)
 
-            def fetch_team_season(team: dict[str, Any], start_year: int) -> list[dict[str, Any]]:
+            def fetch_team_season(team: dict[str, Any], start_year: int) -> Optional[list[dict[str, Any]]]:
                 source_team_id = str(team["transfermarkt_team_id"])
-                payload = fetch_json(
-                    api_url(f"transfer/history/club/{source_team_id}", [("season", str(start_year))]),
-                    args.retries,
-                    args.sleep,
-                )
+                try:
+                    payload = fetch_json(
+                        api_url(f"transfer/history/club/{source_team_id}", [("season", str(start_year))]),
+                        args.retries,
+                        args.sleep,
+                    )
+                except TransfermarktNotFound:
+                    return None
                 return extract_api_departure_loans(payload, team, start_year)
 
             loan_stubs: list[dict[str, Any]] = []
@@ -348,6 +392,9 @@ def main() -> int:
                         loans = future.result()
                     except RuntimeError as exc:
                         failures.append({"team": f"{label} {start_year}", "error": str(exc)})
+                        continue
+                    if loans is None:
+                        unsupported_team_seasons.append(f"{label} {start_year}/{start_year + 1}")
                         continue
                     loan_stubs.extend(loans)
                     coverage[(label, start_year)] = len(loans)
@@ -494,6 +541,18 @@ def main() -> int:
     print("Transfermarkt loan coverage:", flush=True)
     for (team_name, start_year), count in sorted(coverage.items(), key=lambda item: (item[0][1], item[0][0])):
         print(f"- {start_year}/{start_year + 1} {team_name}: {count}", flush=True)
+    if unsupported_teams:
+        print(
+            f"Transfermarkt does not index {len(unsupported_teams)} candidate clubs: "
+            + ", ".join(sorted(unsupported_teams)),
+            flush=True,
+        )
+    if unsupported_team_seasons:
+        print(
+            f"Transfermarkt has no history for {len(unsupported_team_seasons)} club-seasons: "
+            + ", ".join(sorted(unsupported_team_seasons)),
+            flush=True,
+        )
     print(
         f"Transfermarkt loans synchronized automatically: {len(fetched_loans)} records from "
         f"{len(resolved_teams)} clubs across {len(seasons)} seasons"

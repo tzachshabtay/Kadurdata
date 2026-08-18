@@ -8,6 +8,7 @@ from scripts.sync_transfermarkt_loans import (
     normalized_team_name,
     resolve_transfermarkt_team,
     select_team_suggestion,
+    team_search_terms,
 )
 
 
@@ -25,6 +26,13 @@ class TransfermarktLoanTests(unittest.TestCase):
         self.assertEqual(normalized_team_name("Maccabi Tel Aviv FC"), "maccabi tel aviv")
         self.assertEqual(normalized_team_name("FC Ashdod"), "ashdod")
 
+    def test_generates_search_variants_for_source_spelling_differences(self) -> None:
+        self.assertEqual(
+            team_search_terms("Hapoel Ironi Rishon LeZion FC"),
+            ["hapoel ironi rishon lezion", "hapoel rishon lezion"],
+        )
+        self.assertIn("kfar qasem", team_search_terms("MS Kfar Kassem"))
+
     def test_selects_exact_senior_team_from_api_results(self) -> None:
         suggestions = [
             {"id": "19856", "name": "Maccabi Tel Aviv U19"},
@@ -33,6 +41,15 @@ class TransfermarktLoanTests(unittest.TestCase):
         selected = select_team_suggestion(suggestions, "Maccabi Tel Aviv FC")
         self.assertIsNotNone(selected)
         self.assertEqual(selected["id"], "119")
+
+    def test_fuzzy_match_accepts_official_prefix_but_rejects_youth_team(self) -> None:
+        suggestions = [
+            {"id": "18073", "name": "Ihud Bnei Sakhnin U19"},
+            {"id": "4769", "name": "Ihud Bnei Sakhnin"},
+        ]
+        selected = select_team_suggestion(suggestions, "Bnei Sakhnin")
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected["id"], "4769")
 
     def test_extracts_only_started_outgoing_loans_for_requested_season(self) -> None:
         payload = {
