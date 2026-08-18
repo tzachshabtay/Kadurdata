@@ -217,7 +217,9 @@ def candidate_teams(cur: Any, fotmob_source_id: str, lookback_years: int) -> lis
           from core.matches match
           join core.seasons season on season.id = match.season_id
           join core.competitions competition on competition.id = season.competition_id
+          join core.countries country on country.id = competition.country_id
           where coalesce(competition.metadata ->> 'scope', 'domestic') = 'domestic'
+            and lower(country.name) = 'israel'
             and competition.gender = 'men'
             and coalesce(competition.metadata ->> 'age_group', 'senior') = 'senior'
             and coalesce(competition.metadata ->> 'participant_type', 'club') = 'club'
@@ -230,7 +232,9 @@ def candidate_teams(cur: Any, fotmob_source_id: str, lookback_years: int) -> lis
           from core.matches match
           join core.seasons season on season.id = match.season_id
           join core.competitions competition on competition.id = season.competition_id
+          join core.countries country on country.id = competition.country_id
           where coalesce(competition.metadata ->> 'scope', 'domestic') = 'domestic'
+            and lower(country.name) = 'israel'
             and competition.gender = 'men'
             and coalesce(competition.metadata ->> 'age_group', 'senior') = 'senior'
             and coalesce(competition.metadata ->> 'participant_type', 'club') = 'club'

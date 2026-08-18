@@ -51,6 +51,14 @@ class TransfermarktLoanTests(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected["id"], "4769")
 
+    def test_fuzzy_match_rejects_foreign_club(self) -> None:
+        suggestions = [{
+            "id": "999",
+            "name": "Maccabi Example",
+            "baseDetails": {"countryId": 40},
+        }]
+        self.assertIsNone(select_team_suggestion(suggestions, "Maccabi Example"))
+
     def test_extracts_only_started_outgoing_loans_for_requested_season(self) -> None:
         payload = {
             "success": True,

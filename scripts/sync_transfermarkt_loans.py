@@ -163,13 +163,19 @@ def fetch_entities(kind: str, entity_ids: Iterable[str], retries: int, sleep_sec
 
 def select_team_suggestion(suggestions: list[dict[str, Any]], team_name: str) -> Optional[dict[str, Any]]:
     wanted = normalized_team_name(team_name)
-    exact = [item for item in suggestions if normalized_team_name(str(item.get("name") or "")) == wanted]
+    eligible = []
+    for item in suggestions:
+        base_details = item.get("baseDetails") if isinstance(item.get("baseDetails"), dict) else {}
+        country_id = int(base_details.get("countryId") or 0)
+        if country_id in {0, 74}:
+            eligible.append(item)
+    exact = [item for item in eligible if normalized_team_name(str(item.get("name") or "")) == wanted]
     if exact:
         return exact[0]
 
     wanted_tokens = set(wanted.split())
     ranked: list[tuple[float, dict[str, Any]]] = []
-    for item in suggestions:
+    for item in eligible:
         candidate = normalized_team_name(str(item.get("name") or ""))
         candidate_tokens = set(candidate.split())
         if not candidate_tokens or "u19" in candidate_tokens or "women" in candidate_tokens:
@@ -339,14 +345,17 @@ def main() -> int:
     failures: list[dict[str, str]] = []
     unsupported_teams: list[str] = []
     unsupported_team_seasons: list[str] = []
+    duplicate_candidate_teams: list[str] = []
     with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as connection:
         with connection.cursor() as cur:
             source_id = get_source(cur)
             teams = candidate_teams(cur, source_id, args.lookback_years)
             if args.limit > 0:
                 teams = teams[:args.limit]
+            teams.sort(key=lambda team: (not bool(team.get("fotmob_team_id")), str(team["team_name"])))
 
             resolved_teams: list[dict[str, Any]] = []
+            resolved_source_team_ids: set[str] = set()
             for team in teams:
                 source_team_id = str(team.get("fotmob_team_id") or "")
                 if not source_team_id:
@@ -359,8 +368,12 @@ def main() -> int:
                         unsupported_teams.append(str(team["team_name"]))
                         continue
                     source_team_id = str(suggestion["id"])
+                if source_team_id in resolved_source_team_ids:
+                    duplicate_candidate_teams.append(str(team["team_name"]))
+                    continue
                 upsert_mapping(cur, source_id, "team", source_team_id, "core.teams", str(team["canonical_team_id"]), str(team["team_name"]))
                 resolved_teams.append({**team, "transfermarkt_team_id": source_team_id})
+                resolved_source_team_ids.add(source_team_id)
             connection.commit()
 
             seasons = season_start_years(args.lookback_years)
@@ -479,16 +492,15 @@ def main() -> int:
                 player_mapping[source_player_id] = canonical_id
                 return canonical_id
 
-            for parent_team_id, start_year in fetched_team_seasons:
+            for start_year in seasons:
                 cur.execute(
                     """
                     delete from obs.player_loans
                     where source_id = %s
-                      and parent_team_id = %s
                       and started_on >= make_date(%s, 7, 1)
                       and started_on < make_date(%s + 1, 7, 1)
                     """,
-                    (source_id, parent_team_id, start_year, start_year),
+                    (source_id, start_year, start_year),
                 )
 
             fetched_loans: dict[tuple[str, str, str, date], dict[str, Any]] = {}
@@ -551,6 +563,12 @@ def main() -> int:
         print(
             f"Transfermarkt has no history for {len(unsupported_team_seasons)} club-seasons: "
             + ", ".join(sorted(unsupported_team_seasons)),
+            flush=True,
+        )
+    if duplicate_candidate_teams:
+        print(
+            f"Collapsed {len(duplicate_candidate_teams)} duplicate canonical club aliases: "
+            + ", ".join(sorted(duplicate_candidate_teams)),
             flush=True,
         )
     print(
