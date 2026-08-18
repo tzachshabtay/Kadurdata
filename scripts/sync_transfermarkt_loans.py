@@ -52,6 +52,15 @@ KNOWN_TEAM_IDS = {
     "maccabi tel aviv": "119",
     "sc ashdod": "6105",
 }
+PLAYER_NAME_ALIASES = {
+    "itay zafrani": "itai zafrani",
+    "roy nawi": "roy navi",
+}
+
+
+def canonical_player_name(value: str) -> str:
+    normalized = normalized_name(value)
+    return PLAYER_NAME_ALIASES.get(normalized, normalized)
 
 
 def parse_args() -> argparse.Namespace:
@@ -325,7 +334,8 @@ def main() -> int:
             def ensure_player(loan: dict[str, Any]) -> str:
                 source_player_id = str(loan["source_player_id"])
                 player_name = str(loan["player_name"])
-                canonical_id = player_mapping.get(source_player_id) or player_by_name.get(normalized_name(player_name))
+                player_key = canonical_player_name(player_name)
+                canonical_id = player_mapping.get(source_player_id) or player_by_name.get(player_key)
                 metadata = {"formation_position": loan.get("formation_position"), "transfermarkt_loan_import": True}
                 if canonical_id is None:
                     row = cur.execute(
@@ -333,7 +343,7 @@ def main() -> int:
                         (player_name, loan.get("primary_position"), json.dumps(metadata)),
                     ).fetchone()
                     canonical_id = str(row["id"])
-                    player_by_name[normalized_name(player_name)] = canonical_id
+                    player_by_name[player_key] = canonical_id
                 else:
                     cur.execute(
                         "update core.players set primary_position = coalesce(primary_position, %s), metadata = metadata || %s::jsonb where id = %s",

@@ -2,6 +2,7 @@ import unittest
 from datetime import date
 
 from scripts.sync_transfermarkt_loans import (
+    canonical_player_name,
     extract_departure_loans,
     extract_transfer_date,
     reference_loans,
@@ -21,6 +22,15 @@ class TransfermarktLoanTests(unittest.TestCase):
         rows = reference_loans([2025], {"119"})
         self.assertEqual(len(rows), 21)
         self.assertEqual(len({row["source_player_id"] for row in rows}), 18)
+
+    def test_reference_snapshot_covers_maccabi_2026_loans(self) -> None:
+        rows = reference_loans([2026], {"119"})
+        self.assertEqual(len(rows), 16)
+        self.assertEqual(len({row["source_player_id"] for row in rows}), 16)
+
+    def test_reconciles_transfermarkt_player_name_variants(self) -> None:
+        self.assertEqual(canonical_player_name("Roy Nawi"), "roy navi")
+        self.assertEqual(canonical_player_name("Itay Zafrani"), "itai zafrani")
 
     def test_resolves_exact_senior_team_from_search_results(self) -> None:
         html = """
