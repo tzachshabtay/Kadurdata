@@ -2533,7 +2533,12 @@ function ClubsView({
                       {loans.map((loan) => {
                         const ranking = loanLeaderboardByPlayerId.get(loan.player_id);
                         const playerName = language === "he" ? loan.display_name_he ?? loan.display_name : loan.display_name;
-                        const destinationName = language === "he" ? loan.destination_team_name_he ?? loan.destination_team_name : loan.destination_team_name;
+                        const destinationName = localizedClubById(
+                          clubs,
+                          loan.destination_team_id,
+                          language === "he" ? loan.destination_team_name_he ?? loan.destination_team_name : loan.destination_team_name,
+                          language,
+                        );
                         const position = loan.specific_position ?? loan.primary_position ?? text.player;
                         return (
                           <button className="loaned-player" key={loan.loan_id} type="button" onClick={() => openPlayer(loan.player_id)}>
@@ -3030,9 +3035,12 @@ function PlayersView({
     ? localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)
     : "";
   const selectedPlayerLoanParentName = selectedPlayerLoan
-    ? language === "he"
-      ? selectedPlayerLoan.parent_team_name_he ?? selectedPlayerLoan.parent_team_name
-      : selectedPlayerLoan.parent_team_name
+    ? localizedClubById(
+        clubs,
+        selectedPlayerLoan.parent_team_id,
+        language === "he" ? selectedPlayerLoan.parent_team_name_he ?? selectedPlayerLoan.parent_team_name : selectedPlayerLoan.parent_team_name,
+        language,
+      )
     : "";
   const comparisonPlayerName = comparisonPlayer
     ? localizedPlayerName(comparisonPlayer, comparisonPlayer.display_name, language)
