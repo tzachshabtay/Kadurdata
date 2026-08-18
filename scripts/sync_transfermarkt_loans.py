@@ -32,6 +32,24 @@ TRANSFERMARKT_SOURCE = {
     "base_url": BASE_URL,
     "priority": 30,
 }
+KNOWN_TEAM_IDS = {
+    "beitar jerusalem": "3793",
+    "hapoel beer sheva": "2976",
+    "hapoel haifa": "810",
+    "hapoel ironi kiryat shmona": "6028",
+    "hapoel jerusalem": "43119",
+    "hapoel petah tikva": "262",
+    "hapoel ramat gan givatayim": "2785",
+    "hapoel tel aviv": "1017",
+    "ihoud bnei sakhnin": "4769",
+    "ironi tiberias": "51070",
+    "maccabi bnei raina": "70178",
+    "maccabi haifa": "1064",
+    "maccabi netanya": "5223",
+    "maccabi petah tikva": "3785",
+    "maccabi tel aviv": "119",
+    "sc ashdod": "6105",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,7 +102,10 @@ def select_team_suggestion(suggestions: list[dict[str, str]], team_name: str) ->
 
 
 def resolve_transfermarkt_team(team_name: str, retries: int, sleep_seconds: float) -> Optional[dict[str, str]]:
-    url = f"{BASE_URL}/schnellsuche/ergebnis/schnellsuche?query={quote(team_name)}"
+    normalized = normalized_name(team_name)
+    if normalized in KNOWN_TEAM_IDS:
+        return {"id": KNOWN_TEAM_IDS[normalized], "name": team_name, "href": ""}
+    url = f"{BASE_URL}/schnellsuche/ergebnis/schnellsuche?query={quote(normalized)}"
     return select_team_suggestion(transfermarkt_team_suggestions(fetch_text(url, retries, sleep_seconds)), team_name)
 
 

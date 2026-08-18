@@ -4,12 +4,18 @@ from datetime import date
 from scripts.sync_transfermarkt_loans import (
     extract_departure_loans,
     extract_transfer_date,
+    resolve_transfermarkt_team,
     select_team_suggestion,
     transfermarkt_team_suggestions,
 )
 
 
 class TransfermarktLoanTests(unittest.TestCase):
+    def test_known_israeli_club_does_not_depend_on_remote_search(self) -> None:
+        selected = resolve_transfermarkt_team("Maccabi Tel Aviv FC", 0, 0)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected["id"], "119")
+
     def test_resolves_exact_senior_team_from_search_results(self) -> None:
         html = """
         <a href="/maccabi-tel-aviv-u19/startseite/verein/19856" title="Maccabi Tel Aviv U19">Youth</a>
