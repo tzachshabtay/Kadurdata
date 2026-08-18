@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   BarChart3,
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Globe2,
@@ -134,6 +135,8 @@ type PlayerChartPoint = {
 };
 type PlayerComparisonChartPoint = {
   match: number;
+  date: string;
+  timestamp: number;
   primaryPoint: PlayerChartPoint | null;
   comparisonPoint: PlayerChartPoint | null;
   primaryValue: number | null;
@@ -407,6 +410,39 @@ async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
   }
 }
 
+async function fetchPlayerSeasonHeatmapRows(playerId: string, seasonId: string, matches: Match[]) {
+  if (!supabase) return { rows: [] as PlayerSeasonHeatmap[], error: "Supabase is not configured." };
+
+  let result = await supabase
+    .from("api_player_season_heatmaps")
+    .select("*")
+    .eq("season_id", seasonId)
+    .eq("player_id", playerId)
+    .order("scheduled_at")
+    .limit(100);
+
+  if (isSchemaCacheMiss(result.error)) {
+    const matchById = new Map(matches.map((match) => [match.match_id, match]));
+    const fallback = await supabase
+      .from("api_match_player_heatmaps")
+      .select("*")
+      .eq("player_id", playerId)
+      .limit(500);
+    result = {
+      ...fallback,
+      data: (fallback.data ?? []).flatMap((row) => {
+        const match = matchById.get(row.match_id);
+        return match ? [{ ...row, season_id: seasonId, scheduled_at: match.scheduled_at, minutes_played: null }] : [];
+      }),
+    } as typeof result;
+  }
+
+  return {
+    rows: (result.error ? [] : result.data ?? []) as PlayerSeasonHeatmap[],
+    error: result.error?.message ?? null,
+  };
+}
+
 function readDeepLinkState(): DeepLinkState {
   const params = new URLSearchParams(window.location.search);
   const language = params.get("lang");
@@ -548,6 +584,7 @@ export function App() {
   const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
   const [matchPlayerHeatmaps, setMatchPlayerHeatmaps] = useState<MatchPlayerHeatmap[]>([]);
   const [playerSeasonHeatmaps, setPlayerSeasonHeatmaps] = useState<PlayerSeasonHeatmap[]>([]);
+  const [comparisonPlayerSeasonHeatmaps, setComparisonPlayerSeasonHeatmaps] = useState<PlayerSeasonHeatmap[]>([]);
   const [matchShots, setMatchShots] = useState<MatchShot[]>([]);
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
@@ -595,6 +632,7 @@ export function App() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [playerHeatmapLoading, setPlayerHeatmapLoading] = useState(false);
+  const [comparisonPlayerHeatmapLoading, setComparisonPlayerHeatmapLoading] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [squadLeaderboardLoading, setSquadLeaderboardLoading] = useState(false);
@@ -942,37 +980,41 @@ export function App() {
       }
 
       setPlayerHeatmapLoading(true);
-      let result = await supabase
-        .from("api_player_season_heatmaps")
-        .select("*")
-        .eq("season_id", seasonId)
-        .eq("player_id", playerId)
-        .order("scheduled_at")
-        .limit(100);
-
-      if (isSchemaCacheMiss(result.error)) {
-        const matchById = new Map(matches.map((match) => [match.match_id, match]));
-        const fallback = await supabase
-          .from("api_match_player_heatmaps")
-          .select("*")
-          .eq("player_id", playerId)
-          .limit(500);
-        result = {
-          ...fallback,
-          data: (fallback.data ?? []).flatMap((row) => {
-            const match = matchById.get(row.match_id);
-            return match ? [{ ...row, season_id: seasonId, scheduled_at: match.scheduled_at, minutes_played: null }] : [];
-          }),
-        } as typeof result;
-      }
+      const result = await fetchPlayerSeasonHeatmapRows(playerId, seasonId, matches);
       if (cancelled) return;
-      setPlayerSeasonHeatmaps((result.error ? [] : result.data ?? []) as PlayerSeasonHeatmap[]);
+      setPlayerSeasonHeatmaps(result.rows);
       setPlayerHeatmapLoading(false);
     }
 
     void loadPlayerSeasonHeatmaps();
     return () => { cancelled = true; };
   }, [matches, playerId, refreshToken, seasonId, view]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadComparisonPlayerSeasonHeatmaps() {
+      if (view !== "players" || !comparisonPlayerId || comparisonPlayerId === playerId || !seasonId) {
+        setComparisonPlayerSeasonHeatmaps([]);
+        setComparisonPlayerHeatmapLoading(false);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) {
+        setComparisonPlayerSeasonHeatmaps([]);
+        setComparisonPlayerHeatmapLoading(false);
+        return;
+      }
+
+      setComparisonPlayerHeatmapLoading(true);
+      const result = await fetchPlayerSeasonHeatmapRows(comparisonPlayerId, seasonId, matches);
+      if (cancelled) return;
+      setComparisonPlayerSeasonHeatmaps(result.rows);
+      setComparisonPlayerHeatmapLoading(false);
+    }
+
+    void loadComparisonPlayerSeasonHeatmaps();
+    return () => { cancelled = true; };
+  }, [comparisonPlayerId, matches, playerId, refreshToken, seasonId, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1662,6 +1704,12 @@ export function App() {
 
   function openPlayer(nextPlayerId: string) {
     if (nextPlayerId === comparisonPlayerId) setComparisonPlayerId(playerId);
+    setRoleFilter("All");
+    setPositionFilter("All");
+    setClubFilter("all");
+    setPlayerQuery("");
+    setExplorerMetricCode("season_minutes");
+    setExplorerMinimums((current) => ({ ...current, season_minutes: 0 }));
     setPlayerId(nextPlayerId);
     navigate("players");
   }
@@ -1896,6 +1944,8 @@ export function App() {
             season={currentSeason}
             seasonHeatmaps={playerSeasonHeatmaps}
             seasonHeatmapLoading={playerHeatmapLoading}
+            comparisonSeasonHeatmaps={comparisonPlayerSeasonHeatmaps}
+            comparisonSeasonHeatmapLoading={comparisonPlayerHeatmapLoading}
             selectPlayer={(nextPlayerId) => {
               if (nextPlayerId === comparisonPlayerId) setComparisonPlayerId(playerId);
               setPlayerId(nextPlayerId);
@@ -2592,7 +2642,7 @@ function SeasonHeatmapPanel({
   return (
     <section className="season-heatmap-panel">
       <header>
-        <div><span>{text.spatialAnalysis}</span><h3>{text.seasonHeatmap}</h3></div>
+        <div><span>{text.seasonHeatmap}</span><h3>{playerName}</h3></div>
         <div className="season-heatmap-meta">
           <strong>{seasonName}</strong>
           <span>{renderedMatches || heatmaps.length} / {coverageTotal || appearances} {text.heatmapMatches}</span>
@@ -2611,6 +2661,92 @@ function SeasonHeatmapPanel({
         </footer>
       )}
     </section>
+  );
+}
+
+function PlayerComparisonPicker({
+  players,
+  selectedPlayer,
+  clubs,
+  onSelect,
+}: {
+  players: SeasonPlayer[];
+  selectedPlayer?: SeasonPlayer;
+  clubs: Club[];
+  onSelect: (id: string) => void;
+}) {
+  const { language, text } = useLocale();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredPlayers = useMemo(() => players.filter((player) => {
+    if (!normalizedQuery) return true;
+    const position = playerPositionDetail(player);
+    return [
+      player.display_name,
+      player.display_name_he,
+      player.team_name,
+      localizedClubById(clubs, player.team_id, player.team_name, language),
+      position.code,
+      position.label,
+    ].filter(Boolean).some((value) => value!.toLowerCase().includes(normalizedQuery));
+  }).slice(0, 80), [clubs, language, normalizedQuery, players]);
+  const selectedName = selectedPlayer
+    ? localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)
+    : "";
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    setQuery("");
+  }, [selectedPlayer?.player_id]);
+
+  return (
+    <div className={`compare-player-picker${open ? " open" : ""}`} ref={rootRef}>
+      <button
+        className="compare-player-trigger"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ArrowLeftRight size={15} aria-hidden="true" />
+        <span><small>{text.compareWith}</small><strong>{selectedName || text.selectComparisonPlayer}</strong></span>
+        <ChevronDown size={15} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="compare-player-menu">
+          <label>
+            <Search size={15} aria-hidden="true" />
+            <input autoFocus aria-label={text.searchPlayers} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.searchPlayers} />
+          </label>
+          <div className="compare-player-options" role="listbox" aria-label={text.compareWith}>
+            {filteredPlayers.length ? filteredPlayers.map((player) => {
+              const displayName = localizedPlayerName(player, player.display_name, language);
+              return (
+                <button
+                  aria-selected={player.player_id === selectedPlayer?.player_id}
+                  key={player.player_id}
+                  role="option"
+                  type="button"
+                  onClick={() => { onSelect(player.player_id); setOpen(false); }}
+                >
+                  <span className="avatar">{initials(displayName)}</span>
+                  <span><strong>{displayName}</strong><small>{localizedClubById(clubs, player.team_id, player.team_name, language)} · {playerPositionDetail(player).code}</small></span>
+                </button>
+              );
+            }) : <span className="compare-player-empty">{text.noPlayersForMetric}</span>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2636,6 +2772,8 @@ function PlayersView({
   season,
   seasonHeatmaps,
   seasonHeatmapLoading,
+  comparisonSeasonHeatmaps,
+  comparisonSeasonHeatmapLoading,
   selectPlayer,
   roles,
   roleFilter,
@@ -2689,6 +2827,8 @@ function PlayersView({
   season: Season;
   seasonHeatmaps: PlayerSeasonHeatmap[];
   seasonHeatmapLoading: boolean;
+  comparisonSeasonHeatmaps: PlayerSeasonHeatmap[];
+  comparisonSeasonHeatmapLoading: boolean;
   selectPlayer: (id: string) => void;
   roles: RoleFilter[];
   roleFilter: RoleFilter;
@@ -2783,23 +2923,45 @@ function PlayersView({
   };
   const plottedChartData = prepareChartData(chartData);
   const plottedComparisonChartData = prepareChartData(comparisonChartData);
-  const playerComparisonChartData = comparisonPlayer
-    ? Array.from({ length: Math.max(plottedChartData.length, plottedComparisonChartData.length) }, (_, index): PlayerComparisonChartPoint => {
-        const primaryPoint = plottedChartData[index] ?? null;
-        const comparisonPoint = plottedComparisonChartData[index] ?? null;
-        return {
-          match: index + 1,
-          primaryPoint,
-          comparisonPoint,
-          primaryValue: primaryPoint?.value ?? null,
-          primaryNumerator: primaryPoint?.numerator ?? null,
-          primaryDenominator: primaryPoint?.denominator ?? null,
-          comparisonValue: comparisonPoint?.value ?? null,
-          comparisonNumerator: comparisonPoint?.numerator ?? null,
-          comparisonDenominator: comparisonPoint?.denominator ?? null,
-        };
-      })
-    : [];
+  const comparisonPointsByDate = new Map<string, PlayerComparisonChartPoint>();
+  const addComparisonPoint = (point: PlayerChartPoint, side: "primary" | "comparison") => {
+    const dateKey = point.scheduledAt?.slice(0, 10) ?? point.date;
+    const timestamp = point.scheduledAt
+      ? Date.parse(`${dateKey}T00:00:00Z`)
+      : dateValue(point.scheduledAt);
+    const current = comparisonPointsByDate.get(dateKey) ?? {
+      match: 0,
+      date: point.date,
+      timestamp,
+      primaryPoint: null,
+      comparisonPoint: null,
+      primaryValue: null,
+      primaryNumerator: null,
+      primaryDenominator: null,
+      comparisonValue: null,
+      comparisonNumerator: null,
+      comparisonDenominator: null,
+    };
+    if (side === "primary") {
+      current.primaryPoint = point;
+      current.primaryValue = point.value;
+      current.primaryNumerator = point.numerator;
+      current.primaryDenominator = point.denominator;
+    } else {
+      current.comparisonPoint = point;
+      current.comparisonValue = point.value;
+      current.comparisonNumerator = point.numerator;
+      current.comparisonDenominator = point.denominator;
+    }
+    comparisonPointsByDate.set(dateKey, current);
+  };
+  if (comparisonPlayer) {
+    plottedChartData.forEach((point) => addComparisonPoint(point, "primary"));
+    plottedComparisonChartData.forEach((point) => addComparisonPoint(point, "comparison"));
+  }
+  const playerComparisonChartData = [...comparisonPointsByDate.values()]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((point, index) => ({ ...point, match: index + 1 }));
   const totalSampleMinutes = chartData.reduce((total, point) => total + Number(point.minutes ?? 0), 0);
   const per90Value = totalSampleMinutes > 0
     ? chartData.reduce((total, point) => total + Number(point.value ?? 0), 0) * 90 / totalSampleMinutes
@@ -2812,7 +2974,7 @@ function PlayersView({
     : null;
   const summaryValue = isPer90Metric
     ? isPairedMetric
-      ? per90Numerator === null || per90Denominator === null ? "-" : `${formatMetric(per90Numerator)} / ${formatMetric(per90Denominator)}`
+      ? per90Numerator === null || per90Denominator === null ? "-" : formatMetricRatio(per90Numerator, per90Denominator)
       : formatMetric(per90Value)
     : average === null ? "-" : formatMetricWithRatio(average, metric?.value_type, averageNumerator, averageDenominator);
   const summaryNote = isPer90Metric
@@ -2823,7 +2985,7 @@ function PlayersView({
   const formatChartPointValue = (point: PlayerChartPoint | null) => {
     if (!point) return "-";
     return isPer90Metric && isPairedMetric
-      ? `${formatMetric(point.numerator)} / ${formatMetric(point.denominator)}`
+      ? formatMetricRatio(point.numerator, point.denominator)
       : formatMetricWithRatio(point.value, metric?.value_type, point.numerator, point.denominator);
   };
   return (
@@ -2895,18 +3057,7 @@ function PlayersView({
                   <h2>{selectedPlayerName}</h2>
                 </div>
                 <div className="compare-player-control">
-                  <label>
-                    <ArrowLeftRight size={15} aria-hidden="true" />
-                    <span>{text.compareWith}</span>
-                    <select aria-label={text.compareWith} value={comparisonPlayerId} onChange={(event) => setComparisonPlayerId(event.target.value)}>
-                      <option value="">{text.selectComparisonPlayer}</option>
-                      {comparisonOptions.map((player) => (
-                        <option key={player.player_id} value={player.player_id}>
-                          {localizedPlayerName(player, player.display_name, language)} · {localizedClubById(clubs, player.team_id, player.team_name, language)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <PlayerComparisonPicker players={comparisonOptions} selectedPlayer={comparisonPlayer} clubs={clubs} onSelect={setComparisonPlayerId} />
                   {comparisonPlayer && (
                     <button aria-label={text.clearComparison} title={text.clearComparison} type="button" onClick={() => setComparisonPlayerId("")}>
                       <X size={15} aria-hidden="true" />
@@ -2920,13 +3071,6 @@ function PlayersView({
                 <Stat label={text.goalsAssists} value={formatNumber(Number(selectedPlayer.goals) + Number(selectedPlayer.assists))} note={`${formatNumber(selectedPlayer.goals)} ${text.goals.toLowerCase()} · ${formatNumber(selectedPlayer.assists)} ${text.assists}`} />
                 <Stat label={metric?.name ?? text.average} value={summaryValue} note={summaryNote} accent />
               </section>
-              <SeasonHeatmapPanel
-                appearances={Number(selectedPlayer.appearances)}
-                heatmaps={seasonHeatmaps}
-                loading={seasonHeatmapLoading}
-                playerName={localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)}
-                seasonName={season.season_name}
-              />
               <section className="player-attributes">
                 <div className="attribute-heading">
                   <div><span>{comparisonPlayer ? text.playerComparison : text.playerAttributes}</span><h3>{metrics.length} {text.chartableMetrics}</h3></div>
@@ -3028,7 +3172,17 @@ function PlayersView({
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={playerComparisonChartData} margin={{ top: 18, right: 12, bottom: 4, left: -12 }}>
                       <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
-                      <XAxis dataKey="match" axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} minTickGap={20} />
+                      <XAxis
+                        dataKey="timestamp"
+                        type="number"
+                        scale="time"
+                        domain={["dataMin", "dataMax"]}
+                        axisLine={false}
+                        tick={{ fill: "#8B97A6", fontSize: 11 }}
+                        tickFormatter={(value) => formatPlayerHistoryDate(new Date(Number(value)).toISOString(), historyRange === "all", language)}
+                        tickLine={false}
+                        minTickGap={28}
+                      />
                       <YAxis axisLine={false} tick={{ fill: "#8B97A6", fontSize: 11 }} tickLine={false} width={54} />
                       <Tooltip contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }} labelStyle={{ color: "#F4F7FA", fontWeight: 700 }} formatter={(value, _, item) => {
                         const point = item.payload as PlayerComparisonChartPoint;
@@ -3044,7 +3198,10 @@ function PlayersView({
                           : formatMetricWithRatio(Number(value), metric?.value_type, numerator, denominator);
                         const context = playerPoint ? `${playerName} · ${playerPoint.date} · ${playerPoint.opponent}` : playerName;
                         return [formattedValue, component ? `${context} · ${component}` : context];
-                      }} labelFormatter={(label) => `${text.match} ${label}`} />
+                      }} labelFormatter={(_, payload) => {
+                        const point = payload?.[0]?.payload as PlayerComparisonChartPoint | undefined;
+                        return point?.date ?? text.match;
+                      }} />
                       {isPairedMetric ? (
                         <>
                           <Area type="monotone" dataKey="primaryDenominator" connectNulls stroke="#35C9B6" strokeDasharray="6 4" strokeWidth={2} fill="transparent" dot={false} activeDot={{ r: 5, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
@@ -3091,14 +3248,32 @@ function PlayersView({
               </div>
               <div className={`history-strip${comparisonPlayer ? " comparison-history-strip" : ""}`}>
                 {comparisonPlayer ? playerComparisonChartData.slice(-6).reverse().map((item) => (
-                  <div key={item.match}>
-                    <span>{text.match} {item.match}</span>
+                  <div key={item.timestamp}>
+                    <span>{item.date}</span>
                     <strong className="primary-history-value"><i />{selectedPlayerName}<b>{formatChartPointValue(item.primaryPoint)}</b></strong>
                     <small>{item.primaryPoint ? `${item.primaryPoint.date} · ${item.primaryPoint.opponent}` : "-"}</small>
                     <strong className="comparison-history-value"><i />{comparisonPlayerName}<b>{formatChartPointValue(item.comparisonPoint)}</b></strong>
                     <small>{item.comparisonPoint ? `${item.comparisonPoint.date} · ${item.comparisonPoint.opponent}` : "-"}</small>
                   </div>
                 )) : plottedChartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatChartPointValue(item)}</strong><small>{item.score}</small></div>)}
+              </div>
+              <div className={`season-heatmap-layout${comparisonPlayer ? " comparison" : ""}`}>
+                <SeasonHeatmapPanel
+                  appearances={Number(selectedPlayer.appearances)}
+                  heatmaps={seasonHeatmaps}
+                  loading={seasonHeatmapLoading}
+                  playerName={selectedPlayerName}
+                  seasonName={season.season_name}
+                />
+                {comparisonPlayer && (
+                  <SeasonHeatmapPanel
+                    appearances={Number(comparisonPlayer.appearances)}
+                    heatmaps={comparisonSeasonHeatmaps}
+                    loading={comparisonSeasonHeatmapLoading}
+                    playerName={comparisonPlayerName}
+                    seasonName={season.season_name}
+                  />
+                )}
               </div>
             </>
           ) : <EmptyState text={text.selectPlayer} />}
@@ -3590,11 +3765,11 @@ function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerCh
   if (hasObservation && metric.normalization === "per90" && totalMinutes > 0) {
     comparisonValue = isPaired ? numerator * 90 / totalMinutes : totalValue * 90 / totalMinutes;
     value = isPaired
-      ? `${formatMetric(numerator * 90 / totalMinutes)} / ${formatMetric(denominator * 90 / totalMinutes)}`
+      ? formatMetricRatio(numerator * 90 / totalMinutes, denominator * 90 / totalMinutes)
       : formatMetric(totalValue * 90 / totalMinutes);
   } else if (hasObservation && isPaired && points.length) {
     comparisonValue = numerator;
-    value = `${formatMetric(numerator)} / ${formatMetric(denominator)}`;
+    value = formatMetricRatio(numerator, denominator);
   } else if (hasObservation && metric.value_type === "percentage" && values.length) {
     const weightedValue = denominator > 0 ? numerator * 100 / denominator : average(values);
     comparisonValue = weightedValue;
@@ -4221,6 +4396,10 @@ function formatMetric(value: number | null | undefined, valueType?: string) {
   return valueType === "percentage" ? `${formatted}%` : formatted;
 }
 
+function formatMetricRatio(numerator: number | null | undefined, denominator: number | null | undefined) {
+  return `\u2066${formatMetric(numerator)} / ${formatMetric(denominator)}\u2069`;
+}
+
 function formatMetricWithRatio(
   value: number | null | undefined,
   valueType?: string,
@@ -4237,7 +4416,7 @@ function formatMetricWithRatio(
     || !Number.isFinite(Number(numerator))
     || !Number.isFinite(Number(denominator))
   ) return formatted;
-  return `${formatted} (${formatMetric(Number(numerator))}/${formatMetric(Number(denominator))})`;
+  return `${formatted} (${formatMetricRatio(Number(numerator), Number(denominator))})`;
 }
 
 function formatShortDate(value: string | null, language: Language = "en") {

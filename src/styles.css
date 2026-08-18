@@ -2532,38 +2532,101 @@ tr:last-child td {
 
 .compare-player-control {
   display: flex;
-  min-width: min(330px, 46%);
+  min-width: min(360px, 48%);
   align-items: stretch;
   gap: 6px;
   margin-inline-start: auto;
 }
 
-.compare-player-control label {
-  display: grid;
+.compare-player-picker {
+  position: relative;
   min-width: 0;
-  height: 38px;
   flex: 1;
-  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
+.compare-player-trigger {
+  display: grid;
+  width: 100%;
+  height: 42px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding-inline-start: 10px;
+  padding: 0 10px;
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 5px;
   background: var(--panel-deep);
+  text-align: start;
 }
 
-.compare-player-control label > span {
-  font-size: 9px;
-  font-weight: 800;
+.compare-player-trigger:hover,
+.compare-player-picker.open .compare-player-trigger {
+  color: var(--teal);
+  border-color: var(--green);
+}
+
+.compare-player-trigger > span {
+  min-width: 0;
+}
+
+.compare-player-trigger small,
+.compare-player-trigger strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.compare-player-control select {
+.compare-player-trigger small {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.compare-player-trigger strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.compare-player-picker.open .compare-player-trigger > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.compare-player-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(430px, 100%);
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+}
+
+.compare-player-menu > label {
+  display: flex;
+  width: 100%;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel-deep);
+}
+
+.compare-player-menu > label:focus-within {
+  color: var(--teal);
+  border-color: var(--green);
+}
+
+.compare-player-menu input {
   width: 100%;
   min-width: 0;
-  height: 100%;
-  padding: 0 8px;
   color: var(--text);
   border: 0;
   outline: 0;
@@ -2571,10 +2634,73 @@ tr:last-child td {
   font-size: 10px;
 }
 
+.compare-player-options {
+  max-height: 300px;
+  margin-top: 7px;
+  overflow-y: auto;
+}
+
+.compare-player-options > button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  color: var(--text);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: start;
+}
+
+.compare-player-options > button:hover,
+.compare-player-options > button[aria-selected="true"] {
+  background: var(--raised);
+}
+
+.compare-player-options > button[aria-selected="true"] {
+  box-shadow: inset 2px 0 var(--teal);
+}
+
+html[dir="rtl"] .compare-player-options > button[aria-selected="true"] {
+  box-shadow: inset -2px 0 var(--teal);
+}
+
+.compare-player-options > button > span:last-child {
+  min-width: 0;
+}
+
+.compare-player-options strong,
+.compare-player-options small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-player-options strong {
+  font-size: 11px;
+}
+
+.compare-player-options small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.compare-player-empty {
+  display: block;
+  padding: 18px 10px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
 .compare-player-control > button {
   display: inline-flex;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   align-items: center;
   justify-content: center;
   color: var(--muted);
@@ -2630,10 +2756,25 @@ tr:last-child td {
   border-radius: 0;
 }
 
+.season-heatmap-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 20px -22px -22px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-deep);
+}
+
+.season-heatmap-layout.comparison {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.season-heatmap-layout.comparison .season-heatmap-panel + .season-heatmap-panel {
+  border-inline-start: 1px solid var(--line);
+}
+
 .season-heatmap-panel {
-  margin: 0 -22px;
+  min-width: 0;
   padding: 20px 22px 18px;
-  border-bottom: 1px solid var(--line);
 }
 
 .season-heatmap-panel > header,
@@ -2688,7 +2829,8 @@ tr:last-child td {
 
 .season-heatmap-frame {
   position: relative;
-  width: min(780px, 100%);
+  width: 100%;
+  max-width: 780px;
   margin: 0 auto;
   overflow: hidden;
   aspect-ratio: 540 / 341;
@@ -3615,8 +3757,19 @@ html[dir="rtl"] .comparison-attribute-list button.active {
     margin-inline: -15px;
   }
 
-  .season-heatmap-panel {
+  .season-heatmap-layout,
+  .season-heatmap-layout.comparison {
+    grid-template-columns: minmax(0, 1fr);
     margin-inline: -15px;
+    margin-bottom: -15px;
+  }
+
+  .season-heatmap-layout.comparison .season-heatmap-panel + .season-heatmap-panel {
+    border-inline-start: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .season-heatmap-panel {
     padding-inline: 15px;
   }
 
