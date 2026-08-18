@@ -164,26 +164,44 @@ def extract_team_loans(team_payload: dict[str, Any], fetched_team_id: str) -> li
 def candidate_teams(cur: Any, fotmob_source_id: str, lookback_years: int) -> list[dict[str, Any]]:
     return list(cur.execute(
         """
+        with relevant_team_ids as (
+          select match.home_team_id as team_id
+          from core.matches match
+          join core.seasons season on season.id = match.season_id
+          join core.competitions competition on competition.id = season.competition_id
+          where coalesce(competition.metadata ->> 'scope', 'domestic') = 'domestic'
+            and competition.gender = 'men'
+            and coalesce(competition.metadata ->> 'age_group', 'senior') = 'senior'
+            and coalesce(competition.metadata ->> 'participant_type', 'club') = 'club'
+            and coalesce(season.end_date, season.start_date, match.scheduled_at::date, current_date)
+              >= current_date - make_interval(years => %s)
+
+          union
+
+          select match.away_team_id as team_id
+          from core.matches match
+          join core.seasons season on season.id = match.season_id
+          join core.competitions competition on competition.id = season.competition_id
+          where coalesce(competition.metadata ->> 'scope', 'domestic') = 'domestic'
+            and competition.gender = 'men'
+            and coalesce(competition.metadata ->> 'age_group', 'senior') = 'senior'
+            and coalesce(competition.metadata ->> 'participant_type', 'club') = 'club'
+            and coalesce(season.end_date, season.start_date, match.scheduled_at::date, current_date)
+              >= current_date - make_interval(years => %s)
+        )
         select distinct
           team.id::text as canonical_team_id,
           team.name as team_name,
           mapping.source_entity_id as fotmob_team_id
-        from core.team_seasons team_season
-        join core.teams team on team.id = team_season.team_id
-        join core.seasons season on season.id = team_season.season_id
-        join core.competitions competition on competition.id = season.competition_id
+        from relevant_team_ids relevant
+        join core.teams team on team.id = relevant.team_id
         left join source.source_entity_ids mapping
           on mapping.source_id = %s
          and mapping.entity_type = 'team'
          and mapping.canonical_id = team.id
-        where coalesce(competition.metadata ->> 'scope', 'domestic') = 'domestic'
-          and competition.gender = 'men'
-          and coalesce(competition.metadata ->> 'age_group', 'senior') = 'senior'
-          and coalesce(competition.metadata ->> 'participant_type', 'club') = 'club'
-          and coalesce(season.end_date, season.start_date, current_date) >= current_date - make_interval(years => %s)
         order by team.name
         """,
-        (fotmob_source_id, max(lookback_years, 0)),
+        (max(lookback_years, 0), max(lookback_years, 0), fotmob_source_id),
     ).fetchall())
 
 
