@@ -6,7 +6,10 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-data/
+data/*
+!data/reference/
+data/reference/*
+!data/reference/transfermarkt_loans.json
 
 node_modules/
 dist/

@@ -4,6 +4,7 @@ from datetime import date
 from scripts.sync_transfermarkt_loans import (
     extract_departure_loans,
     extract_transfer_date,
+    reference_loans,
     resolve_transfermarkt_team,
     select_team_suggestion,
     transfermarkt_team_suggestions,
@@ -15,6 +16,11 @@ class TransfermarktLoanTests(unittest.TestCase):
         selected = resolve_transfermarkt_team("Maccabi Tel Aviv FC", 0, 0)
         self.assertIsNotNone(selected)
         self.assertEqual(selected["id"], "119")
+
+    def test_reference_snapshot_covers_maccabi_2025_loans(self) -> None:
+        rows = reference_loans([2025], {"119"})
+        self.assertEqual(len(rows), 21)
+        self.assertEqual(len({row["source_player_id"] for row in rows}), 18)
 
     def test_resolves_exact_senior_team_from_search_results(self) -> None:
         html = """

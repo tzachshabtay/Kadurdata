@@ -10,6 +10,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urljoin
@@ -24,6 +25,7 @@ except ModuleNotFoundError:
 
 
 BASE_URL = "https://www.transfermarkt.com"
+REFERENCE_LOANS_PATH = Path(__file__).resolve().parents[1] / "data" / "reference" / "transfermarkt_loans.json"
 USER_AGENT = "Mozilla/5.0 (compatible; Kadurdata/1.0; historical football loan import)"
 TRANSFERMARKT_SOURCE = {
     "code": "transfermarkt",
@@ -174,6 +176,17 @@ def extract_transfer_date(html: str) -> Optional[date]:
     return datetime.strptime(match.group(1), "%d/%m/%Y").date()
 
 
+def reference_loans(start_years: list[int], parent_team_ids: set[str]) -> list[dict[str, Any]]:
+    if not REFERENCE_LOANS_PATH.exists():
+        return []
+    rows = json.loads(REFERENCE_LOANS_PATH.read_text(encoding="utf-8"))
+    return [
+        row for row in rows
+        if int(row.get("season_start_year") or 0) in start_years
+        and str(row.get("source_parent_team_id") or "") in parent_team_ids
+    ]
+
+
 def get_source(cur: Any) -> str:
     row = cur.execute(
         """
@@ -253,12 +266,17 @@ def main() -> int:
                     except RuntimeError as exc:
                         failures.append({"team": f"{team['team_name']} {start_year}", "error": str(exc)})
 
+            loan_stubs.extend(reference_loans(
+                seasons,
+                {str(team["transfermarkt_team_id"]) for team in resolved_teams},
+            ))
+
             transfer_dates: dict[str, date] = {}
 
             def fetch_transfer_date(url: str) -> tuple[str, Optional[date]]:
                 return url, extract_transfer_date(fetch_text(url, args.retries, args.sleep))
 
-            detail_urls = sorted({loan["transfer_detail_url"] for loan in loan_stubs})
+            detail_urls = sorted({loan["transfer_detail_url"] for loan in loan_stubs if not loan.get("started_on")})
             with ThreadPoolExecutor(max_workers=max(args.workers, 1)) as executor:
                 pending = {executor.submit(fetch_transfer_date, url): url for url in detail_urls}
                 for future in as_completed(pending):
@@ -328,7 +346,7 @@ def main() -> int:
             fetched_loans: dict[tuple[str, str, str, date], dict[str, Any]] = {}
             for loan in loan_stubs:
                 fallback_date = date(int(loan["season_start_year"]), 7, 1)
-                started_on = transfer_dates.get(str(loan["transfer_detail_url"]), fallback_date)
+                started_on = date.fromisoformat(str(loan["started_on"])) if loan.get("started_on") else transfer_dates.get(str(loan["transfer_detail_url"]), fallback_date)
                 fetched_loans[(loan["source_player_id"], loan["source_parent_team_id"], loan["source_destination_team_id"], started_on)] = {
                     **loan,
                     "started_on": started_on,
