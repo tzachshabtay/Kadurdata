@@ -60,6 +60,7 @@ def fetch_text(url: str, retries: int, sleep_seconds: float) -> str:
 
 def normalized_name(value: str) -> str:
     ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    ascii_value = ascii_value.replace("'", "")
     ascii_value = re.sub(r"\b(?:fc|football club)\b", " ", ascii_value.lower())
     return re.sub(r"[^a-z0-9]+", " ", ascii_value).strip()
 

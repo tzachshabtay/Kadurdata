@@ -79,6 +79,7 @@ def integer_or_none(value: Optional[str]) -> Optional[int]:
 
 def normalized_name(value: str) -> str:
     ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    ascii_value = ascii_value.replace("'", "")
     return re.sub(r"[^a-z0-9]+", " ", ascii_value.lower()).strip()
 
 

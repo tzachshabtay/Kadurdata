@@ -49,7 +49,7 @@ class FotMobValuationTests(unittest.TestCase):
             {"type": "player", "id": "1285629", "name": "Lucas Ventura", "teamName": "Zacatecoluca"},
         ]
 
-        match = select_search_match(suggestions, "Lucas Ventura", "Hapoel Beer Sheva FC")
+        match = select_search_match(suggestions, "Lucas Ventura", "Hapoel Be'er Sheva FC")
 
         self.assertIsNotNone(match)
         self.assertEqual(match["id"], "846750")
