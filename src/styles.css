@@ -2106,6 +2106,32 @@ tr:last-child td {
   text-align: start;
 }
 
+.squad-list > button.loaned-player {
+  color: var(--muted);
+  opacity: 0.64;
+}
+
+.squad-list > button.loaned-player:first-of-type {
+  border-top: 1px solid var(--line-strong);
+}
+
+.squad-list > button:not(.loaned-player) + button.loaned-player {
+  border-top: 1px solid var(--line-strong);
+}
+
+.squad-list > button.loaned-player:hover {
+  opacity: 0.88;
+}
+
+.squad-list > button.loaned-player .avatar {
+  color: var(--muted);
+  filter: grayscale(0.65);
+}
+
+.squad-list > button.loaned-player em {
+  color: var(--muted);
+}
+
 .squad-rank {
   color: var(--muted);
   font-size: 8px;
@@ -2530,6 +2556,17 @@ tr:last-child td {
   margin-top: 5px;
   color: var(--text);
   font-size: 24px;
+}
+
+.player-loan-status {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.player-loan-status strong {
+  color: var(--amber);
+  font-weight: 750;
 }
 
 .compare-player-control {

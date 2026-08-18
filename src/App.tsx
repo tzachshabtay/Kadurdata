@@ -55,6 +55,7 @@ import type {
   MatchShot,
   MatchTeamStat,
   Metric,
+  PlayerLoan,
   PlayerLeaderboardRow,
   PlayerHistory,
   PlayerSeasonHeatmap,
@@ -599,6 +600,7 @@ export function App() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [players, setPlayers] = useState<SeasonPlayer[]>([]);
+  const [playerLoans, setPlayerLoans] = useState<PlayerLoan[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [playerHistory, setPlayerHistory] = useState<PlayerHistory[]>([]);
   const [comparisonPlayerHistory, setComparisonPlayerHistory] = useState<PlayerHistory[]>([]);
@@ -830,6 +832,7 @@ export function App() {
         setMatches(demoMatches);
         setClubs(demoClubs);
         setPlayers(demoPlayers);
+        setPlayerLoans([]);
         setRoundId((current) => demoRounds.some((round) => round.round_id === current) ? current : demoRounds[demoRounds.length - 1]?.round_id ?? "");
         setClubId((current) => demoClubs.some((club) => club.team_id === current) ? current : demoClubs[0]?.team_id ?? "");
         setPlayerId((current) => demoPlayers.some((player) => player.player_id === current) ? current : demoPlayers[0]?.player_id ?? "");
@@ -856,11 +859,12 @@ export function App() {
         return result;
       }
 
-      const [roundResult, matchResult, clubResult, playerResult, teamAssetResult] = await Promise.all([
+      const [roundResult, matchResult, clubResult, playerResult, loanResult, teamAssetResult] = await Promise.all([
         liveClient.from("api_rounds").select("*").eq("season_id", seasonId).order("stage_number").order("round_number"),
         liveClient.from("api_matches").select("*").eq("season_id", seasonId).order("scheduled_at"),
         liveClient.from("api_clubs").select("*").eq("season_id", seasonId).order("points", { ascending: false }),
         loadSeasonPlayers(),
+        liveClient.rpc("api_player_loans_for_season", { p_season_id: seasonId }),
         liveClient.from("api_team_assets").select("*"),
       ]);
       const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error ?? teamAssetResult.error;
@@ -879,15 +883,19 @@ export function App() {
         logo_url: assetByTeamId.get(club.team_id)?.logo_url ?? null,
       }));
       const nextPlayers = (playerResult.error ? [] : playerResult.data ?? []) as SeasonPlayer[];
+      const nextPlayerLoans = (loanResult.error ? [] : loanResult.data ?? []) as PlayerLoan[];
       const latestPlayedRound = [...nextRounds].reverse().find((round) => round.completed_match_count > 0) ?? nextRounds[nextRounds.length - 1];
 
       setRounds(nextRounds);
       setMatches(nextMatches);
       setClubs(nextClubs);
       setPlayers(nextPlayers);
+      setPlayerLoans(nextPlayerLoans);
       setRoundId((current) => nextRounds.some((round) => round.round_id === current) ? current : latestPlayedRound?.round_id ?? "");
       setClubId((current) => nextClubs.some((club) => club.team_id === current) ? current : nextClubs[0]?.team_id ?? "");
-      setPlayerId((current) => nextPlayers.some((player) => player.player_id === current) ? current : nextPlayers[0]?.player_id ?? "");
+      setPlayerId((current) => nextPlayers.some((player) => player.player_id === current) || nextPlayerLoans.some((loan) => loan.player_id === current)
+        ? current
+        : nextPlayers[0]?.player_id ?? nextPlayerLoans[0]?.player_id ?? "");
       setSeasonLoading(false);
     }
 
@@ -1369,7 +1377,38 @@ export function App() {
   const selectedMatch = matches.find((match) => match.match_id === matchId);
   const selectedClub = (clubTournamentScope === "all" ? allTournamentClubs.find((club) => club.team_id === clubId) : undefined)
     ?? clubs.find((club) => club.team_id === clubId);
-  const selectedPlayer = players.find((player) => player.player_id === playerId);
+  const loanProfilePlayers = useMemo(() => playerLoans.map((loan): SeasonPlayer => {
+    const seasonPlayer = players.find((player) => player.player_id === loan.player_id);
+    return seasonPlayer ?? {
+      season_id: loan.season_id,
+      competition_id: competitionId,
+      player_id: loan.player_id,
+      display_name: loan.display_name,
+      display_name_he: loan.display_name_he,
+      primary_position: loan.primary_position,
+      specific_position: loan.specific_position,
+      role_group: loan.role_group,
+      team_id: loan.destination_team_id,
+      team_name: loan.destination_team_name,
+      appearances: 0,
+      starts: 0,
+      minutes: 0,
+      goals: 0,
+      assists: 0,
+      average_rating: null,
+    };
+  }), [competitionId, playerLoans, players]);
+  const profilePlayers = useMemo(() => {
+    const byPlayerId = new Map(players.map((player) => [player.player_id, player]));
+    loanProfilePlayers.forEach((player) => {
+      if (!byPlayerId.has(player.player_id)) byPlayerId.set(player.player_id, player);
+    });
+    return [...byPlayerId.values()];
+  }, [loanProfilePlayers, players]);
+  const selectedPlayer = profilePlayers.find((player) => player.player_id === playerId);
+  const selectedPlayerLoan = useMemo(() => playerLoans
+    .filter((loan) => loan.player_id === playerId)
+    .sort((a, b) => dateValue(b.started_on) - dateValue(a.started_on))[0], [playerId, playerLoans]);
   const comparisonPlayer = players.find((player) => player.player_id === comparisonPlayerId);
   useEffect(() => {
     if (!comparisonPlayerId || loading || seasonLoading || !players.length) return;
@@ -1595,10 +1634,10 @@ export function App() {
     return player ? [player] : [];
   });
   useEffect(() => {
-    if (view !== "players" || explorerLeaderboardLoading || !rankedExplorerPlayers.length || rankedExplorerPlayers.some((player) => player.player_id === playerId)) return;
+    if (view !== "players" || explorerLeaderboardLoading || selectedPlayerLoan || !rankedExplorerPlayers.length || rankedExplorerPlayers.some((player) => player.player_id === playerId)) return;
     setComparisonPlayerId("");
     setPlayerId(rankedExplorerPlayers[0].player_id);
-  }, [explorerLeaderboardLoading, playerId, rankedExplorerPlayers, view]);
+  }, [explorerLeaderboardLoading, playerId, rankedExplorerPlayers, selectedPlayerLoan, view]);
   const clubMatches = useMemo(
     () => clubTournamentScope === "all" && view === "clubs"
       ? allTournamentClubMatches
@@ -1607,15 +1646,30 @@ export function App() {
         .sort((a, b) => dateValue(b.scheduled_at) - dateValue(a.scheduled_at)),
     [allTournamentClubMatches, clubId, clubTournamentScope, matches, view],
   );
+  const clubLoans = useMemo(() => {
+    const latestByPlayerId = new Map<string, PlayerLoan>();
+    playerLoans
+      .filter((loan) => loan.parent_team_id === clubId)
+      .sort((a, b) => dateValue(a.started_on) - dateValue(b.started_on))
+      .forEach((loan) => latestByPlayerId.set(loan.player_id, loan));
+    return [...latestByPlayerId.values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
+  }, [clubId, playerLoans]);
   const clubSquad = useMemo(
-    () => players.filter((player) => player.team_id === clubId),
-    [clubId, players],
+    () => {
+      const loanedPlayerIds = new Set(clubLoans.map((loan) => loan.player_id));
+      return players.filter((player) => player.team_id === clubId && !loanedPlayerIds.has(player.player_id));
+    },
+    [clubId, clubLoans, players],
   );
   const clubSquadLeaderboardRows = useMemo(() => {
     const squadPlayerIds = new Set(clubSquad.map((player) => player.player_id));
     return squadLeaderboardRows.filter((player) => squadPlayerIds.has(player.player_id));
   }, [clubSquad, squadLeaderboardRows]);
   const clubSquadLeaders = filterLeaderboardRows(clubSquadLeaderboardRows, players, squadQualification, squadMinimum);
+  const clubLoanLeaderboardRows = useMemo(() => {
+    const loanPlayerIds = new Set(clubLoans.map((loan) => loan.player_id));
+    return squadLeaderboardRows.filter((row) => loanPlayerIds.has(row.player_id));
+  }, [clubLoans, squadLeaderboardRows]);
   const selectedPlayerMetric = playerViewMetrics.find((metric) => metric.chartKey === metricCode);
   const latestPlayerHistorySeasonId = useMemo(() => latestHistorySeasonId(playerHistory), [playerHistory]);
   const latestComparisonHistorySeasonId = useMemo(
@@ -1958,6 +2012,8 @@ export function App() {
             seasonName={currentSeason.season_name}
             squad={clubSquad}
             squadLeaders={clubSquadLeaders}
+            loans={clubLoans}
+            loanLeaderboardRows={clubLoanLeaderboardRows}
             metrics={leaderboardMetrics}
             metricCode={squadMetricCode}
             setMetricCode={setSquadMetricCode}
@@ -2007,6 +2063,7 @@ export function App() {
             rankingError={explorerLeaderboardError}
             allPlayersCount={players.length}
             selectedPlayer={selectedPlayer}
+            selectedPlayerLoan={selectedPlayerLoan}
             comparisonPlayer={comparisonPlayer}
             comparisonPlayerId={comparisonPlayerId}
             setComparisonPlayerId={setComparisonPlayerId}
@@ -2351,6 +2408,8 @@ function ClubsView({
   seasonName,
   squad,
   squadLeaders,
+  loans,
+  loanLeaderboardRows,
   metrics,
   metricCode,
   setMetricCode,
@@ -2376,6 +2435,8 @@ function ClubsView({
   seasonName: string;
   squad: SeasonPlayer[];
   squadLeaders: PlayerLeaderboardRow[];
+  loans: PlayerLoan[];
+  loanLeaderboardRows: PlayerLeaderboardRow[];
   metrics: LeaderboardMetricOption[];
   metricCode: string;
   setMetricCode: (code: string) => void;
@@ -2393,6 +2454,7 @@ function ClubsView({
   const recent = matches.filter(isCompletedMatch).slice(0, 5);
   const displayClub = selectedClub && allTournaments ? aggregateClubRecord(selectedClub, matches) : selectedClub;
   const squadByPlayerId = new Map(squad.map((player) => [player.player_id, player]));
+  const loanLeaderboardByPlayerId = new Map(loanLeaderboardRows.map((row) => [row.player_id, row]));
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
   const normalizedQuery = query.trim().toLowerCase();
@@ -2445,7 +2507,7 @@ function ClubsView({
                 </section>
                 {!allTournaments && <section className="surface squad-panel">
                   <div className="squad-leaderboard-heading">
-                    <div><span>{squad.length} {text.players.toLowerCase()}</span><h2>{text.seasonSquad}</h2></div>
+                    <div><span>{squad.length} {text.players.toLowerCase()}, {loans.length} {text.loaned.toLowerCase()}</span><h2>{text.seasonSquad}</h2></div>
                     <label className="leader-metric-select squad-metric-select">
                       <span>{text.rankBy}</span>
                       <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
@@ -2456,17 +2518,33 @@ function ClubsView({
                   </div>
                   {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
                   <div className="squad-list">
-                    {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text={text.squadLoadError} /> : squadLeaders.length ? squadLeaders.map((leader, index) => {
-                      const player = squadByPlayerId.get(leader.player_id);
-                      return (
-                        <button key={leader.player_id} type="button" onClick={() => openPlayer(leader.player_id)}>
-                          <span className="squad-rank">{String(index + 1).padStart(2, "0")}</span>
-                          <span className="avatar">{initials(leader.display_name)}</span>
-                          <span><strong>{localizedPlayerName(player, leader.display_name, language)}</strong><small>{player ? `${playerPositionDetail(player).code} · ${localizedPlayerPosition(player, language).label}` : text.player}</small></span>
-                          <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
-                        </button>
-                      );
-                    }) : <EmptyState text={qualification ? text.noSquadMinimumSample : text.noSquadData} />}
+                    {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text={text.squadLoadError} /> : squadLeaders.length || loans.length ? <>
+                      {squadLeaders.map((leader, index) => {
+                        const player = squadByPlayerId.get(leader.player_id);
+                        return (
+                          <button key={leader.player_id} type="button" onClick={() => openPlayer(leader.player_id)}>
+                            <span className="squad-rank">{String(index + 1).padStart(2, "0")}</span>
+                            <span className="avatar">{initials(leader.display_name)}</span>
+                            <span><strong>{localizedPlayerName(player, leader.display_name, language)}</strong><small>{player ? `${playerPositionDetail(player).code} · ${localizedPlayerPosition(player, language).label}` : text.player}</small></span>
+                            <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
+                          </button>
+                        );
+                      })}
+                      {loans.map((loan) => {
+                        const ranking = loanLeaderboardByPlayerId.get(loan.player_id);
+                        const playerName = language === "he" ? loan.display_name_he ?? loan.display_name : loan.display_name;
+                        const destinationName = language === "he" ? loan.destination_team_name_he ?? loan.destination_team_name : loan.destination_team_name;
+                        const position = loan.specific_position ?? loan.primary_position ?? text.player;
+                        return (
+                          <button className="loaned-player" key={loan.loan_id} type="button" onClick={() => openPlayer(loan.player_id)}>
+                            <span className="squad-rank" title={text.loaned}><ArrowUpRight size={12} aria-hidden="true" /></span>
+                            <span className="avatar">{initials(playerName)}</span>
+                            <span><strong>{playerName}</strong><small>{position} · ({text.loanedTo} {destinationName})</small></span>
+                            <em>{ranking ? formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value) : "-"}</em>
+                          </button>
+                        );
+                      })}
+                    </> : <EmptyState text={qualification ? text.noSquadMinimumSample : text.noSquadData} />}
                   </div>
                 </section>}
               </div>
@@ -2838,6 +2916,7 @@ function PlayersView({
   rankingError,
   allPlayersCount,
   selectedPlayer,
+  selectedPlayerLoan,
   comparisonPlayer,
   comparisonPlayerId,
   setComparisonPlayerId,
@@ -2896,6 +2975,7 @@ function PlayersView({
   rankingError: string | null;
   allPlayersCount: number;
   selectedPlayer?: SeasonPlayer;
+  selectedPlayerLoan?: PlayerLoan;
   comparisonPlayer?: SeasonPlayer;
   comparisonPlayerId: string;
   setComparisonPlayerId: (id: string) => void;
@@ -2948,6 +3028,11 @@ function PlayersView({
   const comparisonPosition = comparisonPlayer ? localizedPlayerPosition(comparisonPlayer, language) : null;
   const selectedPlayerName = selectedPlayer
     ? localizedPlayerName(selectedPlayer, selectedPlayer.display_name, language)
+    : "";
+  const selectedPlayerLoanParentName = selectedPlayerLoan
+    ? language === "he"
+      ? selectedPlayerLoan.parent_team_name_he ?? selectedPlayerLoan.parent_team_name
+      : selectedPlayerLoan.parent_team_name
     : "";
   const comparisonPlayerName = comparisonPlayer
     ? localizedPlayerName(comparisonPlayer, comparisonPlayer.display_name, language)
@@ -3133,6 +3218,7 @@ function PlayersView({
                 <div>
                   <span className="player-position-line"><b title={selectedPosition?.label}>{selectedPosition?.code}</b><span>{selectedPosition?.label} · {localizedClubById(clubs, selectedPlayer.team_id, selectedPlayer.team_name, language)}</span></span>
                   <h2>{selectedPlayerName}</h2>
+                  {selectedPlayerLoan && <p className="player-loan-status">{text.onLoanFrom} <strong>{selectedPlayerLoanParentName}</strong></p>}
                 </div>
                 <div className="compare-player-control">
                   <PlayerComparisonPicker players={comparisonOptions} selectedPlayer={comparisonPlayer} clubs={clubs} onSelect={setComparisonPlayerId} />

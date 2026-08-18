@@ -135,6 +135,25 @@ export type SeasonPlayer = {
   average_rating: number | null;
 };
 
+export type PlayerLoan = {
+  loan_id: string;
+  season_id: string;
+  player_id: string;
+  display_name: string;
+  display_name_he: string | null;
+  primary_position: string | null;
+  specific_position: string | null;
+  role_group: SeasonPlayer["role_group"];
+  parent_team_id: string | null;
+  parent_team_name: string;
+  parent_team_name_he: string | null;
+  destination_team_id: string | null;
+  destination_team_name: string;
+  destination_team_name_he: string | null;
+  started_on: string | null;
+  ended_on: string | null;
+};
+
 export type Legionnaire = SeasonPlayer & {
   competition_name: string;
   competition_name_he: string | null;

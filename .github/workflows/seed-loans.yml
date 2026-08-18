@@ -1,0 +1,53 @@
+name: Seed Player Loans
+
+on:
+  workflow_dispatch:
+    inputs:
+      lookback_years:
+        description: "How many recent seasons of Israeli clubs to inspect."
+        required: false
+        default: "2"
+      club_limit:
+        description: "Optional club limit for a smoke run. Use 0 for all clubs."
+        required: false
+        default: "0"
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify required secrets
+        run: test -n "$SUPABASE_DB_URL" || (echo "SUPABASE_DB_URL secret is required" && exit 1)
+
+      - name: Validate Supabase DB URL
+        run: python scripts/validate_supabase_db_url.py
+
+      - name: Apply database migrations
+        run: python scripts/apply_migrations.py
+
+      - name: Synchronize FotMob loans
+        run: |
+          python scripts/sync_fotmob_loans.py \
+            --lookback-years "${{ inputs.lookback_years }}" \
+            --limit "${{ inputs.club_limit }}" \
+            --allow-fetch-failures \
+            --retries 4 \
+            --sleep 0.25 \
+            --workers 6
