@@ -1,0 +1,63 @@
+name: Seed Player Valuations
+
+on:
+  schedule:
+    - cron: "20 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      lookback_years:
+        description: "Include players with appearances during this many recent years."
+        required: false
+        default: "3"
+      player_limit:
+        description: "Player limit for a smoke run. Use 0 for every candidate."
+        required: false
+        default: "0"
+      include_all_mapped:
+        description: "Also refresh every player already mapped to FotMob."
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      LOOKBACK_YEARS: ${{ inputs.lookback_years }}
+      PLAYER_LIMIT: ${{ inputs.player_limit }}
+      INCLUDE_ALL_MAPPED: ${{ inputs.include_all_mapped }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify required secrets
+        run: test -n "$SUPABASE_DB_URL" || (echo "SUPABASE_DB_URL secret is required" && exit 1)
+
+      - name: Apply database migrations
+        run: python scripts/apply_migrations.py
+
+      - name: Fetch valuation history
+        run: |
+          args=(--allow-fetch-failures --workers 8 --retries 3 --lookback-years "${LOOKBACK_YEARS:-3}")
+          if [ "${PLAYER_LIMIT:-0}" != "0" ]; then
+            args+=(--limit "$PLAYER_LIMIT")
+          fi
+          if [ "$INCLUDE_ALL_MAPPED" = "true" ]; then
+            args+=(--include-all-mapped)
+          fi
+          python scripts/ingest_fotmob_valuations.py "${args[@]}"
+
+      - name: Load Supabase
+        run: python scripts/load_fotmob_valuations_to_supabase.py

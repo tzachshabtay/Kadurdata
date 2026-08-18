@@ -7,6 +7,7 @@ Israeli soccer data pipeline and schema exploration.
 - React + TypeScript frontend: `src/`
 - 365Scores domestic, UEFA club, and Israel national-team ingestion: `scripts/ingest_365scores.py`
 - FotMob historical Ligat Ha'Al ingestion: `scripts/ingest_fotmob.py`
+- FotMob/SciSports player valuation ingestion: `scripts/ingest_fotmob_valuations.py`
 - Supabase/Postgres migration runner: `scripts/apply_migrations.py`
 - Supabase loader: `scripts/load_365scores_to_supabase.py`
 - Database schema and public API views: `db/migrations/`
@@ -44,6 +45,7 @@ Use the public Supabase anon key for `SUPABASE_ANON_KEY`. The GitHub Pages front
 - `public.api_player_leaderboard(season, metric)`
 - `public.api_player_match_stats`
 - `public.api_team_match_stats`
+- `public.api_player_valuations`
 
 ## Run Locally
 
@@ -60,6 +62,10 @@ For historical Ligat Ha'Al seasons:
 ```bash
 python3 scripts/ingest_fotmob.py --fixtures-only
 python3 scripts/load_fotmob_to_supabase.py
+
+# Refresh recent players' SciSports ETV history exposed through FotMob.
+python3 scripts/ingest_fotmob_valuations.py --lookback-years 3 --allow-fetch-failures
+python3 scripts/load_fotmob_valuations_to_supabase.py
 ```
 
 Omit `--fixtures-only` to also request historical match pages and import the

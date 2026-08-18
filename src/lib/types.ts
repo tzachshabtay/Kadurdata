@@ -200,6 +200,26 @@ export type PlayerHistory = {
   raw_value: string | null;
 };
 
+export type PlayerValuation = {
+  player_id: string;
+  display_name: string;
+  display_name_he: string | null;
+  valuation_date: string;
+  value_amount: number;
+  currency: string;
+  lower_bound: number | null;
+  upper_bound: number | null;
+  provider: string | null;
+  source_player_id: string;
+  source_team_id: string | null;
+  source_team_name: string | null;
+  source_url: string | null;
+  source_id: string;
+  source_code: string;
+  source_name: string;
+  observed_at: string;
+};
+
 export type MatchPlayerStat = {
   match_id: string;
   season_id: string;

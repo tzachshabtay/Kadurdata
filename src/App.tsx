@@ -58,6 +58,7 @@ import type {
   PlayerLeaderboardRow,
   PlayerHistory,
   PlayerSeasonHeatmap,
+  PlayerValuation,
   Round,
   Season,
   SeasonPlayer,
@@ -156,6 +157,14 @@ type PlayerAttributeSummary = {
 type PlayerAttributeCategory = (typeof playerAttributeCategories)[number];
 type PlayerPositionDetail = { code: string; label: string };
 type MatchPlayerAttribute = { code: string; name: string; value: string; category: PlayerAttributeCategory };
+type ValuationChartPoint = {
+  date: string;
+  timestamp: number;
+  primaryValue: number | null;
+  comparisonValue: number | null;
+  primary: PlayerValuation | null;
+  comparison: PlayerValuation | null;
+};
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const allTournamentsValue = "all-tournaments";
@@ -410,6 +419,19 @@ async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
   }
 }
 
+async function fetchPlayerValuationRows(playerId: string) {
+  if (!supabase) return { rows: [] as PlayerValuation[], error: "Supabase is not configured." };
+  const result = await supabase
+    .from("api_player_valuations")
+    .select("*")
+    .eq("player_id", playerId)
+    .order("valuation_date");
+  return {
+    rows: (result.error ? [] : result.data ?? []) as PlayerValuation[],
+    error: isSchemaCacheMiss(result.error) ? null : result.error?.message ?? null,
+  };
+}
+
 async function fetchPlayerSeasonHeatmapRows(playerId: string, seasonId: string, matches: Match[]) {
   if (!supabase) return { rows: [] as PlayerSeasonHeatmap[], error: "Supabase is not configured." };
 
@@ -580,6 +602,8 @@ export function App() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [playerHistory, setPlayerHistory] = useState<PlayerHistory[]>([]);
   const [comparisonPlayerHistory, setComparisonPlayerHistory] = useState<PlayerHistory[]>([]);
+  const [playerValuations, setPlayerValuations] = useState<PlayerValuation[]>([]);
+  const [comparisonPlayerValuations, setComparisonPlayerValuations] = useState<PlayerValuation[]>([]);
   const [matchPlayerStats, setMatchPlayerStats] = useState<MatchPlayerStat[]>([]);
   const [matchTeamStats, setMatchTeamStats] = useState<MatchTeamStat[]>([]);
   const [matchPlayerHeatmaps, setMatchPlayerHeatmaps] = useState<MatchPlayerHeatmap[]>([]);
@@ -631,6 +655,8 @@ export function App() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const [playerValuationLoading, setPlayerValuationLoading] = useState(false);
+  const [comparisonValuationLoading, setComparisonValuationLoading] = useState(false);
   const [playerHeatmapLoading, setPlayerHeatmapLoading] = useState(false);
   const [comparisonPlayerHeatmapLoading, setComparisonPlayerHeatmapLoading] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -963,6 +989,48 @@ export function App() {
     void loadComparisonPlayerDetail();
     return () => { cancelled = true; };
   }, [comparisonPlayerId, competitionId, playerId, view]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPlayerValuations() {
+      if (view !== "players" || !playerId || !hasSupabaseConfig || !supabase) {
+        setPlayerValuations([]);
+        setPlayerValuationLoading(false);
+        return;
+      }
+      setPlayerValuationLoading(true);
+      const result = await fetchPlayerValuationRows(playerId);
+      if (cancelled) return;
+      setPlayerValuations(result.rows);
+      if (result.error) setError(result.error);
+      setPlayerValuationLoading(false);
+    }
+
+    void loadPlayerValuations();
+    return () => { cancelled = true; };
+  }, [playerId, refreshToken, view]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadComparisonPlayerValuations() {
+      if (view !== "players" || !comparisonPlayerId || comparisonPlayerId === playerId || !hasSupabaseConfig || !supabase) {
+        setComparisonPlayerValuations([]);
+        setComparisonValuationLoading(false);
+        return;
+      }
+      setComparisonValuationLoading(true);
+      const result = await fetchPlayerValuationRows(comparisonPlayerId);
+      if (cancelled) return;
+      setComparisonPlayerValuations(result.rows);
+      if (result.error) setError(result.error);
+      setComparisonValuationLoading(false);
+    }
+
+    void loadComparisonPlayerValuations();
+    return () => { cancelled = true; };
+  }, [comparisonPlayerId, playerId, refreshToken, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1973,6 +2041,9 @@ export function App() {
             historySeasonCount={playerHistorySeasonCount}
             historyRows={visiblePlayerHistory}
             comparisonHistoryRows={visibleComparisonPlayerHistory}
+            valuations={playerValuations}
+            comparisonValuations={comparisonPlayerValuations}
+            valuationLoading={playerValuationLoading || comparisonValuationLoading}
             chartData={playerChartData}
             comparisonChartData={comparisonPlayerChartData}
             average={playerAverage}
@@ -2798,6 +2869,9 @@ function PlayersView({
   historySeasonCount,
   historyRows,
   comparisonHistoryRows,
+  valuations,
+  comparisonValuations,
+  valuationLoading,
   chartData,
   comparisonChartData,
   average,
@@ -2853,6 +2927,9 @@ function PlayersView({
   historySeasonCount: number;
   historyRows: PlayerHistory[];
   comparisonHistoryRows: PlayerHistory[];
+  valuations: PlayerValuation[];
+  comparisonValuations: PlayerValuation[];
+  valuationLoading: boolean;
   chartData: PlayerChartPoint[];
   comparisonChartData: PlayerChartPoint[];
   average: number | null;
@@ -3258,6 +3335,13 @@ function PlayersView({
                   </div>
                 )) : plottedChartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatChartPointValue(item)}</strong><small>{item.score}</small></div>)}
               </div>
+              <PlayerValuationPanel
+                comparisonName={comparisonPlayerName}
+                comparisonValuations={comparisonValuations}
+                loading={valuationLoading}
+                playerName={selectedPlayerName}
+                valuations={valuations}
+              />
               <div className={`season-heatmap-layout${comparisonPlayer ? " comparison" : ""}`}>
                 <SeasonHeatmapPanel
                   appearances={Number(selectedPlayer.appearances)}
@@ -3281,6 +3365,129 @@ function PlayersView({
         </section>
       </div>
     </>
+  );
+}
+
+function PlayerValuationPanel({
+  playerName,
+  valuations,
+  comparisonName,
+  comparisonValuations,
+  loading,
+}: {
+  playerName: string;
+  valuations: PlayerValuation[];
+  comparisonName: string;
+  comparisonValuations: PlayerValuation[];
+  loading: boolean;
+}) {
+  const { language, text } = useLocale();
+  const primaryLatest = valuations[valuations.length - 1] ?? null;
+  const comparisonLatest = comparisonValuations[comparisonValuations.length - 1] ?? null;
+  const pointsByDate = new Map<string, ValuationChartPoint>();
+  const addValue = (valuation: PlayerValuation, side: "primary" | "comparison") => {
+    const current = pointsByDate.get(valuation.valuation_date) ?? {
+      date: valuation.valuation_date,
+      timestamp: Date.parse(`${valuation.valuation_date}T00:00:00Z`),
+      primaryValue: null,
+      comparisonValue: null,
+      primary: null,
+      comparison: null,
+    };
+    if (side === "primary") {
+      current.primaryValue = Number(valuation.value_amount);
+      current.primary = valuation;
+    } else {
+      current.comparisonValue = Number(valuation.value_amount);
+      current.comparison = valuation;
+    }
+    pointsByDate.set(valuation.valuation_date, current);
+  };
+  valuations.forEach((valuation) => addValue(valuation, "primary"));
+  comparisonValuations.forEach((valuation) => addValue(valuation, "comparison"));
+  const chartPoints = [...pointsByDate.values()].sort((a, b) => a.timestamp - b.timestamp);
+  const currency = primaryLatest?.currency ?? comparisonLatest?.currency ?? "EUR";
+  const primaryClass = comparisonLatest
+    ? playerComparisonClass(primaryLatest?.value_amount ?? null, comparisonLatest.value_amount, "estimated_transfer_value")
+    : "";
+  const comparisonClass = primaryLatest
+    ? playerComparisonClass(comparisonLatest?.value_amount ?? null, primaryLatest.value_amount, "estimated_transfer_value")
+    : "";
+  const rangeLabel = (valuation: PlayerValuation) => {
+    if (valuation.lower_bound === null || valuation.upper_bound === null) return "";
+    return `${text.valuationRange}: ${formatValuation(valuation.lower_bound, valuation.currency, language)}–${formatValuation(valuation.upper_bound, valuation.currency, language)}`;
+  };
+  return (
+    <section className="player-valuation">
+      <div className="valuation-heading">
+        <div><span>{text.estimatedTransferValue}</span><h3>{text.valuationHistory}</h3></div>
+        <span>{text.valuationSource}</span>
+      </div>
+      {loading ? <InlineLoading /> : chartPoints.length ? (
+        <>
+          <div className={`valuation-current-band${comparisonLatest ? " comparison" : ""}`}>
+            {primaryLatest && (
+              <div className="valuation-current">
+                <span>{playerName}</span>
+                <strong className={primaryClass}>{formatValuation(primaryLatest.value_amount, primaryLatest.currency, language)}</strong>
+                <small>{text.valuationAsOf} {formatValuationDate(primaryLatest.valuation_date, language)}{rangeLabel(primaryLatest) ? ` · ${rangeLabel(primaryLatest)}` : ""}</small>
+              </div>
+            )}
+            {comparisonLatest && (
+              <div className="valuation-current">
+                <span>{comparisonName}</span>
+                <strong className={comparisonClass}>{formatValuation(comparisonLatest.value_amount, comparisonLatest.currency, language)}</strong>
+                <small>{text.valuationAsOf} {formatValuationDate(comparisonLatest.valuation_date, language)}{rangeLabel(comparisonLatest) ? ` · ${rangeLabel(comparisonLatest)}` : ""}</small>
+              </div>
+            )}
+          </div>
+          <div className="valuation-chart-frame">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartPoints} margin={{ top: 18, right: 12, bottom: 4, left: 4 }}>
+                <CartesianGrid vertical={false} stroke="#293545" strokeDasharray="3 5" />
+                <XAxis
+                  dataKey="timestamp"
+                  type="number"
+                  scale="time"
+                  domain={["dataMin", "dataMax"]}
+                  axisLine={false}
+                  tick={{ fill: "#8B97A6", fontSize: 11 }}
+                  tickFormatter={(value) => formatValuationDate(new Date(Number(value)).toISOString().slice(0, 10), language, true)}
+                  tickLine={false}
+                  minTickGap={30}
+                />
+                <YAxis
+                  axisLine={false}
+                  tick={{ fill: "#8B97A6", fontSize: 11 }}
+                  tickFormatter={(value) => formatValuation(Number(value), currency, language)}
+                  tickLine={false}
+                  width={68}
+                />
+                <Tooltip
+                  contentStyle={{ color: "#F4F7FA", background: "#182432", border: "1px solid #354456", borderRadius: 6, boxShadow: "0 14px 34px rgba(0, 0, 0, .3)" }}
+                  labelStyle={{ color: "#F4F7FA", fontWeight: 700 }}
+                  formatter={(value, _, item) => {
+                    const point = item.payload as ValuationChartPoint;
+                    const isPrimary = String(item.dataKey) === "primaryValue";
+                    const valuation = isPrimary ? point.primary : point.comparison;
+                    const name = isPrimary ? playerName : comparisonName;
+                    if (!valuation) return ["-", name];
+                    const range = rangeLabel(valuation);
+                    return [
+                      `${formatValuation(Number(value), valuation.currency, language)}${range ? ` · ${range}` : ""}`,
+                      name,
+                    ];
+                  }}
+                  labelFormatter={(value) => formatValuationDate(new Date(Number(value)).toISOString().slice(0, 10), language)}
+                />
+                <Area type="monotone" dataKey="primaryValue" connectNulls stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
+                {comparisonLatest && <Area type="monotone" dataKey="comparisonValue" connectNulls stroke="#F0B35A" strokeWidth={3} fill="rgba(240, 179, 90, 0.06)" dot={{ r: 3, fill: "#111923", stroke: "#F0B35A", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#F0B35A", stroke: "#080D14", strokeWidth: 3 }} />}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      ) : <EmptyState text={text.noValuationData} />}
+    </section>
   );
 }
 
@@ -4384,6 +4591,25 @@ function dateValue(value: string | null) {
 
 function formatNumber(value: number | string) {
   return numberFormatter.format(Math.round(Number(value)));
+}
+
+function formatValuation(value: number, currency: string, language: Language) {
+  return new Intl.NumberFormat(localeCode(language), {
+    style: "currency",
+    currency,
+    currencyDisplay: "narrowSymbol",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatValuationDate(value: string, language: Language, short = false) {
+  return new Intl.DateTimeFormat(localeCode(language), {
+    month: "short",
+    year: short ? "2-digit" : "numeric",
+    day: short ? undefined : "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00Z`));
 }
 
 function signed(value: number) {
