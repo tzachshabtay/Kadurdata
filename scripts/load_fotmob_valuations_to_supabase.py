@@ -12,10 +12,6 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Optional
 
-import psycopg
-from psycopg.rows import dict_row
-
-
 PROCESSED_DIR = Path("data/processed/fotmob-valuations")
 FOTMOB_SOURCE = {
     "code": "fotmob",
@@ -142,7 +138,53 @@ def upsert_fotmob_mappings(
     )
 
 
+def build_valuation_series(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (row["canonical_player_id"], row["source_player_id"])
+        series = grouped.setdefault(
+            key,
+            {
+                "canonical_player_id": row["canonical_player_id"],
+                "source_player_id": row["source_player_id"],
+                "currency": row["currency"],
+                "provider": row.get("provider") or "scisports",
+                "source_url": row.get("source_url") or None,
+                "points": {},
+            },
+        )
+        if series["currency"] != row["currency"]:
+            raise RuntimeError(f"mixed currencies for FotMob player {row['source_player_id']}")
+        if row.get("provider"):
+            series["provider"] = row["provider"]
+        if row.get("source_url"):
+            series["source_url"] = row["source_url"]
+        series["points"][row["valuation_date"]] = (
+            int(row["value_amount"]),
+            integer_or_none(row.get("lower_bound")),
+            integer_or_none(row.get("upper_bound")),
+        )
+
+    result: list[dict[str, Any]] = []
+    for series in grouped.values():
+        points = series.pop("points")
+        dates = sorted(points)
+        result.append(
+            {
+                **series,
+                "valuation_dates": dates,
+                "value_amounts": [points[date][0] for date in dates],
+                "lower_bounds": [points[date][1] for date in dates],
+                "upper_bounds": [points[date][2] for date in dates],
+            }
+        )
+    return result
+
+
 def main() -> int:
+    import psycopg
+    from psycopg.rows import dict_row
+
     args = parse_args()
     database_url = os.environ.get("SUPABASE_DB_URL")
     if not database_url:
@@ -153,6 +195,7 @@ def main() -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     if not rows:
         raise SystemExit("processed valuation file contains no rows")
+    series_rows = build_valuation_series(rows)
 
     with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as connection:
         with connection.cursor() as cur:
@@ -166,73 +209,69 @@ def main() -> int:
 
             cur.executemany(
                 """
-                insert into obs.player_valuations as existing (
+                insert into obs.player_valuation_series as existing (
                   source_id,
                   player_id,
                   source_player_id,
-                  valuation_date,
-                  value_amount,
                   currency,
-                  lower_bound,
-                  upper_bound,
                   provider,
-                  source_team_id,
-                  source_team_name,
                   source_url,
+                  valuation_dates,
+                  value_amounts,
+                  lower_bounds,
+                  upper_bounds,
                   observed_at
                 )
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
-                on conflict (source_id, player_id, source_player_id, valuation_date) do update
-                  set value_amount = excluded.value_amount,
-                      currency = excluded.currency,
-                      lower_bound = excluded.lower_bound,
-                      upper_bound = excluded.upper_bound,
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                on conflict (source_id, player_id, source_player_id) do update
+                  set currency = excluded.currency,
                       provider = excluded.provider,
-                      source_team_id = excluded.source_team_id,
-                      source_team_name = excluded.source_team_name,
                       source_url = excluded.source_url,
+                      valuation_dates = excluded.valuation_dates,
+                      value_amounts = excluded.value_amounts,
+                      lower_bounds = excluded.lower_bounds,
+                      upper_bounds = excluded.upper_bounds,
                       observed_at = now()
                 where (
-                  existing.value_amount,
                   existing.currency,
-                  existing.lower_bound,
-                  existing.upper_bound,
                   existing.provider,
-                  existing.source_team_id,
-                  existing.source_team_name,
-                  existing.source_url
+                  existing.source_url,
+                  existing.valuation_dates,
+                  existing.value_amounts,
+                  existing.lower_bounds,
+                  existing.upper_bounds
                 ) is distinct from (
-                  excluded.value_amount,
                   excluded.currency,
-                  excluded.lower_bound,
-                  excluded.upper_bound,
                   excluded.provider,
-                  excluded.source_team_id,
-                  excluded.source_team_name,
-                  excluded.source_url
+                  excluded.source_url,
+                  excluded.valuation_dates,
+                  excluded.value_amounts,
+                  excluded.lower_bounds,
+                  excluded.upper_bounds
                 )
                 """,
                 [
                     (
                         valuation_source_id,
-                        row["canonical_player_id"],
-                        row["source_player_id"],
-                        row["valuation_date"],
-                        int(row["value_amount"]),
-                        row["currency"],
-                        integer_or_none(row.get("lower_bound")),
-                        integer_or_none(row.get("upper_bound")),
-                        row.get("provider") or "scisports",
-                        row.get("source_team_id") or None,
-                        row.get("source_team_name") or None,
-                        row.get("source_url") or None,
+                        series["canonical_player_id"],
+                        series["source_player_id"],
+                        series["currency"],
+                        series["provider"],
+                        series["source_url"],
+                        series["valuation_dates"],
+                        series["value_amounts"],
+                        series["lower_bounds"],
+                        series["upper_bounds"],
                     )
-                    for row in rows
+                    for series in series_rows
                 ],
             )
         connection.commit()
 
-    print(f"loaded {len(rows)} valuations for {len(player_rows)} players")
+    print(
+        f"loaded {len(rows)} valuation points in {len(series_rows)} profile series "
+        f"for {len(player_rows)} source players"
+    )
     return 0
 
 

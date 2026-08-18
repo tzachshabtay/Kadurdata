@@ -69,6 +69,10 @@ def slugify(value: str) -> str:
     return normalized_name(value).replace(" ", "-") or "player"
 
 
+def transliteration_name(value: str) -> str:
+    return normalized_name(value).replace("ch", "h")
+
+
 def player_page_url(player_id: str, player_name: str) -> str:
     return f"{BASE_URL}/en-GB/players/{quote(player_id)}/{quote(slugify(player_name))}"
 
@@ -144,18 +148,27 @@ def select_search_match(
 ) -> Optional[dict[str, Any]]:
     wanted_name = normalized_name(player_name)
     exact_name = [item for item in suggestions if normalized_name(str(item.get("name") or "")) == wanted_name]
-    if not exact_name:
-        return None
-
     wanted_team = normalized_name(team_name or "")
-    if wanted_team:
+    if exact_name and wanted_team:
         exact_team = [
             item for item in exact_name
             if normalized_name(str(item.get("teamName") or "")) == wanted_team
         ]
         if len(exact_team) == 1:
             return exact_team[0]
-    return exact_name[0] if len(exact_name) == 1 else None
+    if len(exact_name) == 1:
+        return exact_name[0]
+
+    if wanted_team:
+        transliterated_name = transliteration_name(player_name)
+        transliterated_team_matches = [
+            item for item in suggestions
+            if transliteration_name(str(item.get("name") or "")) == transliterated_name
+            and normalized_name(str(item.get("teamName") or "")) == wanted_team
+        ]
+        if len(transliterated_team_matches) == 1:
+            return transliterated_team_matches[0]
+    return None
 
 
 def resolve_fotmob_player(

@@ -62,6 +62,16 @@ class FotMobValuationTests(unittest.TestCase):
 
         self.assertIsNone(select_search_match(suggestions, "Test Player", "Three"))
 
+    def test_search_match_accepts_team_anchored_transliteration(self) -> None:
+        suggestions = [
+            {"type": "player", "id": "1116740", "name": "Ido Shahar", "teamName": "Maccabi Tel Aviv"},
+        ]
+
+        match = select_search_match(suggestions, "Ido Shachar", "Maccabi Tel Aviv FC")
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match["id"], "1116740")
+
     def test_search_groups_are_deduplicated(self) -> None:
         item = {"type": "player", "id": "7", "name": "Player", "isCoach": False}
         payload = [
