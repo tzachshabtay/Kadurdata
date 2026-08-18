@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synchronize explicit player loan relationships from FotMob team pages."""
+"""Synchronize current team rosters and explicit loans from FotMob team pages."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ except ModuleNotFoundError:
 
 BASE_URL = "https://www.fotmob.com"
 SEARCH_URL = f"{BASE_URL}/api/data/search/suggest"
-USER_AGENT = "Mozilla/5.0 (compatible; Kadurdata/1.0; football loan import)"
+USER_AGENT = "Mozilla/5.0 (compatible; Kadurdata/1.0; football roster import)"
 FOTMOB_SOURCE = {
     "code": "fotmob",
     "name": "FotMob",
@@ -35,7 +35,7 @@ FOTMOB_SOURCE = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Synchronize FotMob player loans into Supabase.")
+    parser = argparse.ArgumentParser(description="Synchronize FotMob team rosters and player loans into Supabase.")
     parser.add_argument("--lookback-years", type=int, default=2)
     parser.add_argument("--limit", type=int, default=0, help="Limit parent clubs for a smoke run.")
     parser.add_argument("--workers", type=int, default=6)
@@ -128,6 +128,54 @@ def primary_position(transfer: dict[str, Any]) -> Optional[str]:
 def formation_position(transfer: dict[str, Any]) -> Optional[str]:
     label = str((transfer.get("position") or {}).get("label") or "").strip()
     return label or None
+
+
+def roster_primary_position(group_name: str) -> Optional[str]:
+    return {
+        "keepers": "Goalkeeper",
+        "defenders": "Defender",
+        "midfielders": "Midfielder",
+        "attackers": "Attacker",
+        "coach": "Management",
+        "management": "Management",
+        "staff": "Management",
+    }.get(group_name.lower())
+
+
+def extract_team_roster(team_payload: dict[str, Any], fetched_team_id: str) -> tuple[str, list[dict[str, Any]]]:
+    season_name = str((team_payload.get("overview") or {}).get("season") or "").strip()
+    groups = (team_payload.get("squad") or {}).get("squad") or []
+    roster: list[dict[str, Any]] = []
+    if not season_name:
+        return season_name, roster
+    for group in groups:
+        group_name = str(group.get("title") or "other").strip().lower()
+        for member in group.get("members") or []:
+            if member.get("id") is None or not str(member.get("name") or "").strip():
+                continue
+            role = member.get("role") or {}
+            positions = [value.strip() for value in str(member.get("positionIdsDesc") or "").split(",") if value.strip()]
+            roster.append({
+                "source_player_id": str(member["id"]),
+                "player_name": str(member["name"]).strip(),
+                "source_team_id": fetched_team_id,
+                "season_name": season_name,
+                "roster_group": group_name,
+                "role_name": str(role.get("fallback") or role.get("key") or group_name).strip(),
+                "primary_position": roster_primary_position(group_name),
+                "formation_position": positions[0] if positions else None,
+                "shirt_number": member.get("shirtNumber"),
+                "metadata": {
+                    "position_ids": member.get("positionIds"),
+                    "position_codes": positions,
+                    "height": member.get("height"),
+                    "date_of_birth": member.get("dateOfBirth"),
+                    "country_code": member.get("ccode"),
+                    "country_name": member.get("cname"),
+                    "transfer_value": member.get("transferValue"),
+                },
+            })
+    return season_name, roster
 
 
 def extract_team_loans(team_payload: dict[str, Any], fetched_team_id: str) -> list[dict[str, Any]]:
@@ -297,22 +345,25 @@ def main() -> int:
                 resolved_teams.append({**team, "fotmob_team_id": source_team_id})
             connection.commit()
 
-            def fetch_team(team: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+            def fetch_team(team: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]], str, list[dict[str, Any]]]:
                 source_team_id = str(team["fotmob_team_id"])
                 url = f"{BASE_URL}/teams/{quote(source_team_id)}/overview/{quote(slugify(str(team['team_name'])))}"
                 props = page_props(fetch_text(url, args.retries, args.sleep))
                 payload = (props.get("fallback") or {}).get(f"team-{source_team_id}")
                 if not isinstance(payload, dict):
                     raise RuntimeError(f"FotMob team page had no team-{source_team_id} payload")
-                return team, extract_team_loans(payload, source_team_id)
+                season_name, roster = extract_team_roster(payload, source_team_id)
+                return team, extract_team_loans(payload, source_team_id), season_name, roster
 
             fetched_loans: dict[tuple[str, str, str, Optional[date]], dict[str, Any]] = {}
+            fetched_rosters: dict[tuple[str, str, str], dict[str, Any]] = {}
+            fetched_roster_teams: set[tuple[str, str]] = set()
             with ThreadPoolExecutor(max_workers=max(args.workers, 1)) as executor:
                 pending = {executor.submit(fetch_team, team): team for team in resolved_teams}
                 for future in as_completed(pending):
                     team = pending[future]
                     try:
-                        _, loans = future.result()
+                        _, loans, roster_season_name, roster = future.result()
                     except RuntimeError as exc:
                         failures.append({"team": str(team["team_name"]), "error": str(exc)})
                         continue
@@ -324,6 +375,14 @@ def main() -> int:
                             loan["started_on"],
                         )
                         fetched_loans[key] = loan
+                    if roster_season_name:
+                        source_team_id = str(team["fotmob_team_id"])
+                        fetched_roster_teams.add((source_team_id, roster_season_name))
+                        for member in roster:
+                            fetched_rosters[(source_team_id, member["source_player_id"], roster_season_name)] = {
+                                **member,
+                                "canonical_team_id": str(team["canonical_team_id"]),
+                            }
 
             if failures and not args.allow_fetch_failures:
                 details = "\n".join(f"- {item['team']}: {item['error']}" for item in failures)
@@ -370,11 +429,15 @@ def main() -> int:
                     team_mapping[source_team_id] = canonical_id
                 return canonical_id
 
-            def ensure_player(loan: dict[str, Any]) -> str:
-                source_player_id = str(loan["source_player_id"])
-                player_name = str(loan["player_name"])
+            def ensure_player(player_data: dict[str, Any], import_kind: str) -> str:
+                source_player_id = str(player_data["source_player_id"])
+                player_name = str(player_data["player_name"])
                 canonical_id = player_mapping.get(source_player_id) or player_by_name.get(normalized_name(player_name))
-                metadata = {"formation_position": loan.get("formation_position"), "fotmob_loan_import": True}
+                metadata = {
+                    "formation_position": player_data.get("formation_position"),
+                    f"fotmob_{import_kind}_import": True,
+                    **(player_data.get("metadata") or {}),
+                }
                 if canonical_id is None:
                     row = cur.execute(
                         """
@@ -382,7 +445,7 @@ def main() -> int:
                         values (%s, %s, %s)
                         returning id::text
                         """,
-                        (player_name, loan.get("primary_position"), json.dumps(metadata)),
+                        (player_name, player_data.get("primary_position"), json.dumps(metadata)),
                     ).fetchone()
                     canonical_id = str(row["id"])
                     player_by_name[normalized_name(player_name)] = canonical_id
@@ -394,14 +457,14 @@ def main() -> int:
                             metadata = metadata || %s::jsonb
                         where id = %s
                         """,
-                        (loan.get("primary_position"), json.dumps(metadata), canonical_id),
+                        (player_data.get("primary_position"), json.dumps(metadata), canonical_id),
                     )
                 upsert_mapping(cur, fotmob_source_id, "player", source_player_id, "core.players", canonical_id, player_name)
                 player_mapping[source_player_id] = canonical_id
                 return canonical_id
 
             for loan in fetched_loans.values():
-                player_id = ensure_player(loan)
+                player_id = ensure_player(loan, "loan")
                 parent_team_id = ensure_team(loan["source_parent_team_id"], loan["parent_team_name"])
                 destination_team_id = ensure_team(loan["source_destination_team_id"], loan["destination_team_name"])
                 cur.execute(
@@ -457,10 +520,69 @@ def main() -> int:
                         }),
                     ),
                 )
+
+            for source_team_id, _ in fetched_roster_teams:
+                cur.execute(
+                    """
+                    update obs.team_roster_memberships
+                    set is_active = false,
+                        observed_at = now()
+                    where source_id = %s
+                      and source_team_id = %s
+                    """,
+                    (fotmob_source_id, source_team_id),
+                )
+
+            for roster in fetched_rosters.values():
+                player_id = ensure_player(roster, "roster")
+                cur.execute(
+                    """
+                    insert into obs.team_roster_memberships as existing (
+                      source_id,
+                      team_id,
+                      player_id,
+                      source_team_id,
+                      source_player_id,
+                      season_name,
+                      roster_group,
+                      role_name,
+                      specific_position,
+                      shirt_number,
+                      is_active,
+                      observed_at,
+                      metadata
+                    )
+                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, now(), %s)
+                    on conflict (source_id, source_team_id, source_player_id, season_name) do update
+                      set team_id = excluded.team_id,
+                          player_id = excluded.player_id,
+                          roster_group = excluded.roster_group,
+                          role_name = excluded.role_name,
+                          specific_position = excluded.specific_position,
+                          shirt_number = excluded.shirt_number,
+                          is_active = true,
+                          observed_at = now(),
+                          metadata = excluded.metadata
+                    """,
+                    (
+                        fotmob_source_id,
+                        roster["canonical_team_id"],
+                        player_id,
+                        roster["source_team_id"],
+                        roster["source_player_id"],
+                        roster["season_name"],
+                        roster["roster_group"],
+                        roster["role_name"],
+                        roster.get("formation_position"),
+                        roster.get("shirt_number"),
+                        json.dumps(roster.get("metadata") or {}),
+                    ),
+                )
             connection.commit()
 
     print(
-        f"FotMob loans synchronized: {len(fetched_loans)} records from {len(resolved_teams)} clubs"
+        f"FotMob synchronized: {len(fetched_rosters)} roster members and {len(fetched_loans)} loans "
+        f"from {len(resolved_teams)} clubs"
         + (f" ({len(failures)} fetch failures allowed)" if failures else ""),
         flush=True,
     )

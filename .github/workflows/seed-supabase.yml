@@ -122,12 +122,22 @@ jobs:
       - name: Load legionnaire data
         run: python scripts/load_365scores_to_supabase.py --processed-dir data/processed/legionnaires
 
-      - name: Synchronize FotMob loans
+      - name: Synchronize FotMob rosters and loans
         run: |
           python scripts/sync_fotmob_loans.py \
             --allow-fetch-failures \
             --retries 4 \
             --sleep 0.25 \
+            --workers 6
+
+      - name: Synchronize historical Transfermarkt loans
+        continue-on-error: true
+        run: |
+          python scripts/sync_transfermarkt_loans.py \
+            --lookback-years 2 \
+            --allow-fetch-failures \
+            --retries 4 \
+            --sleep 0.3 \
             --workers 6
 
       - name: Populate Hebrew player names

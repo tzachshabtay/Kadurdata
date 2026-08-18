@@ -2173,6 +2173,61 @@ tr:last-child td {
   white-space: nowrap;
 }
 
+.panel-inline-error {
+  margin: 8px 0 0;
+  color: #e28d84;
+  font-size: 9px;
+}
+
+.management-panel {
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.management-panel > p {
+  margin: -4px 0 14px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.management-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.management-list > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 8px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-deep);
+  text-align: start;
+}
+
+.management-list strong,
+.management-list small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.management-list strong {
+  font-size: 10px;
+}
+
+.management-list small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
 .avatar {
   display: inline-flex;
   flex: 0 0 auto;

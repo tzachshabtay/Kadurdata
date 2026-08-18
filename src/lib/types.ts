@@ -154,6 +154,14 @@ export type PlayerLoan = {
   ended_on: string | null;
 };
 
+export type TeamRosterMember = SeasonPlayer & {
+  roster_id: string;
+  roster_group: string;
+  role_name: string | null;
+  shirt_number: number | null;
+  is_management: boolean;
+};
+
 export type Legionnaire = SeasonPlayer & {
   competition_name: string;
   competition_name_he: string | null;

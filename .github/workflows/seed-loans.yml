@@ -1,4 +1,4 @@
-name: Seed Player Loans
+name: Seed Rosters and Loans
 
 on:
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
       - name: Apply database migrations
         run: python scripts/apply_migrations.py
 
-      - name: Synchronize FotMob loans
+      - name: Synchronize FotMob rosters and loans
         run: |
           python scripts/sync_fotmob_loans.py \
             --lookback-years "${{ inputs.lookback_years }}" \
@@ -50,4 +50,14 @@ jobs:
             --allow-fetch-failures \
             --retries 4 \
             --sleep 0.25 \
+            --workers 6
+
+      - name: Synchronize historical Transfermarkt loans
+        run: |
+          python scripts/sync_transfermarkt_loans.py \
+            --lookback-years "${{ inputs.lookback_years }}" \
+            --limit "${{ inputs.club_limit }}" \
+            --allow-fetch-failures \
+            --retries 4 \
+            --sleep 0.3 \
             --workers 6

@@ -3,6 +3,7 @@ from datetime import date
 
 from scripts.sync_fotmob_loans import (
     extract_team_loans,
+    extract_team_roster,
     normalized_name,
     primary_position,
     select_team_suggestion,
@@ -63,6 +64,35 @@ class FotMobLoanTests(unittest.TestCase):
     def test_position_grouping_handles_short_labels(self) -> None:
         self.assertEqual(primary_position({"position": {"label": "CB"}}), "Defender")
         self.assertEqual(primary_position({"position": {"label": "RW"}}), "Attacker")
+
+    def test_extracts_current_players_and_management_from_roster_groups(self) -> None:
+        payload = {
+            "overview": {"season": "2026/2027"},
+            "squad": {"squad": [
+                {"title": "coach", "members": [
+                    {"id": 1, "name": "The Coach", "role": {"fallback": "Coach"}},
+                ]},
+                {"title": "defenders", "members": [
+                    {
+                        "id": 2,
+                        "name": "The Defender",
+                        "shirtNumber": 3,
+                        "role": {"fallback": "Defender"},
+                        "positionIds": "38,59",
+                        "positionIdsDesc": "LB,LWB",
+                    },
+                ]},
+            ]},
+        }
+
+        season_name, roster = extract_team_roster(payload, "7855")
+
+        self.assertEqual(season_name, "2026/2027")
+        self.assertEqual(len(roster), 2)
+        self.assertEqual(roster[0]["primary_position"], "Management")
+        self.assertEqual(roster[1]["primary_position"], "Defender")
+        self.assertEqual(roster[1]["formation_position"], "LB")
+        self.assertEqual(roster[1]["shirt_number"], 3)
 
 
 if __name__ == "__main__":

@@ -64,6 +64,7 @@ import type {
   Season,
   SeasonPlayer,
   TeamAsset,
+  TeamRosterMember,
 } from "./lib/types";
 
 type View = "overview" | "matches" | "clubs" | "players" | "legionnaires";
@@ -601,6 +602,7 @@ export function App() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [players, setPlayers] = useState<SeasonPlayer[]>([]);
   const [playerLoans, setPlayerLoans] = useState<PlayerLoan[]>([]);
+  const [teamRoster, setTeamRoster] = useState<TeamRosterMember[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [playerHistory, setPlayerHistory] = useState<PlayerHistory[]>([]);
   const [comparisonPlayerHistory, setComparisonPlayerHistory] = useState<PlayerHistory[]>([]);
@@ -833,6 +835,7 @@ export function App() {
         setClubs(demoClubs);
         setPlayers(demoPlayers);
         setPlayerLoans([]);
+        setTeamRoster([]);
         setRoundId((current) => demoRounds.some((round) => round.round_id === current) ? current : demoRounds[demoRounds.length - 1]?.round_id ?? "");
         setClubId((current) => demoClubs.some((club) => club.team_id === current) ? current : demoClubs[0]?.team_id ?? "");
         setPlayerId((current) => demoPlayers.some((player) => player.player_id === current) ? current : demoPlayers[0]?.player_id ?? "");
@@ -859,12 +862,13 @@ export function App() {
         return result;
       }
 
-      const [roundResult, matchResult, clubResult, playerResult, loanResult, teamAssetResult] = await Promise.all([
+      const [roundResult, matchResult, clubResult, playerResult, loanResult, rosterResult, teamAssetResult] = await Promise.all([
         liveClient.from("api_rounds").select("*").eq("season_id", seasonId).order("stage_number").order("round_number"),
         liveClient.from("api_matches").select("*").eq("season_id", seasonId).order("scheduled_at"),
         liveClient.from("api_clubs").select("*").eq("season_id", seasonId).order("points", { ascending: false }),
         loadSeasonPlayers(),
         liveClient.rpc("api_player_loans_for_season", { p_season_id: seasonId }),
+        liveClient.rpc("api_team_rosters_for_season", { p_season_id: seasonId }),
         liveClient.from("api_team_assets").select("*"),
       ]);
       const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error ?? teamAssetResult.error;
@@ -884,6 +888,7 @@ export function App() {
       }));
       const nextPlayers = (playerResult.error ? [] : playerResult.data ?? []) as SeasonPlayer[];
       const nextPlayerLoans = (loanResult.error ? [] : loanResult.data ?? []) as PlayerLoan[];
+      const nextTeamRoster = (rosterResult.error ? [] : rosterResult.data ?? []) as TeamRosterMember[];
       const latestPlayedRound = [...nextRounds].reverse().find((round) => round.completed_match_count > 0) ?? nextRounds[nextRounds.length - 1];
 
       setRounds(nextRounds);
@@ -891,11 +896,14 @@ export function App() {
       setClubs(nextClubs);
       setPlayers(nextPlayers);
       setPlayerLoans(nextPlayerLoans);
+      setTeamRoster(nextTeamRoster);
       setRoundId((current) => nextRounds.some((round) => round.round_id === current) ? current : latestPlayedRound?.round_id ?? "");
       setClubId((current) => nextClubs.some((club) => club.team_id === current) ? current : nextClubs[0]?.team_id ?? "");
-      setPlayerId((current) => nextPlayers.some((player) => player.player_id === current) || nextPlayerLoans.some((loan) => loan.player_id === current)
+      setPlayerId((current) => nextPlayers.some((player) => player.player_id === current)
+        || nextPlayerLoans.some((loan) => loan.player_id === current)
+        || nextTeamRoster.some((player) => player.player_id === current)
         ? current
-        : nextPlayers[0]?.player_id ?? nextPlayerLoans[0]?.player_id ?? "");
+        : nextPlayers[0]?.player_id ?? nextTeamRoster[0]?.player_id ?? nextPlayerLoans[0]?.player_id ?? "");
       setSeasonLoading(false);
     }
 
@@ -1400,11 +1408,14 @@ export function App() {
   }), [competitionId, playerLoans, players]);
   const profilePlayers = useMemo(() => {
     const byPlayerId = new Map(players.map((player) => [player.player_id, player]));
+    teamRoster.forEach((player) => {
+      if (!byPlayerId.has(player.player_id)) byPlayerId.set(player.player_id, player);
+    });
     loanProfilePlayers.forEach((player) => {
       if (!byPlayerId.has(player.player_id)) byPlayerId.set(player.player_id, player);
     });
     return [...byPlayerId.values()];
-  }, [loanProfilePlayers, players]);
+  }, [loanProfilePlayers, players, teamRoster]);
   const selectedPlayer = profilePlayers.find((player) => player.player_id === playerId);
   const selectedPlayerLoan = useMemo(() => playerLoans
     .filter((loan) => loan.player_id === playerId)
@@ -1657,15 +1668,45 @@ export function App() {
   const clubSquad = useMemo(
     () => {
       const loanedPlayerIds = new Set(clubLoans.map((loan) => loan.player_id));
-      return players.filter((player) => player.team_id === clubId && !loanedPlayerIds.has(player.player_id));
+      const byPlayerId = new Map<string, SeasonPlayer>();
+      teamRoster
+        .filter((player) => player.team_id === clubId && !isManagementPlayer(player) && !loanedPlayerIds.has(player.player_id))
+        .forEach((player) => byPlayerId.set(player.player_id, player));
+      players
+        .filter((player) => player.team_id === clubId && !isManagementPlayer(player) && !loanedPlayerIds.has(player.player_id))
+        .forEach((player) => byPlayerId.set(player.player_id, player));
+      return [...byPlayerId.values()];
     },
-    [clubId, clubLoans, players],
+    [clubId, clubLoans, players, teamRoster],
   );
+  const clubManagement = useMemo(() => {
+    const byPlayerId = new Map<string, SeasonPlayer>();
+    players
+      .filter((player) => player.team_id === clubId && isManagementPlayer(player))
+      .forEach((player) => byPlayerId.set(player.player_id, player));
+    teamRoster
+      .filter((player) => player.team_id === clubId && isManagementPlayer(player))
+      .forEach((player) => byPlayerId.set(player.player_id, player));
+    return [...byPlayerId.values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
+  }, [clubId, players, teamRoster]);
   const clubSquadLeaderboardRows = useMemo(() => {
     const squadPlayerIds = new Set(clubSquad.map((player) => player.player_id));
     return squadLeaderboardRows.filter((player) => squadPlayerIds.has(player.player_id));
   }, [clubSquad, squadLeaderboardRows]);
   const clubSquadLeaders = filterLeaderboardRows(clubSquadLeaderboardRows, players, squadQualification, squadMinimum);
+  const clubSquadRows = useMemo(() => {
+    const playerById = new Map(clubSquad.map((player) => [player.player_id, player]));
+    const rankedPlayerIds = new Set(clubSquadLeaders.map((row) => row.player_id));
+    const ranked = clubSquadLeaders.flatMap((ranking) => {
+      const player = playerById.get(ranking.player_id);
+      return player ? [{ player, ranking }] : [];
+    });
+    const unranked = clubSquad
+      .filter((player) => !rankedPlayerIds.has(player.player_id))
+      .sort((a, b) => a.display_name.localeCompare(b.display_name))
+      .map((player) => ({ player, ranking: null }));
+    return [...ranked, ...unranked];
+  }, [clubSquad, clubSquadLeaders]);
   const clubLoanLeaderboardRows = useMemo(() => {
     const loanPlayerIds = new Set(clubLoans.map((loan) => loan.player_id));
     return squadLeaderboardRows.filter((row) => loanPlayerIds.has(row.player_id));
@@ -2011,7 +2052,9 @@ export function App() {
             allTournaments={showingAllTournaments}
             seasonName={currentSeason.season_name}
             squad={clubSquad}
-            squadLeaders={clubSquadLeaders}
+            squadRows={clubSquadRows}
+            qualifiedSquadCount={clubSquadLeaders.length}
+            management={clubManagement}
             loans={clubLoans}
             loanLeaderboardRows={clubLoanLeaderboardRows}
             metrics={leaderboardMetrics}
@@ -2407,7 +2450,9 @@ function ClubsView({
   allTournaments,
   seasonName,
   squad,
-  squadLeaders,
+  squadRows,
+  qualifiedSquadCount,
+  management,
   loans,
   loanLeaderboardRows,
   metrics,
@@ -2434,7 +2479,9 @@ function ClubsView({
   allTournaments: boolean;
   seasonName: string;
   squad: SeasonPlayer[];
-  squadLeaders: PlayerLeaderboardRow[];
+  squadRows: { player: SeasonPlayer; ranking: PlayerLeaderboardRow | null }[];
+  qualifiedSquadCount: number;
+  management: SeasonPlayer[];
   loans: PlayerLoan[];
   loanLeaderboardRows: PlayerLeaderboardRow[];
   metrics: LeaderboardMetricOption[];
@@ -2453,7 +2500,6 @@ function ClubsView({
   const { language, text } = useLocale();
   const recent = matches.filter(isCompletedMatch).slice(0, 5);
   const displayClub = selectedClub && allTournaments ? aggregateClubRecord(selectedClub, matches) : selectedClub;
-  const squadByPlayerId = new Map(squad.map((player) => [player.player_id, player]));
   const loanLeaderboardByPlayerId = new Map(loanLeaderboardRows.map((row) => [row.player_id, row]));
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
@@ -2516,17 +2562,18 @@ function ClubsView({
                       </select>
                     </label>
                   </div>
-                  {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={squadLeaders.length} loading={leaderboardLoading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
+                  {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={qualifiedSquadCount} loading={leaderboardLoading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
+                  {leaderboardError && <p className="panel-inline-error">{text.squadLoadError}</p>}
                   <div className="squad-list">
-                    {leaderboardLoading ? <InlineLoading /> : leaderboardError ? <EmptyState text={text.squadLoadError} /> : squadLeaders.length || loans.length ? <>
-                      {squadLeaders.map((leader, index) => {
-                        const player = squadByPlayerId.get(leader.player_id);
+                    {squadRows.length || loans.length ? <>
+                      {squadRows.map(({ player, ranking }, index) => {
+                        const playerName = localizedPlayerName(player, player.display_name, language);
                         return (
-                          <button key={leader.player_id} type="button" onClick={() => openPlayer(leader.player_id)}>
-                            <span className="squad-rank">{String(index + 1).padStart(2, "0")}</span>
-                            <span className="avatar">{initials(leader.display_name)}</span>
-                            <span><strong>{localizedPlayerName(player, leader.display_name, language)}</strong><small>{player ? `${playerPositionDetail(player).code} · ${localizedPlayerPosition(player, language).label}` : text.player}</small></span>
-                            <em>{formatMetricWithRatio(leader.leaderboard_value, leader.value_type, leader.numerator_value, leader.denominator_value)}</em>
+                          <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
+                            <span className="squad-rank">{ranking ? String(index + 1).padStart(2, "0") : "--"}</span>
+                            <span className="avatar">{initials(playerName)}</span>
+                            <span><strong>{playerName}</strong><small>{`${playerPositionDetail(player).code} · ${localizedPlayerPosition(player, language).label}`}</small></span>
+                            <em>{ranking ? formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value) : leaderboardLoading ? <Loader2 className="spin" size={12} aria-label={text.updatingRanking} /> : "-"}</em>
                           </button>
                         );
                       })}
@@ -2549,10 +2596,27 @@ function ClubsView({
                           </button>
                         );
                       })}
-                    </> : <EmptyState text={qualification ? text.noSquadMinimumSample : text.noSquadData} />}
+                    </> : <EmptyState text={text.noSquadData} />}
                   </div>
                 </section>}
               </div>
+              {!allTournaments && management.length > 0 && (
+                <section className="surface management-panel">
+                  <SectionHeading eyebrow={text.seasonSquad} title={text.management} />
+                  <p>{text.managementDescription}</p>
+                  <div className="management-list">
+                    {management.map((person) => {
+                      const personName = localizedPlayerName(person, person.display_name, language);
+                      return (
+                        <div key={person.player_id}>
+                          <span className="avatar">{initials(personName)}</span>
+                          <span><strong>{personName}</strong><small>{person.primary_position ?? text.management}</small></span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
             </>
           ) : <EmptyState text={text.selectClub} />}
         </section>
@@ -4243,6 +4307,11 @@ function specificPositionDetail(position?: string | null): PlayerPositionDetail 
   const label = position!.trim();
   const code = label.split(/\s+/).map((word) => word[0]).join("").slice(0, 3).toUpperCase();
   return { code: code || "Other", label };
+}
+
+function isManagementPlayer(player: SeasonPlayer) {
+  const position = `${player.primary_position ?? ""} ${player.specific_position ?? ""}`.toLowerCase();
+  return /\b(?:coach|manager|management|staff)\b/.test(position);
 }
 
 function playerPositionDetail(player: SeasonPlayer): PlayerPositionDetail {
