@@ -168,9 +168,8 @@ def main() -> int:
                   observed_at
                 )
                 values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
-                on conflict (source_id, source_player_id, valuation_date) do update
-                  set player_id = excluded.player_id,
-                      value_amount = excluded.value_amount,
+                on conflict (source_id, player_id, source_player_id, valuation_date) do update
+                  set value_amount = excluded.value_amount,
                       currency = excluded.currency,
                       lower_bound = excluded.lower_bound,
                       upper_bound = excluded.upper_bound,
