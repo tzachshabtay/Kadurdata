@@ -211,7 +211,7 @@ export type UiText = { [Key in keyof typeof englishText]: string };
 const hebrewText: UiText = {
   pageTitle: "Kadurdata | נתוני הכדורגל הישראלי",
   metaDescription: "נתוני משחקים, מועדונים, שחקנים ומגמות ביצועים בכדורגל הישראלי.",
-  brandTagline: "מודיעין כדורגל ישראלי",
+  brandTagline: "כדורגל ישראלי במספרים",
   primaryNavigation: "ניווט ראשי",
   overview: "סקירה",
   matches: "משחקים",
