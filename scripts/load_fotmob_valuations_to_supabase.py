@@ -75,26 +75,29 @@ def integer_or_none(value: Optional[str]) -> Optional[int]:
     return int(value)
 
 
-def upsert_fotmob_mapping(
+def upsert_fotmob_mappings(
     cur: psycopg.Cursor,
     fotmob_source_id: str,
-    row: dict[str, str],
+    rows: list[dict[str, str]],
 ) -> None:
-    existing = cur.execute(
+    existing_rows = cur.execute(
         """
-        select canonical_id
+        select source_entity_id, canonical_id
         from source.source_entity_ids
         where source_id = %s
           and entity_type = 'player'
-          and source_entity_id = %s
+          and source_entity_id = any(%s)
         """,
-        (fotmob_source_id, row["source_player_id"]),
-    ).fetchone()
-    if existing and existing["canonical_id"] and str(existing["canonical_id"]) != row["canonical_player_id"]:
-        raise RuntimeError(
-            f"FotMob player {row['source_player_id']} is already mapped to {existing['canonical_id']}"
-        )
-    cur.execute(
+        (fotmob_source_id, [row["source_player_id"] for row in rows]),
+    ).fetchall()
+    existing_by_source_id = {str(row["source_entity_id"]): row for row in existing_rows}
+    for row in rows:
+        existing = existing_by_source_id.get(row["source_player_id"])
+        if existing and existing["canonical_id"] and str(existing["canonical_id"]) != row["canonical_player_id"]:
+            raise RuntimeError(
+                f"FotMob player {row['source_player_id']} is already mapped to {existing['canonical_id']}"
+            )
+    cur.executemany(
         """
         insert into source.source_entity_ids as mapping (
           source_id,
@@ -113,12 +116,15 @@ def upsert_fotmob_mapping(
               source_name = excluded.source_name,
               last_seen_at = now()
         """,
-        (
-            fotmob_source_id,
-            row["source_player_id"],
-            row["canonical_player_id"],
-            row["player_name"],
-        ),
+        [
+            (
+                fotmob_source_id,
+                row["source_player_id"],
+                row["canonical_player_id"],
+                row["player_name"],
+            )
+            for row in rows
+        ],
     )
 
 
@@ -142,8 +148,7 @@ def main() -> int:
             player_rows: dict[str, dict[str, str]] = {}
             for row in rows:
                 player_rows[row["source_player_id"]] = row
-            for row in player_rows.values():
-                upsert_fotmob_mapping(cur, fotmob_source_id, row)
+            upsert_fotmob_mappings(cur, fotmob_source_id, list(player_rows.values()))
 
             cur.executemany(
                 """
