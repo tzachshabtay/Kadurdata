@@ -166,7 +166,7 @@ def main() -> int:
 
             cur.executemany(
                 """
-                insert into obs.player_valuations (
+                insert into obs.player_valuations as existing (
                   source_id,
                   player_id,
                   source_player_id,
@@ -192,6 +192,25 @@ def main() -> int:
                       source_team_name = excluded.source_team_name,
                       source_url = excluded.source_url,
                       observed_at = now()
+                where (
+                  existing.value_amount,
+                  existing.currency,
+                  existing.lower_bound,
+                  existing.upper_bound,
+                  existing.provider,
+                  existing.source_team_id,
+                  existing.source_team_name,
+                  existing.source_url
+                ) is distinct from (
+                  excluded.value_amount,
+                  excluded.currency,
+                  excluded.lower_bound,
+                  excluded.upper_bound,
+                  excluded.provider,
+                  excluded.source_team_id,
+                  excluded.source_team_name,
+                  excluded.source_url
+                )
                 """,
                 [
                     (
