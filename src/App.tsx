@@ -1528,6 +1528,7 @@ export function App() {
   });
   useEffect(() => {
     if (view !== "players" || explorerLeaderboardLoading || !rankedExplorerPlayers.length || rankedExplorerPlayers.some((player) => player.player_id === playerId)) return;
+    setComparisonPlayerId("");
     setPlayerId(rankedExplorerPlayers[0].player_id);
   }, [explorerLeaderboardLoading, playerId, rankedExplorerPlayers, view]);
   const clubMatches = useMemo(
@@ -1703,7 +1704,7 @@ export function App() {
   }
 
   function openPlayer(nextPlayerId: string) {
-    if (nextPlayerId === comparisonPlayerId) setComparisonPlayerId(playerId);
+    setComparisonPlayerId("");
     setRoleFilter("All");
     setPositionFilter("All");
     setClubFilter("all");
@@ -1947,7 +1948,7 @@ export function App() {
             comparisonSeasonHeatmaps={comparisonPlayerSeasonHeatmaps}
             comparisonSeasonHeatmapLoading={comparisonPlayerHeatmapLoading}
             selectPlayer={(nextPlayerId) => {
-              if (nextPlayerId === comparisonPlayerId) setComparisonPlayerId(playerId);
+              setComparisonPlayerId("");
               setPlayerId(nextPlayerId);
             }}
             roles={roleFilters}
@@ -3578,12 +3579,6 @@ function PlayerMatchInspector({
           <span><small>{text.match}</small><strong>{formatScore(match.home_score, match.away_score)}</strong></span>
         </div>
         <div className="match-player-dialog-body">
-          {heatmap?.heatmap_url ? (
-            <section className="player-heatmap-panel">
-              <h3>{text.playerHeatmap}</h3>
-              <div><img src={heatmap.heatmap_url} alt={`${displayName} · ${text.playerHeatmap}`} /></div>
-            </section>
-          ) : null}
           {loading ? <InlineLoading /> : loadError ? <EmptyState text={loadError} /> : attributeGroups.length ? attributeGroups.map((group) => (
             <section className="match-attribute-group" key={group.category}>
               <h3>{categoryName(group.category, language)}</h3>
@@ -3592,6 +3587,12 @@ function PlayerMatchInspector({
               </div>
             </section>
           )) : <EmptyState text={text.noMatchAttributes} />}
+          {heatmap?.heatmap_url ? (
+            <section className="player-heatmap-panel">
+              <h3>{text.playerHeatmap}</h3>
+              <div><img src={heatmap.heatmap_url} alt={`${displayName} · ${text.playerHeatmap}`} /></div>
+            </section>
+          ) : null}
         </div>
       </section>
     </div>
