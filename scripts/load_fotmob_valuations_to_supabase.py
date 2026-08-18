@@ -7,6 +7,8 @@ import argparse
 import csv
 import json
 import os
+import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Optional
 
@@ -75,6 +77,11 @@ def integer_or_none(value: Optional[str]) -> Optional[int]:
     return int(value)
 
 
+def normalized_name(value: str) -> str:
+    ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", ascii_value.lower()).strip()
+
+
 def upsert_fotmob_mappings(
     cur: psycopg.Cursor,
     fotmob_source_id: str,
@@ -82,9 +89,10 @@ def upsert_fotmob_mappings(
 ) -> None:
     existing_rows = cur.execute(
         """
-        select source_entity_id, canonical_id
-        from source.source_entity_ids
-        where source_id = %s
+        select mapping.source_entity_id, mapping.canonical_id, player.display_name
+        from source.source_entity_ids mapping
+        left join core.players player on player.id = mapping.canonical_id
+        where mapping.source_id = %s
           and entity_type = 'player'
           and source_entity_id = any(%s)
         """,
@@ -93,7 +101,12 @@ def upsert_fotmob_mappings(
     existing_by_source_id = {str(row["source_entity_id"]): row for row in existing_rows}
     for row in rows:
         existing = existing_by_source_id.get(row["source_player_id"])
-        if existing and existing["canonical_id"] and str(existing["canonical_id"]) != row["canonical_player_id"]:
+        if (
+            existing
+            and existing["canonical_id"]
+            and str(existing["canonical_id"]) != row["canonical_player_id"]
+            and normalized_name(str(existing["display_name"] or "")) != normalized_name(row["player_name"])
+        ):
             raise RuntimeError(
                 f"FotMob player {row['source_player_id']} is already mapped to {existing['canonical_id']}"
             )
