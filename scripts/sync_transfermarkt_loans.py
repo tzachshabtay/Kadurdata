@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synchronize historical outgoing loans from Transfermarkt season pages."""
+"""Synchronize outgoing loans from Transfermarkt's machine-readable club history API."""
 
 from __future__ import annotations
 
@@ -9,14 +9,11 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime
-from pathlib import Path
-from typing import Any, Optional
+from datetime import date
+from typing import Any, Iterable, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urljoin
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-
-from bs4 import BeautifulSoup
 
 try:
     from scripts.sync_fotmob_loans import candidate_teams, normalized_name, unique_name_index, upsert_mapping
@@ -25,12 +22,12 @@ except ModuleNotFoundError:
 
 
 BASE_URL = "https://www.transfermarkt.com"
-REFERENCE_LOANS_PATH = Path(__file__).resolve().parents[1] / "data" / "reference" / "transfermarkt_loans.json"
-USER_AGENT = "Mozilla/5.0 (compatible; Kadurdata/1.0; historical football loan import)"
+API_BASE_URL = "https://tmapi-alpha.transfermarkt.technology"
+USER_AGENT = "Mozilla/5.0 (compatible; Kadurdata/1.0; football loan import)"
 TRANSFERMARKT_SOURCE = {
     "code": "transfermarkt",
     "name": "Transfermarkt",
-    "kind": "unofficial_web_page_data",
+    "kind": "unofficial_json_api_data",
     "base_url": BASE_URL,
     "priority": 30,
 }
@@ -56,15 +53,16 @@ PLAYER_NAME_ALIASES = {
     "itay zafrani": "itai zafrani",
     "roy nawi": "roy navi",
 }
-
-
-def canonical_player_name(value: str) -> str:
-    normalized = normalized_name(value)
-    return PLAYER_NAME_ALIASES.get(normalized, normalized)
+POSITION_GROUPS = {
+    "GOALKEEPER": "Goalkeeper",
+    "DEFENDER": "Defender",
+    "MIDFIELDER": "Midfielder",
+    "FORWARD": "Attacker",
+}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Synchronize historical Transfermarkt player loans.")
+    parser = argparse.ArgumentParser(description="Synchronize Transfermarkt player loans for Israeli clubs.")
     parser.add_argument("--lookback-years", type=int, default=2)
     parser.add_argument("--limit", type=int, default=0, help="Limit parent clubs for a smoke run.")
     parser.add_argument("--workers", type=int, default=6)
@@ -74,126 +72,195 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def fetch_text(url: str, retries: int, sleep_seconds: float) -> str:
+def canonical_player_name(value: str) -> str:
+    normalized = normalized_name(value)
+    return PLAYER_NAME_ALIASES.get(normalized, normalized)
+
+
+def normalized_team_name(value: str) -> str:
+    tokens = normalized_name(value).split()
+    return " ".join(token for token in tokens if token not in {"fc", "sc", "afc", "cf"})
+
+
+def fetch_json(url: str, retries: int, sleep_seconds: float) -> dict[str, Any]:
     error: Optional[Exception] = None
     for attempt in range(retries + 1):
         try:
-            request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
+            request = Request(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "Origin": BASE_URL,
+                    "Referer": f"{BASE_URL}/",
+                    "User-Agent": USER_AGENT,
+                },
+            )
             with urlopen(request, timeout=30) as response:
-                return response.read().decode("utf-8", "ignore")
-        except (HTTPError, URLError, TimeoutError) as exc:
+                payload = json.loads(response.read().decode("utf-8"))
+            if not isinstance(payload, dict) or payload.get("success") is not True or not isinstance(payload.get("data"), (dict, list)):
+                raise RuntimeError(f"unexpected Transfermarkt API response from {url}")
+            return payload
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, RuntimeError) as exc:
             error = exc
             if attempt < retries:
                 time.sleep(sleep_seconds * (attempt + 1))
     raise RuntimeError(f"failed to fetch {url}: {error}")
 
 
-def path_entity_id(path: str, entity_name: str) -> Optional[str]:
-    match = re.search(rf"/{entity_name}/(\d+)(?:/|$)", path)
-    return match.group(1) if match else None
+def api_url(path: str, params: Optional[list[tuple[str, str]]] = None) -> str:
+    url = f"{API_BASE_URL}/{path.lstrip('/')}"
+    return f"{url}?{urlencode(params)}" if params else url
 
 
-def transfermarkt_team_suggestions(html: str) -> list[dict[str, str]]:
-    soup = BeautifulSoup(html, "html.parser")
-    suggestions: dict[str, dict[str, str]] = {}
-    for link in soup.select('a[href*="/startseite/verein/"]'):
-        team_id = path_entity_id(str(link.get("href") or ""), "verein")
-        name = str(link.get("title") or link.get_text(" ", strip=True)).strip()
-        if team_id and name:
-            suggestions[team_id] = {"id": team_id, "name": name, "href": str(link["href"])}
-    return list(suggestions.values())
+def batched(values: Iterable[str], size: int = 40) -> list[list[str]]:
+    items = list(dict.fromkeys(str(value) for value in values if str(value)))
+    return [items[index:index + size] for index in range(0, len(items), size)]
 
 
-def select_team_suggestion(suggestions: list[dict[str, str]], team_name: str) -> Optional[dict[str, str]]:
-    wanted = normalized_name(team_name)
-    exact = [item for item in suggestions if normalized_name(item["name"]) == wanted]
+def fetch_entities(kind: str, entity_ids: Iterable[str], retries: int, sleep_seconds: float, workers: int) -> dict[str, dict[str, Any]]:
+    chunks = batched(entity_ids)
+    if not chunks:
+        return {}
+
+    def fetch_chunk(ids: list[str]) -> list[dict[str, Any]]:
+        payload = fetch_json(api_url(kind, [("ids[]", entity_id) for entity_id in ids]), retries, sleep_seconds)
+        rows = payload["data"]
+        if not isinstance(rows, list):
+            raise RuntimeError(f"Transfermarkt {kind} response was not a list")
+        return [row for row in rows if isinstance(row, dict) and row.get("id")]
+
+    entities: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=max(workers, 1)) as executor:
+        pending = [executor.submit(fetch_chunk, chunk) for chunk in chunks]
+        for future in as_completed(pending):
+            for entity in future.result():
+                entities[str(entity["id"])] = entity
+    return entities
+
+
+def select_team_suggestion(suggestions: list[dict[str, Any]], team_name: str) -> Optional[dict[str, Any]]:
+    wanted = normalized_team_name(team_name)
+    exact = [item for item in suggestions if normalized_team_name(str(item.get("name") or "")) == wanted]
     if exact:
         return exact[0]
     return suggestions[0] if len(suggestions) == 1 else None
 
 
-def resolve_transfermarkt_team(team_name: str, retries: int, sleep_seconds: float) -> Optional[dict[str, str]]:
+def resolve_transfermarkt_team(team_name: str, retries: int, sleep_seconds: float) -> Optional[dict[str, Any]]:
     normalized = normalized_name(team_name)
     if normalized in KNOWN_TEAM_IDS:
-        return {"id": KNOWN_TEAM_IDS[normalized], "name": team_name, "href": ""}
-    url = f"{BASE_URL}/schnellsuche/ergebnis/schnellsuche?query={quote(normalized)}"
-    return select_team_suggestion(transfermarkt_team_suggestions(fetch_text(url, retries, sleep_seconds)), team_name)
+        return {"id": KNOWN_TEAM_IDS[normalized], "name": team_name}
+
+    search = fetch_json(api_url("quick-search", [("term", team_name)]), retries, sleep_seconds)
+    result = search["data"].get("result") if isinstance(search["data"], dict) else None
+    club_ids = result.get("clubIds") if isinstance(result, dict) else None
+    if not isinstance(club_ids, list) or not club_ids:
+        return None
+    clubs = fetch_entities("clubs", club_ids, retries, sleep_seconds, 2)
+    return select_team_suggestion(list(clubs.values()), team_name)
 
 
-def primary_position(position: str) -> Optional[str]:
-    value = position.lower()
-    if "keeper" in value:
-        return "Goalkeeper"
-    if any(token in value for token in ("back", "defender")):
-        return "Defender"
-    if "midfield" in value:
-        return "Midfielder"
-    if any(token in value for token in ("winger", "striker", "forward")):
-        return "Attacker"
-    return None
+def parse_api_date(value: Any) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
 
 
-def extract_departure_loans(html: str, parent_team: dict[str, Any], season_start_year: int) -> list[dict[str, Any]]:
-    soup = BeautifulSoup(html, "html.parser")
-    departure_box = None
-    for box in soup.select("div.box"):
-        heading = box.select_one("h2, .content-box-headline")
-        if heading and heading.get_text(" ", strip=True).lower().startswith("departures"):
-            departure_box = box
-            break
-    if departure_box is None:
-        return []
+def extract_api_departure_loans(
+    payload: dict[str, Any],
+    parent_team: dict[str, Any],
+    season_start_year: int,
+    today: Optional[date] = None,
+) -> list[dict[str, Any]]:
+    data = payload.get("data")
+    if not isinstance(data, dict) or str(data.get("clubId") or "") != str(parent_team["transfermarkt_team_id"]):
+        raise RuntimeError(f"Transfermarkt history did not match club {parent_team['transfermarkt_team_id']}")
+    departures = data.get("departures")
+    if not isinstance(departures, dict) or not isinstance(departures.get("terminated"), list):
+        raise RuntimeError(f"Transfermarkt history had no departures for club {parent_team['transfermarkt_team_id']}")
 
     loans: list[dict[str, Any]] = []
-    for row in departure_box.select("table.items > tbody > tr"):
-        transfer_link = next((
-            link for link in row.select("a[href]")
-            if link.get_text(" ", strip=True).lower() == "loan transfer"
-        ), None)
-        player_link = row.select_one('a[href*="/profil/spieler/"]')
-        if transfer_link is None or player_link is None:
+    records = [*departures["terminated"], *(departures.get("pending") or [])]
+    current_date = today or date.today()
+    for record in records:
+        details = record.get("details") if isinstance(record, dict) else None
+        transfer_type = record.get("typeDetails") if isinstance(record, dict) else None
+        source = record.get("transferSource") if isinstance(record, dict) else None
+        destination = record.get("transferDestination") if isinstance(record, dict) else None
+        if not all(isinstance(value, dict) for value in (details, transfer_type, source, destination)):
             continue
-        source_player_id = path_entity_id(str(player_link.get("href") or ""), "spieler")
-        destination_links = row.select('a[href*="/startseite/verein/"]')
-        destination_link = destination_links[-1] if destination_links else None
-        source_destination_team_id = path_entity_id(str(destination_link.get("href") or ""), "verein") if destination_link else None
-        if not source_player_id or not source_destination_team_id or destination_link is None:
+        if str(transfer_type.get("type") or "") != "ACTIVE_LOAN_TRANSFER":
             continue
-        player_table = player_link.find_parent("table")
-        player_rows = player_table.select(":scope > tbody > tr, :scope > tr") if player_table else []
-        position = player_rows[1].get_text(" ", strip=True) if len(player_rows) > 1 else ""
+        if int(details.get("seasonId") or 0) != season_start_year or details.get("isPending") is True:
+            continue
+        started_on = parse_api_date(details.get("date"))
+        if started_on is None or started_on > current_date:
+            continue
+        player_id = str(details.get("playerId") or "")
+        source_team_id = str(source.get("clubId") or "")
+        destination_team_id = str(destination.get("clubId") or "")
+        if not player_id or source_team_id != str(parent_team["transfermarkt_team_id"]) or not destination_team_id:
+            continue
+        relative_url = str(record.get("relativeUrl") or "")
         loans.append({
-            "source_player_id": source_player_id,
-            "player_name": str(player_link.get("title") or player_link.get_text(" ", strip=True)).strip(),
-            "source_parent_team_id": str(parent_team["transfermarkt_team_id"]),
+            "source_transfer_id": str(record.get("id") or ""),
+            "source_player_id": player_id,
+            "source_parent_team_id": source_team_id,
             "parent_team_name": str(parent_team["team_name"]),
-            "source_destination_team_id": source_destination_team_id,
-            "destination_team_name": str(destination_link.get("title") or destination_link.get_text(" ", strip=True)).strip(),
+            "source_destination_team_id": destination_team_id,
             "season_start_year": season_start_year,
-            "primary_position": primary_position(position),
-            "formation_position": position or None,
-            "transfer_detail_url": urljoin(BASE_URL, str(transfer_link.get("href") or "")),
+            "started_on": started_on,
+            "transfer_detail_url": f"{BASE_URL}{relative_url}" if relative_url else BASE_URL,
         })
     return loans
 
 
-def extract_transfer_date(html: str) -> Optional[date]:
-    text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
-    match = re.search(r"Transfer date\s+Season\s+\d{2}/\d{2}\s*-\s*(\d{2}/\d{2}/\d{4})", text)
-    if not match:
-        return None
-    return datetime.strptime(match.group(1), "%d/%m/%Y").date()
+def hebrew_name(player: dict[str, Any]) -> Optional[str]:
+    nationality = player.get("nationalityDetails")
+    value = nationality.get("passportName") if isinstance(nationality, dict) else None
+    return str(value).strip() if value and re.search(r"[\u0590-\u05ff]", str(value)) else None
 
 
-def reference_loans(start_years: list[int], parent_team_ids: set[str]) -> list[dict[str, Any]]:
-    if not REFERENCE_LOANS_PATH.exists():
-        return []
-    rows = json.loads(REFERENCE_LOANS_PATH.read_text(encoding="utf-8"))
-    return [
-        row for row in rows
-        if int(row.get("season_start_year") or 0) in start_years
-        and str(row.get("source_parent_team_id") or "") in parent_team_ids
-    ]
+def enrich_loan_stubs(
+    stubs: list[dict[str, Any]],
+    players: dict[str, dict[str, Any]],
+    clubs: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for stub in stubs:
+        source_player_id = str(stub["source_player_id"])
+        destination_team_id = str(stub["source_destination_team_id"])
+        player = players.get(source_player_id)
+        club = clubs.get(destination_team_id)
+        if player is None or club is None:
+            missing.append(f"player {source_player_id}" if player is None else f"club {destination_team_id}")
+            continue
+        attributes = player.get("attributes") if isinstance(player.get("attributes"), dict) else {}
+        position = attributes.get("position") if isinstance(attributes.get("position"), dict) else {}
+        position_group = str(attributes.get("positionGroup") or "")
+        formation_position = str(position.get("name") or "").strip() or None
+        player_name = str(player.get("name") or player.get("shortName") or "").strip()
+        destination_name = str(club.get("name") or "").strip()
+        if not player_name or not destination_name:
+            missing.append(f"metadata for player {source_player_id} / club {destination_team_id}")
+            continue
+        enriched.append({
+            **stub,
+            "player_name": player_name,
+            "player_name_he": hebrew_name(player),
+            "destination_team_name": destination_name,
+            "primary_position": POSITION_GROUPS.get(position_group),
+            "formation_position": formation_position,
+            "ended_on": date(int(stub["season_start_year"]) + 1, 6, 30),
+        })
+    if missing:
+        sample = ", ".join(missing[:10])
+        raise RuntimeError(f"Transfermarkt entity enrichment missed {len(missing)} records: {sample}")
+    return enriched
 
 
 def get_source(cur: Any) -> str:
@@ -241,15 +308,16 @@ def main() -> int:
             resolved_teams: list[dict[str, Any]] = []
             for team in teams:
                 source_team_id = str(team.get("fotmob_team_id") or "")
-                suggestion = None
                 if not source_team_id:
                     try:
                         suggestion = resolve_transfermarkt_team(str(team["team_name"]), args.retries, args.sleep)
                     except RuntimeError as exc:
                         failures.append({"team": str(team["team_name"]), "error": str(exc)})
-                    if not suggestion:
                         continue
-                    source_team_id = suggestion["id"]
+                    if not suggestion:
+                        failures.append({"team": str(team["team_name"]), "error": "no exact Transfermarkt club match"})
+                        continue
+                    source_team_id = str(suggestion["id"])
                 upsert_mapping(cur, source_id, "team", source_team_id, "core.teams", str(team["canonical_team_id"]), str(team["team_name"]))
                 resolved_teams.append({**team, "transfermarkt_team_id": source_team_id})
             connection.commit()
@@ -258,11 +326,16 @@ def main() -> int:
 
             def fetch_team_season(team: dict[str, Any], start_year: int) -> list[dict[str, Any]]:
                 source_team_id = str(team["transfermarkt_team_id"])
-                slug = normalized_name(str(team["team_name"])).replace(" ", "-")
-                url = f"{BASE_URL}/{quote(slug)}/transfers/verein/{source_team_id}/saison_id/{start_year}/pos//detailpos/0/w_s//plus/1"
-                return extract_departure_loans(fetch_text(url, args.retries, args.sleep), team, start_year)
+                payload = fetch_json(
+                    api_url(f"transfer/history/club/{source_team_id}", [("season", str(start_year))]),
+                    args.retries,
+                    args.sleep,
+                )
+                return extract_api_departure_loans(payload, team, start_year)
 
             loan_stubs: list[dict[str, Any]] = []
+            coverage: dict[tuple[str, int], int] = {}
+            fetched_team_seasons: set[tuple[str, int]] = set()
             with ThreadPoolExecutor(max_workers=max(args.workers, 1)) as executor:
                 pending = {
                     executor.submit(fetch_team_season, team, start_year): (team, start_year)
@@ -270,37 +343,37 @@ def main() -> int:
                 }
                 for future in as_completed(pending):
                     team, start_year = pending[future]
+                    label = str(team["team_name"])
                     try:
-                        loan_stubs.extend(future.result())
+                        loans = future.result()
                     except RuntimeError as exc:
-                        failures.append({"team": f"{team['team_name']} {start_year}", "error": str(exc)})
-
-            loan_stubs.extend(reference_loans(
-                seasons,
-                {str(team["transfermarkt_team_id"]) for team in resolved_teams},
-            ))
-
-            transfer_dates: dict[str, date] = {}
-
-            def fetch_transfer_date(url: str) -> tuple[str, Optional[date]]:
-                return url, extract_transfer_date(fetch_text(url, args.retries, args.sleep))
-
-            detail_urls = sorted({loan["transfer_detail_url"] for loan in loan_stubs if not loan.get("started_on")})
-            with ThreadPoolExecutor(max_workers=max(args.workers, 1)) as executor:
-                pending = {executor.submit(fetch_transfer_date, url): url for url in detail_urls}
-                for future in as_completed(pending):
-                    url = pending[future]
-                    try:
-                        _, started_on = future.result()
-                    except RuntimeError as exc:
-                        failures.append({"team": url, "error": str(exc)})
+                        failures.append({"team": f"{label} {start_year}", "error": str(exc)})
                         continue
-                    if started_on:
-                        transfer_dates[url] = started_on
+                    loan_stubs.extend(loans)
+                    coverage[(label, start_year)] = len(loans)
+                    fetched_team_seasons.add((str(team["canonical_team_id"]), start_year))
 
             if failures and not args.allow_fetch_failures:
                 details = "\n".join(f"- {item['team']}: {item['error']}" for item in failures)
-                raise RuntimeError(f"failed to fetch {len(failures)} Transfermarkt pages:\n{details}")
+                raise RuntimeError(f"failed to fetch {len(failures)} Transfermarkt club histories:\n{details}")
+            if resolved_teams and not loan_stubs:
+                raise RuntimeError("Transfermarkt returned zero loans across every requested club and season")
+
+            players = fetch_entities(
+                "players",
+                (stub["source_player_id"] for stub in loan_stubs),
+                args.retries,
+                args.sleep,
+                args.workers,
+            )
+            clubs = fetch_entities(
+                "clubs",
+                (stub["source_destination_team_id"] for stub in loan_stubs),
+                args.retries,
+                args.sleep,
+                args.workers,
+            )
+            loans = enrich_loan_stubs(loan_stubs, players, clubs)
 
             team_rows = list(cur.execute("select id::text, name from core.teams").fetchall())
             player_rows = list(cur.execute("select id::text, display_name from core.players").fetchall())
@@ -339,34 +412,52 @@ def main() -> int:
                 metadata = {"formation_position": loan.get("formation_position"), "transfermarkt_loan_import": True}
                 if canonical_id is None:
                     row = cur.execute(
-                        "insert into core.players (display_name, primary_position, metadata) values (%s, %s, %s) returning id::text",
-                        (player_name, loan.get("primary_position"), json.dumps(metadata)),
+                        "insert into core.players (display_name, display_name_he, primary_position, metadata) values (%s, %s, %s, %s) returning id::text",
+                        (player_name, loan.get("player_name_he"), loan.get("primary_position"), json.dumps(metadata)),
                     ).fetchone()
                     canonical_id = str(row["id"])
                     player_by_name[player_key] = canonical_id
                 else:
                     cur.execute(
-                        "update core.players set primary_position = coalesce(primary_position, %s), metadata = metadata || %s::jsonb where id = %s",
-                        (loan.get("primary_position"), json.dumps(metadata), canonical_id),
+                        """
+                        update core.players
+                        set display_name_he = coalesce(nullif(display_name_he, ''), %s),
+                            primary_position = coalesce(primary_position, %s),
+                            metadata = metadata || %s::jsonb
+                        where id = %s
+                        """,
+                        (loan.get("player_name_he"), loan.get("primary_position"), json.dumps(metadata), canonical_id),
                     )
                 upsert_mapping(cur, source_id, "player", source_player_id, "core.players", canonical_id, player_name)
                 player_mapping[source_player_id] = canonical_id
                 return canonical_id
 
+            for parent_team_id, start_year in fetched_team_seasons:
+                cur.execute(
+                    """
+                    delete from obs.player_loans
+                    where source_id = %s
+                      and parent_team_id = %s
+                      and started_on >= make_date(%s, 7, 1)
+                      and started_on < make_date(%s + 1, 7, 1)
+                    """,
+                    (source_id, parent_team_id, start_year, start_year),
+                )
+
             fetched_loans: dict[tuple[str, str, str, date], dict[str, Any]] = {}
-            for loan in loan_stubs:
-                fallback_date = date(int(loan["season_start_year"]), 7, 1)
-                started_on = date.fromisoformat(str(loan["started_on"])) if loan.get("started_on") else transfer_dates.get(str(loan["transfer_detail_url"]), fallback_date)
-                fetched_loans[(loan["source_player_id"], loan["source_parent_team_id"], loan["source_destination_team_id"], started_on)] = {
-                    **loan,
-                    "started_on": started_on,
-                    "ended_on": date(int(loan["season_start_year"]) + 1, 6, 30),
-                }
+            for loan in loans:
+                key = (
+                    str(loan["source_player_id"]),
+                    str(loan["source_parent_team_id"]),
+                    str(loan["source_destination_team_id"]),
+                    loan["started_on"],
+                )
+                fetched_loans[key] = loan
 
             for loan in fetched_loans.values():
                 player_id = ensure_player(loan)
-                parent_team_id = ensure_team(loan["source_parent_team_id"], loan["parent_team_name"])
-                destination_team_id = ensure_team(loan["source_destination_team_id"], loan["destination_team_name"])
+                parent_team_id = ensure_team(str(loan["source_parent_team_id"]), str(loan["parent_team_name"]))
+                destination_team_id = ensure_team(str(loan["source_destination_team_id"]), str(loan["destination_team_name"]))
                 cur.execute(
                     """
                     insert into obs.player_loans as existing (
@@ -392,15 +483,20 @@ def main() -> int:
                         json.dumps({
                             "formation_position": loan.get("formation_position"),
                             "season_start_year": loan["season_start_year"],
+                            "source_transfer_id": loan.get("source_transfer_id"),
                             "transfer_detail_url": loan["transfer_detail_url"],
+                            "acquisition_method": "transfermarkt_internal_api",
                         }),
                     ),
                 )
             connection.commit()
 
+    print("Transfermarkt loan coverage:", flush=True)
+    for (team_name, start_year), count in sorted(coverage.items(), key=lambda item: (item[0][1], item[0][0])):
+        print(f"- {start_year}/{start_year + 1} {team_name}: {count}", flush=True)
     print(
-        f"Transfermarkt loans synchronized: {len(fetched_loans)} records from {len(resolved_teams)} clubs "
-        f"across {len(seasons)} seasons"
+        f"Transfermarkt loans synchronized automatically: {len(fetched_loans)} records from "
+        f"{len(resolved_teams)} clubs across {len(seasons)} seasons"
         + (f" ({len(failures)} fetch failures allowed)" if failures else ""),
         flush=True,
     )

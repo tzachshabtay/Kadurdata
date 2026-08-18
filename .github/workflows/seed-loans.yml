@@ -57,7 +57,6 @@ jobs:
           python scripts/sync_transfermarkt_loans.py \
             --lookback-years "${{ inputs.lookback_years }}" \
             --limit "${{ inputs.club_limit }}" \
-            --allow-fetch-failures \
             --retries 4 \
             --sleep 0.3 \
             --workers 6

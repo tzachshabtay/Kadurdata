@@ -131,11 +131,9 @@ jobs:
             --workers 6
 
       - name: Synchronize historical Transfermarkt loans
-        continue-on-error: true
         run: |
           python scripts/sync_transfermarkt_loans.py \
             --lookback-years 2 \
-            --allow-fetch-failures \
             --retries 4 \
             --sleep 0.3 \
             --workers 6
