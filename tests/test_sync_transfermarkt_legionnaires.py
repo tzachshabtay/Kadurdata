@@ -1,7 +1,10 @@
+import argparse
 import unittest
+from unittest.mock import patch
 
 from scripts.sync_transfermarkt_legionnaires import (
     current_season_name,
+    discover_players,
     parse_destination_countries,
     parse_legionnaire_players,
 )
@@ -71,6 +74,49 @@ class TransfermarktLegionnaireCensusTests(unittest.TestCase):
 
         self.assertEqual(current_season_name(date(2026, 8, 18)), "2026/2027")
         self.assertEqual(current_season_name(date(2026, 2, 18)), "2025/2026")
+
+    def test_uses_next_mirror_when_first_index_has_no_country_table(self) -> None:
+        index_html = """
+        <div id="yw1"><table class="items"><tbody><tr>
+          <td><a href="/spieler-statistik/legionaere/statistik/stat/land_id/74/land/184">United States</a></td>
+        </tr></tbody></table></div>
+        """
+        country_html = """
+        <div id="yw1"><table class="items"><tbody><tr>
+          <td>1</td>
+          <td><table class="inline-table">
+            <tr><td></td><td><a title="Liel Abada" href="/liel-abada/profil/spieler/519514">Liel Abada</a></td></tr>
+            <tr><td>Right Winger</td></tr>
+          </table></td>
+          <td>24</td><td>Israel</td>
+          <td><table class="inline-table">
+            <tr><td><a title="Charlotte FC" href="/charlotte-fc/startseite/verein/78435">Charlotte</a></td></tr>
+            <tr><td><a title="Major League Soccer" href="/major-league-soccer/startseite/wettbewerb/MLS1">MLS</a></td></tr>
+          </table></td>
+        </tr></tbody></table></div>
+        """
+        requested_urls: list[str] = []
+
+        def fake_fetch(url: str, _retries: int, _sleep: float) -> str:
+            requested_urls.append(url)
+            if url.startswith("https://blocked.example"):
+                return "<html><body>Request blocked</body></html>"
+            return index_html if "/land/0/" in url else country_html
+
+        args = argparse.Namespace(retries=0, sleep=0.0, workers=1, limit=0)
+        with (
+            patch(
+                "scripts.sync_transfermarkt_legionnaires.TRANSFERMARKT_WEB_BASES",
+                ("https://blocked.example", "https://working.example"),
+            ),
+            patch("scripts.sync_transfermarkt_legionnaires.fetch_html", side_effect=fake_fetch),
+        ):
+            players, country_count = discover_players(args)
+
+        self.assertEqual(country_count, 1)
+        self.assertEqual(players[0]["source_player_id"], "519514")
+        self.assertTrue(any(url.startswith("https://blocked.example") for url in requested_urls))
+        self.assertTrue(any(url.startswith("https://working.example") for url in requested_urls))
 
 
 if __name__ == "__main__":

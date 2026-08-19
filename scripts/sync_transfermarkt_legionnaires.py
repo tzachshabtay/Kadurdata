@@ -21,9 +21,7 @@ from bs4 import BeautifulSoup
 try:
     from scripts.sync_fotmob_loans import normalized_name, unique_name_index, upsert_mapping
     from scripts.sync_transfermarkt_loans import (
-        BASE_URL,
         POSITION_GROUPS,
-        USER_AGENT,
         fetch_entities,
         get_source,
         hebrew_name,
@@ -31,9 +29,7 @@ try:
 except ModuleNotFoundError:
     from sync_fotmob_loans import normalized_name, unique_name_index, upsert_mapping
     from sync_transfermarkt_loans import (
-        BASE_URL,
         POSITION_GROUPS,
-        USER_AGENT,
         fetch_entities,
         get_source,
         hebrew_name,
@@ -52,6 +48,16 @@ SCORES365_SOURCE = {
 SCORES365_API = "https://webws.365scores.com"
 LEGIONNAIRE_INDEX = (
     "/spieler-statistik/legionaere/statistik/stat/land/0/land_id/74/plus/0"
+)
+TRANSFERMARKT_WEB_BASES = (
+    "https://www.transfermarkt.com",
+    "https://www.transfermarkt.us",
+    "https://www.transfermarkt.co.uk",
+    "https://www.transfermarkt.de",
+)
+WEB_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
 )
 PLAYER_LINK = re.compile(r"/profil/spieler/(\d+)")
 CLUB_LINK = re.compile(r"/startseite/verein/(\d+)")
@@ -87,9 +93,10 @@ def fetch_bytes(url: str, retries: int, sleep_seconds: float) -> bytes:
                 url,
                 headers={
                     "Accept": "text/html,application/json",
-                    "Origin": BASE_URL,
-                    "Referer": f"{BASE_URL}/",
-                    "User-Agent": USER_AGENT,
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Origin": "/".join(url.split("/")[:3]),
+                    "Referer": f"{'/'.join(url.split('/')[:3])}/",
+                    "User-Agent": WEB_USER_AGENT,
                 },
             )
             with urlopen(request, timeout=40) as response:
@@ -216,12 +223,35 @@ def parse_legionnaire_players(
 
 
 def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], int]:
-    index_html = fetch_html(f"{BASE_URL}{LEGIONNAIRE_INDEX}", args.retries, args.sleep)
+    index_html = ""
+    web_base = ""
+    mirror_errors: list[str] = []
+    for candidate_base in TRANSFERMARKT_WEB_BASES:
+        try:
+            candidate_html = fetch_html(
+                f"{candidate_base}{LEGIONNAIRE_INDEX}",
+                args.retries,
+                args.sleep,
+            )
+            candidate_countries = parse_destination_countries(candidate_html)
+        except RuntimeError as exc:
+            mirror_errors.append(f"{candidate_base}: {exc}")
+            continue
+        if candidate_countries:
+            index_html = candidate_html
+            web_base = candidate_base
+            break
+        mirror_errors.append(f"{candidate_base}: country table was empty")
+    if not web_base:
+        raise RuntimeError(
+            "Transfermarkt legionnaire index was unavailable on every mirror: "
+            + "; ".join(mirror_errors)
+        )
     index_soup = BeautifulSoup(index_html, "html.parser")
     index_pages = max_page(index_soup)
     countries = parse_destination_countries(index_html)
     for page in range(2, index_pages + 1):
-        page_html = fetch_html(f"{BASE_URL}{LEGIONNAIRE_INDEX}/page/{page}", args.retries, args.sleep)
+        page_html = fetch_html(f"{web_base}{LEGIONNAIRE_INDEX}/page/{page}", args.retries, args.sleep)
         countries.extend(parse_destination_countries(page_html))
     countries = list({country["country_id"]: country for country in countries}.values())
 
@@ -232,7 +262,7 @@ def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], in
             "/spieler-statistik/legionaere/statistik/stat/"
             f"land_id/74/land/{country['country_id']}/plus/0"
         )
-        html = fetch_html(f"{BASE_URL}{path}", args.retries, args.sleep)
+        html = fetch_html(f"{web_base}{path}", args.retries, args.sleep)
         first_pages[country["country_id"]] = html
         pages = max_page(BeautifulSoup(html, "html.parser"))
         page_tasks.extend((country, page) for page in range(2, pages + 1))
@@ -250,7 +280,7 @@ def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], in
     def fetch_country_page(task: tuple[dict[str, str], int]) -> tuple[dict[str, str], str]:
         country, page = task
         url = (
-            f"{BASE_URL}/spieler-statistik/legionaere/statistik/stat/"
+            f"{web_base}/spieler-statistik/legionaere/statistik/stat/"
             f"land_id/74/land/{country['country_id']}/plus/0/page/{page}"
         )
         return country, fetch_html(url, args.retries, args.sleep)
