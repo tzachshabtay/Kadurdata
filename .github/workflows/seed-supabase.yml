@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       seed_mode:
-        description: "Full backfill, fixtures only, or a small recent refresh."
+        description: "Full backfill, fixtures, a recent refresh, legionnaires, or Hebrew names only."
         required: false
         default: "full"
         type: choice
@@ -13,6 +13,7 @@ on:
           - fixtures
           - recent
           - legionnaires
+          - hebrew_names
       seed_limit:
         description: "Matches per competition. Use 0 for every match in the selected window."
         required: false
@@ -59,7 +60,7 @@ jobs:
         run: python scripts/apply_migrations.py
 
       - name: Fetch and flatten 365Scores data
-        if: env.SEED_MODE != 'legionnaires'
+        if: env.SEED_MODE != 'legionnaires' && env.SEED_MODE != 'hebrew_names'
         run: |
           args=(
             --all-israeli-competitions
@@ -89,10 +90,11 @@ jobs:
           python scripts/ingest_365scores.py "${args[@]}"
 
       - name: Load Supabase
-        if: env.SEED_MODE != 'legionnaires'
+        if: env.SEED_MODE != 'legionnaires' && env.SEED_MODE != 'hebrew_names'
         run: python scripts/load_365scores_to_supabase.py
 
       - name: Discover the full Israeli-abroad player census
+        if: env.SEED_MODE != 'hebrew_names'
         run: |
           python scripts/sync_transfermarkt_legionnaires.py \
             --allow-fetch-failures \
@@ -101,6 +103,7 @@ jobs:
             --workers 8
 
       - name: Fetch and flatten legionnaire data
+        if: env.SEED_MODE != 'hebrew_names'
         run: |
           args=(
             --allow-fetch-failures
@@ -128,9 +131,11 @@ jobs:
           python scripts/ingest_legionnaires.py "${args[@]}"
 
       - name: Load legionnaire data
+        if: env.SEED_MODE != 'hebrew_names'
         run: python scripts/load_365scores_to_supabase.py --processed-dir data/processed/legionnaires
 
       - name: Synchronize FotMob rosters and loans
+        if: env.SEED_MODE != 'hebrew_names'
         run: |
           python scripts/sync_fotmob_loans.py \
             --allow-fetch-failures \
@@ -139,6 +144,7 @@ jobs:
             --workers 6
 
       - name: Synchronize historical Transfermarkt loans
+        if: env.SEED_MODE != 'hebrew_names'
         run: |
           python scripts/sync_transfermarkt_loans.py \
             --lookback-years 2 \

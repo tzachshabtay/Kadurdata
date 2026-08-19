@@ -1,14 +1,18 @@
 import unittest
+from unittest.mock import patch
 
 from scripts.backfill_hebrew_player_names import (
     athletes_url,
     chunked,
     extract_game_hebrew_names,
     extract_hebrew_names,
+    extract_transliterated_name,
     game_url,
     is_365scores_athlete_id,
     search_url,
     select_transfermarkt_player,
+    transliterate_israeli_players,
+    transliteration_url,
 )
 
 
@@ -73,6 +77,58 @@ class HebrewPlayerNameTests(unittest.TestCase):
 
         self.assertIn("langId=1", url)
         self.assertIn("query=Liel+Abada", url)
+
+    def test_extracts_google_hebrew_transliteration(self) -> None:
+        payload = [[
+            ["אופק ", "Ofek ", None, None, 1],
+            ["לוי", "Levy", None, None, 1],
+        ]]
+
+        self.assertEqual(extract_transliterated_name(payload), "אופק לוי")
+        self.assertIsNone(extract_transliterated_name([[['Ofek Levy']]]))
+
+    def test_builds_english_to_hebrew_transliteration_request(self) -> None:
+        url = transliteration_url("Ofek Levy")
+
+        self.assertIn("sl=en", url)
+        self.assertIn("tl=iw", url)
+        self.assertIn("q=Ofek+Levy", url)
+
+    @patch("scripts.backfill_hebrew_player_names.fetch_json")
+    def test_transliteration_is_limited_to_verified_israeli_players(self, fetch_json) -> None:
+        fetch_json.return_value = [[['טסט פלייר']]]
+        players = [
+            {"player_id": "israeli", "display_name": "Test Player", "is_israeli": True},
+            {"player_id": "foreign", "display_name": "Gift Emmanuel", "is_israeli": False},
+        ]
+
+        names, verified, failures = transliterate_israeli_players(
+            players,
+            retries=0,
+            sleep_seconds=0,
+            workers=1,
+            allow_fetch_failures=False,
+        )
+
+        self.assertEqual(names, {"israeli": "טסט פלייר"})
+        self.assertEqual(verified, 0)
+        self.assertEqual(failures, 0)
+        fetch_json.assert_called_once()
+
+    @patch("scripts.backfill_hebrew_player_names.fetch_json")
+    def test_verified_spelling_wins_without_a_network_request(self, fetch_json) -> None:
+        names, verified, failures = transliterate_israeli_players(
+            [{"player_id": "mahdy", "display_name": "Mahdy Mhajne", "is_israeli": True}],
+            retries=0,
+            sleep_seconds=0,
+            workers=1,
+            allow_fetch_failures=False,
+        )
+
+        self.assertEqual(names, {"mahdy": "מהדי מחאגנה"})
+        self.assertEqual(verified, 1)
+        self.assertEqual(failures, 0)
+        fetch_json.assert_not_called()
 
     def test_transfermarkt_fallback_requires_unique_israeli_identity(self) -> None:
         entities = {

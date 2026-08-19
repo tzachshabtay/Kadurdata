@@ -10,7 +10,7 @@ import socket
 import time
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -41,10 +41,31 @@ if TYPE_CHECKING:
 BASE_URL = "https://webws.365scores.com"
 SOURCE_CODE = "365scores"
 TRANSFERMARKT_COUNTRY_ID = 74
+GOOGLE_TRANSLATE_URL = "https://translate.googleapis.com/translate_a/single"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 )
+
+# Verified spellings take precedence over machine transliteration for names whose
+# Latin spelling is ambiguous. Keep this list limited to Israeli identities.
+VERIFIED_HEBREW_NAMES = {
+    normalized_name("Adam Salama"): "אדם סלמה",
+    normalized_name("Chad Taieb"): "צ'אד טייב",
+    normalized_name("David Tal"): "דוד טל",
+    normalized_name("Doron Bruck"): "דורון ברוק",
+    normalized_name("Erik Georgiev"): "אריק ג'ורג'ייב",
+    normalized_name("Fadi Khuriya"): "פאדי ח'וריה",
+    normalized_name("Fadi Salback"): "פאדי סלבק",
+    normalized_name("Hadi Taha"): "האדי טאהא",
+    normalized_name("Idoh Zeltzer-Zubida"): "עידו זלצר-זובידה",
+    normalized_name("Mahdy Mhajne"): "מהדי מחאגנה",
+    normalized_name("Niv Stavi"): "ניב סתווי",
+    normalized_name("Ofek Levy"): "אופק לוי",
+    normalized_name("Roi Moskowitz"): "רועי מוסקוביץ",
+    normalized_name("Shlomi Campos García"): "שלומי קמפוס גרסיה",
+    normalized_name("Yoav Sade"): "יואב שדה",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -113,6 +134,17 @@ def game_url(game_id: str) -> str:
     return f"{BASE_URL}/web/game/?{urlencode(params)}"
 
 
+def transliteration_url(player_name: str) -> str:
+    params = {
+        "client": "gtx",
+        "sl": "en",
+        "tl": "iw",
+        "dt": "t",
+        "q": player_name,
+    }
+    return f"{GOOGLE_TRANSLATE_URL}?{urlencode(params)}"
+
+
 def contains_hebrew(value: str) -> bool:
     return any("\u0590" <= character <= "\u05ff" for character in value)
 
@@ -158,7 +190,22 @@ def extract_game_hebrew_names(payload: dict[str, Any]) -> dict[str, str]:
     return names
 
 
-def fetch_json(url: str, *, retries: int, sleep_seconds: float) -> dict[str, Any]:
+def extract_transliterated_name(payload: Any) -> Optional[str]:
+    if not isinstance(payload, list) or not payload or not isinstance(payload[0], list):
+        return None
+    translated_parts = [
+        segment[0]
+        for segment in payload[0]
+        if isinstance(segment, list)
+        and segment
+        and isinstance(segment[0], str)
+        and segment[0].strip()
+    ]
+    translated = "".join(translated_parts).strip()
+    return translated if translated and contains_hebrew(translated) else None
+
+
+def fetch_json(url: str, *, retries: int, sleep_seconds: float) -> Any:
     last_error: Exception | None = None
     for attempt in range(retries + 1):
         try:
@@ -196,17 +243,82 @@ def player_mappings(cur: psycopg.Cursor, *, refresh: bool) -> dict[str, str]:
     }
 
 
-def players_needing_hebrew(cur: psycopg.Cursor, *, refresh: bool) -> list[dict[str, str]]:
+def players_needing_hebrew(cur: psycopg.Cursor, *, refresh: bool) -> list[dict[str, Any]]:
     cur.execute(
         """
-        select player.id::text as player_id, player.display_name
+        select
+          player.id::text as player_id,
+          player.display_name,
+          (
+            country.iso2 = 'IL'
+            or coalesce(
+              player.metadata ->> 'source_country_id',
+              player.metadata ->> '365_country_id'
+            ) = '6'
+            or exists (
+              select 1
+              from core.player_team_stints stint
+              where stint.player_id = player.id
+                and stint.metadata ->> 'transfermarkt_legionnaire_census' = 'true'
+            )
+          ) as is_israeli
         from core.players player
+        left join core.countries country on country.id = player.country_id
         where %s or nullif(btrim(player.display_name_he), '') is null
         order by player.display_name, player.id
         """,
         (refresh,),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def transliterate_israeli_players(
+    players: list[dict[str, Any]],
+    *,
+    retries: int,
+    sleep_seconds: float,
+    workers: int,
+    allow_fetch_failures: bool,
+) -> tuple[dict[str, str], int, int]:
+    resolved: dict[str, str] = {}
+    verified_matches = 0
+    failures = 0
+    candidates: list[dict[str, Any]] = []
+
+    for player in players:
+        if not player.get("is_israeli"):
+            continue
+        verified = VERIFIED_HEBREW_NAMES.get(normalized_name(player["display_name"]))
+        if verified:
+            resolved[player["player_id"]] = verified
+            verified_matches += 1
+        else:
+            candidates.append(player)
+
+    def transliterate(player: dict[str, Any]) -> tuple[str, Optional[str]]:
+        payload = fetch_json(
+            transliteration_url(player["display_name"]),
+            retries=retries,
+            sleep_seconds=sleep_seconds,
+        )
+        return player["player_id"], extract_transliterated_name(payload)
+
+    with ThreadPoolExecutor(max_workers=max(workers, 1)) as executor:
+        pending = {executor.submit(transliterate, player): player for player in candidates}
+        for future in as_completed(pending):
+            player = pending[future]
+            try:
+                player_id, name = future.result()
+            except RuntimeError as exc:
+                if not allow_fetch_failures:
+                    raise
+                failures += 1
+                print(f"warning: Hebrew transliteration failed for {player['display_name']}: {exc}")
+                continue
+            if name:
+                resolved[player_id] = name
+
+    return resolved, verified_matches, failures
 
 
 def all_365scores_player_mappings(cur: psycopg.Cursor) -> dict[str, str]:
@@ -674,6 +786,22 @@ def main() -> int:
                 )
                 transfermarkt_search_matches += 1
 
+            unresolved_players = [
+                player
+                for player in unresolved_players
+                if player["player_id"] not in names_by_player_id
+            ]
+            transliterated, verified_matches, transliteration_failures = (
+                transliterate_israeli_players(
+                    unresolved_players,
+                    retries=args.retries,
+                    sleep_seconds=args.sleep,
+                    workers=args.workers,
+                    allow_fetch_failures=args.allow_fetch_failures,
+                )
+            )
+            names_by_player_id.update(transliterated)
+
             updated = update_players(cur, names_by_player_id, refresh=args.refresh)
             cur.execute(
                 """
@@ -693,10 +821,14 @@ def main() -> int:
         f"365scores_returned={len(names_by_source_player)}, 365scores_missing={missing_365}, "
         f"365scores_search_matches={searched_365_matches}, "
         f"transfermarkt_mapped={len(mapped_transfermarkt)}, "
-        f"transfermarkt_search_matches={transfermarkt_search_matches}, updated={updated}, "
+        f"transfermarkt_search_matches={transfermarkt_search_matches}, "
+        f"verified_matches={verified_matches}, "
+        f"transliteration_matches={len(transliterated) - verified_matches}, "
+        f"updated={updated}, "
         f"database_missing={len(still_missing_names)}, failed_batches={failed_batches}, "
         f"failed_games={failed_games}, 365scores_search_failures={search_365_failures}, "
-        f"transfermarkt_failures={transfermarkt_failures + quick_search_failures}"
+        f"transfermarkt_failures={transfermarkt_failures + quick_search_failures}, "
+        f"transliteration_failures={transliteration_failures}"
     )
     if still_missing_names:
         print("Unresolved Hebrew player names: " + ", ".join(still_missing_names[:80]))
