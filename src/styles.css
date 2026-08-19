@@ -1919,10 +1919,6 @@ tr:last-child td {
   gap: 18px;
 }
 
-.club-detail-grid.all-tournaments {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .club-directory {
   max-height: 720px;
   overflow-y: auto;

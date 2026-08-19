@@ -1168,7 +1168,7 @@ export function App() {
     let cancelled = false;
 
     async function loadSquadLeaderboard() {
-      if (view !== "clubs" || clubTournamentScope === "all" || !seasonId || !squadMetricCode) return;
+      if (view !== "clubs" || !seasonId || !squadMetricCode) return;
 
       setSquadLeaderboardLoading(true);
       setSquadLeaderboardError(null);
@@ -2572,7 +2572,7 @@ function ClubsView({
                     {matchesLoading ? <InlineLoading /> : matches.length ? matches.map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} showCompetition={allTournaments} />) : <EmptyState text={text.noClubMatches} />}
                   </div>
                 </section>
-                {!allTournaments && <section className="surface squad-panel">
+                <section className="surface squad-panel">
                   <div className="squad-leaderboard-heading">
                     <div><span>{squad.length} {text.players.toLowerCase()}, {loans.length} {text.loaned.toLowerCase()}</span><h2>{text.seasonSquad}</h2></div>
                     <label className="leader-metric-select squad-metric-select">
@@ -2619,9 +2619,9 @@ function ClubsView({
                       })}
                     </> : <EmptyState text={text.noSquadData} />}
                   </div>
-                </section>}
+                </section>
               </div>
-              {!allTournaments && management.length > 0 && (
+              {management.length > 0 && (
                 <section className="surface management-panel">
                   <SectionHeading eyebrow={text.seasonSquad} title={text.management} />
                   <p>{text.managementDescription}</p>
