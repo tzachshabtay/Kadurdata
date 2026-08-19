@@ -19,6 +19,7 @@ try:
     from scripts.sync_fotmob_loans import normalized_name, upsert_mapping
     from scripts.sync_transfermarkt_loans import (
         api_url as transfermarkt_api_url,
+        extract_hebrew_text as extract_transfermarkt_hebrew_text,
         fetch_entities as fetch_transfermarkt_entities,
         fetch_json as fetch_transfermarkt_json,
         get_source as get_transfermarkt_source,
@@ -28,6 +29,7 @@ except ModuleNotFoundError:
     from sync_fotmob_loans import normalized_name, upsert_mapping
     from sync_transfermarkt_loans import (
         api_url as transfermarkt_api_url,
+        extract_hebrew_text as extract_transfermarkt_hebrew_text,
         fetch_entities as fetch_transfermarkt_entities,
         fetch_json as fetch_transfermarkt_json,
         get_source as get_transfermarkt_source,
@@ -314,6 +316,28 @@ def players_needing_hebrew(
         (refresh, israeli_only),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def clean_mixed_hebrew_names(cur: psycopg.Cursor) -> int:
+    cur.execute(
+        """
+        select player.id::text as player_id, player.display_name_he
+        from core.players player
+        where player.display_name_he ~ '[A-Za-z]'
+          and player.display_name_he ~ '[\u0590-\u05ff]'
+        """
+    )
+    cleaned = {
+        str(row["player_id"]): extract_transfermarkt_hebrew_text(row["display_name_he"])
+        for row in cur.fetchall()
+    }
+    cleaned = {player_id: name for player_id, name in cleaned.items() if name}
+    for player_id, name in cleaned.items():
+        cur.execute(
+            "update core.players set display_name_he = %s where id = %s::uuid",
+            (name, player_id),
+        )
+    return len(cleaned)
 
 
 def transliterate_israeli_players(
@@ -634,6 +658,7 @@ def main() -> int:
 
     with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
+            cleaned_mixed_names = clean_mixed_hebrew_names(cur)
             mappings = player_mappings(
                 cur,
                 refresh=args.refresh,
@@ -876,6 +901,7 @@ def main() -> int:
         f"transfermarkt_search_matches={transfermarkt_search_matches}, "
         f"verified_matches={verified_matches}, "
         f"transliteration_matches={len(transliterated) - verified_matches}, "
+        f"cleaned_mixed_names={cleaned_mixed_names}, "
         f"updated={updated}, "
         f"database_missing={len(still_missing_names)}, failed_batches={failed_batches}, "
         f"failed_games={failed_games}, 365scores_search_failures={search_365_failures}, "

@@ -263,10 +263,21 @@ def extract_api_departure_loans(
     return loans
 
 
+def extract_hebrew_text(value: Any) -> Optional[str]:
+    if not value:
+        return None
+    words = re.findall(
+        r"[\u0590-\u05ff]+(?:[ '\u05f3\u05f4\-\u05be]+[\u0590-\u05ff]+)*",
+        str(value),
+    )
+    cleaned = " ".join(word.strip() for word in words if word.strip()).strip()
+    return cleaned or None
+
+
 def hebrew_name(player: dict[str, Any]) -> Optional[str]:
     nationality = player.get("nationalityDetails")
     value = nationality.get("passportName") if isinstance(nationality, dict) else None
-    return str(value).strip() if value and re.search(r"[\u0590-\u05ff]", str(value)) else None
+    return extract_hebrew_text(value)
 
 
 def enrich_loan_stubs(

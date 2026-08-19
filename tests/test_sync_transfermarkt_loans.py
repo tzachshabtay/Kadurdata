@@ -5,6 +5,7 @@ from scripts.sync_transfermarkt_loans import (
     canonical_player_name,
     enrich_loan_stubs,
     extract_api_departure_loans,
+    extract_hebrew_text,
     normalized_team_name,
     resolve_transfermarkt_team,
     select_team_suggestion,
@@ -13,6 +14,20 @@ from scripts.sync_transfermarkt_loans import (
 
 
 class TransfermarktLoanTests(unittest.TestCase):
+    def test_extracts_only_hebrew_from_bilingual_passport_names(self) -> None:
+        self.assertEqual(
+            extract_hebrew_text("Amir Moshe Ariely - אמיר משה אריאלי"),
+            "אמיר משה אריאלי",
+        )
+        self.assertEqual(
+            extract_hebrew_text("עידן טוקלומטי ג'ורנו - Idan Toklomati Jorno"),
+            "עידן טוקלומטי ג'ורנו",
+        )
+        self.assertEqual(
+            extract_hebrew_text("Yigal Aloni Becker, יגאל בקר"),
+            "יגאל בקר",
+        )
+
     def test_known_israeli_club_does_not_depend_on_remote_search(self) -> None:
         selected = resolve_transfermarkt_team("Maccabi Tel Aviv FC", 0, 0)
         self.assertIsNotNone(selected)
