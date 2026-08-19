@@ -1949,8 +1949,20 @@ export function App() {
     view,
   ]);
 
+  function selectAllTournamentOverview() {
+    setClubTournamentScope("all");
+    const premierLeague = competitions.find((competition) => competition.name === "Israeli Premier League");
+    if (!premierLeague) return;
+    const matchingSeason = seasons.find((season) => season.competition_id === premierLeague.competition_id && season.season_name === currentSeason.season_name)
+      ?? seasons
+        .filter((season) => season.competition_id === premierLeague.competition_id && season.completed_match_count > 0)
+        .sort((a, b) => dateValue(b.latest_match_at) - dateValue(a.latest_match_at))[0];
+    setCompetitionId(premierLeague.competition_id);
+    if (matchingSeason) setSeasonId(matchingSeason.season_id);
+  }
+
   function navigate(nextView: View) {
-    if (nextView === "overview") setClubTournamentScope("all");
+    if (nextView === "overview") selectAllTournamentOverview();
     setView(nextView);
     window.history.pushState(null, "", `#${nextView}`);
   }
@@ -2042,7 +2054,8 @@ export function App() {
               disabled={showingLegionnaires}
               onChange={(event) => {
                 if (event.target.value === allTournamentsValue) {
-                  setClubTournamentScope("all");
+                  if (view === "overview") selectAllTournamentOverview();
+                  else setClubTournamentScope("all");
                   return;
                 }
                 setClubTournamentScope("selected");
@@ -2115,9 +2128,24 @@ export function App() {
               seasonName={currentSeason.season_name}
               competitions={competitions}
               matches={allTournamentOverviewMatches}
+              leagueSeason={currentSeason}
+              seasonPlayers={players}
+              leagueStandings={standings}
+              leaders={qualifiedLeaderboardRows}
+              metrics={leaderboardMetrics}
+              metricCode={leaderMetricCode}
+              setMetricCode={setLeaderMetricCode}
+              qualification={leaderQualification}
+              minimum={leaderMinimum}
+              setMinimum={(value) => setLeaderMinimums((current) => ({ ...current, [leaderMetricCode]: value }))}
+              ratingMinimumMinutes={leaderRatingMinimumMinutes}
+              setRatingMinimumMinutes={setLeaderRatingMinimumMinutes}
+              leaderboardLoading={leaderboardLoading}
+              leaderboardError={leaderboardError}
               loading={allTournamentOverviewLoading}
               openMatch={openMatch}
               openClub={openClub}
+              openPlayer={openPlayer}
             />
           ) : (
             <OverviewView
@@ -2380,16 +2408,46 @@ function AllTournamentsOverview({
   seasonName,
   competitions,
   matches,
+  leagueSeason,
+  seasonPlayers,
+  leagueStandings,
+  leaders,
+  metrics,
+  metricCode,
+  setMetricCode,
+  qualification,
+  minimum,
+  setMinimum,
+  ratingMinimumMinutes,
+  setRatingMinimumMinutes,
+  leaderboardLoading,
+  leaderboardError,
   loading,
   openMatch,
   openClub,
+  openPlayer,
 }: {
   seasonName: string;
   competitions: Competition[];
   matches: Match[];
+  leagueSeason: Season;
+  seasonPlayers: SeasonPlayer[];
+  leagueStandings: Club[];
+  leaders: PlayerLeaderboardRow[];
+  metrics: LeaderboardMetricOption[];
+  metricCode: string;
+  setMetricCode: (metric: string) => void;
+  qualification: LeaderboardQualification | null;
+  minimum: number;
+  setMinimum: (value: number) => void;
+  ratingMinimumMinutes: number;
+  setRatingMinimumMinutes: (value: number) => void;
+  leaderboardLoading: boolean;
+  leaderboardError: string | null;
   loading: boolean;
   openMatch: (match: Match) => void;
   openClub: (id: string) => void;
+  openPlayer: (id: string) => void;
 }) {
   const { language, text } = useLocale();
   const competitionById = new Map(competitions.map((competition) => [competition.competition_id, competition]));
@@ -2422,7 +2480,20 @@ function AllTournamentsOverview({
               .filter((match) => !matchHasResult(match) && dateValue(match.scheduled_at) >= Date.now() - 6 * 60 * 60 * 1000)
               .sort((a, b) => dateValue(a.scheduled_at) - dateValue(b.scheduled_at))
               .slice(0, 8);
-            const standings = aggregateOverviewStandings(groupMatches);
+            const preferredLeagueName = {
+              seniorMen: "Israeli Premier League",
+              youth: "Youth League",
+              women: "Women's Premier League",
+            }[group.key];
+            const leagueCompetition = competitions.find((competition) => competition.name === preferredLeagueName)
+              ?? competitions.find((competition) => competition.competition_type === "league"
+                && competition.scope === "domestic"
+                && competition.participant_type === "club"
+                && competitionOverviewGroup(competition) === group.key);
+            const leagueMatches = leagueCompetition
+              ? groupMatches.filter((match) => match.competition_id === leagueCompetition.competition_id)
+              : [];
+            const standings = aggregateOverviewStandings(leagueMatches);
             return (
               <section className="overview-group" key={group.key}>
                 <div className="overview-group-heading">
@@ -2444,8 +2515,8 @@ function AllTournamentsOverview({
                     </div>
                   </section>
                   <section className="surface overview-ranking-surface">
-                    <SectionHeading eyebrow={text.overallLeaderboard} title={text.seasonForm} />
-                    <div className="mini-table" aria-label={`${group.label} ${text.overallLeaderboard}`}>
+                    <SectionHeading eyebrow={text.leagueTable} title={localizedCompetition(leagueCompetition, language)} />
+                    <div className="mini-table" aria-label={`${localizedCompetition(leagueCompetition, language)} ${text.leagueStandings}`}>
                       <div className="mini-table-head"><span>#</span><span>{text.team}</span><span>{text.goalDifferenceShort}</span><span>{text.pointsShort}</span></div>
                       <div className="mini-table-body">
                         {standings.length ? standings.map((club, index) => (
@@ -2465,6 +2536,95 @@ function AllTournamentsOverview({
           })}
         </div>
       )}
+
+      <section className="surface leaders-surface overview-player-leaderboard">
+        <PlayerLeaderboardPanel
+          scopeLabel={`${localizedSeasonCompetition(leagueSeason, language)} · ${text.playerLeaderboard}`}
+          seasonPlayers={seasonPlayers}
+          standings={leagueStandings}
+          leaders={leaders}
+          metrics={metrics}
+          metricCode={metricCode}
+          setMetricCode={setMetricCode}
+          qualification={qualification}
+          minimum={minimum}
+          setMinimum={setMinimum}
+          ratingMinimumMinutes={ratingMinimumMinutes}
+          setRatingMinimumMinutes={setRatingMinimumMinutes}
+          loading={leaderboardLoading}
+          error={leaderboardError}
+          openPlayer={openPlayer}
+        />
+      </section>
+    </>
+  );
+}
+
+function PlayerLeaderboardPanel({
+  scopeLabel,
+  seasonPlayers,
+  standings,
+  leaders,
+  metrics,
+  metricCode,
+  setMetricCode,
+  qualification,
+  minimum,
+  setMinimum,
+  ratingMinimumMinutes,
+  setRatingMinimumMinutes,
+  loading,
+  error,
+  openPlayer,
+}: {
+  scopeLabel: string;
+  seasonPlayers: SeasonPlayer[];
+  standings: Club[];
+  leaders: PlayerLeaderboardRow[];
+  metrics: LeaderboardMetricOption[];
+  metricCode: string;
+  setMetricCode: (metric: string) => void;
+  qualification: LeaderboardQualification | null;
+  minimum: number;
+  setMinimum: (value: number) => void;
+  ratingMinimumMinutes: number;
+  setRatingMinimumMinutes: (value: number) => void;
+  loading: boolean;
+  error: string | null;
+  openPlayer: (id: string) => void;
+}) {
+  const { language, text } = useLocale();
+  const selectedMetric = metrics.find((metric) => metric.code === metricCode);
+  const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
+  const matchMetrics = metrics.filter((metric) => metric.kind === "match");
+  const minutesByPlayer = new Map(seasonPlayers.map((player) => [player.player_id, Number(player.minutes)]));
+  const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
+
+  return (
+    <>
+      <div className="leaderboard-heading">
+        <div><span>{scopeLabel}</span><h2>{selectedMetric?.name ?? text.performance}</h2></div>
+        <label className="leader-metric-select">
+          <span>{text.sortBy}</span>
+          <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
+            <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+            <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+          </select>
+        </label>
+      </div>
+      {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
+      <div className="leader-list">
+        {loading ? <InlineLoading /> : error ? <EmptyState text={text.leaderboardLoadError} /> : leaders.length ? leaders.map((player, index) => {
+          const seasonPlayer = seasonPlayerById.get(player.player_id);
+          return (
+            <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
+              <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
+              <span className="leader-copy"><strong>{localizedPlayerName(seasonPlayer, player.display_name, language)}</strong><small>{localizedClubById(standings, player.team_id, player.team_name, language)}</small></span>
+              <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{leaderboardSampleLabel(player, qualification, minutesByPlayer, language)}</small></span>
+            </button>
+          );
+        }) : <EmptyState text={qualification ? text.noMinimumSamplePlayers : text.noLeaderboardData} />}
+      </div>
     </>
   );
 }
@@ -2515,11 +2675,6 @@ function OverviewView({
   showMatches: () => void;
 }) {
   const { language, text } = useLocale();
-  const selectedMetric = metrics.find((metric) => metric.code === metricCode);
-  const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
-  const matchMetrics = metrics.filter((metric) => metric.kind === "match");
-  const minutesByPlayer = new Map(seasonPlayers.map((player) => [player.player_id, Number(player.minutes)]));
-  const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
   const participantRows = [...standings].sort((a, b) => localizedClubName(a, language).localeCompare(localizedClubName(b, language), localeCode(language)));
   return (
     <>
@@ -2578,29 +2733,23 @@ function OverviewView({
         </section>
 
         <section className="surface leaders-surface">
-          <div className="leaderboard-heading">
-            <div><span>{text.playerLeaderboard}</span><h2>{selectedMetric?.name ?? text.performance}</h2></div>
-            <label className="leader-metric-select">
-              <span>{text.sortBy}</span>
-              <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
-                <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-                <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-              </select>
-            </label>
-          </div>
-          {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
-          <div className="leader-list">
-            {loading ? <InlineLoading /> : error ? <EmptyState text={text.leaderboardLoadError} /> : leaders.length ? leaders.map((player, index) => {
-              const seasonPlayer = seasonPlayerById.get(player.player_id);
-              return (
-                <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
-                  <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="leader-copy"><strong>{localizedPlayerName(seasonPlayer, player.display_name, language)}</strong><small>{localizedClubById(standings, player.team_id, player.team_name, language)}</small></span>
-                  <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{leaderboardSampleLabel(player, qualification, minutesByPlayer, language)}</small></span>
-                </button>
-              );
-            }) : <EmptyState text={qualification ? text.noMinimumSamplePlayers : text.noLeaderboardData} />}
-          </div>
+          <PlayerLeaderboardPanel
+            scopeLabel={text.playerLeaderboard}
+            seasonPlayers={seasonPlayers}
+            standings={standings}
+            leaders={leaders}
+            metrics={metrics}
+            metricCode={metricCode}
+            setMetricCode={setMetricCode}
+            qualification={qualification}
+            minimum={minimum}
+            setMinimum={setMinimum}
+            ratingMinimumMinutes={ratingMinimumMinutes}
+            setRatingMinimumMinutes={setRatingMinimumMinutes}
+            loading={loading}
+            error={error}
+            openPlayer={openPlayer}
+          />
         </section>
       </div>
     </>

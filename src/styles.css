@@ -628,14 +628,23 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .overview-group-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.overview-player-leaderboard {
+  margin-top: 30px;
+  padding: 18px;
 }
 
 .overview-feed-surface,
 .overview-ranking-surface {
   min-height: 0;
   padding: 17px;
+}
+
+.overview-ranking-surface {
+  grid-column: 1 / -1;
 }
 
 .overview-group .score-list,
@@ -646,12 +655,21 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .overview-group .compact-match {
-  grid-template-columns: 72px minmax(86px, 1fr) auto minmax(86px, 1fr) 16px;
-  gap: 7px;
+  grid-template-columns: 82px minmax(120px, 1fr) auto minmax(120px, 1fr) 18px;
+  gap: 10px;
+  min-height: 78px;
 }
 
 .overview-group .compact-club {
   gap: 6px;
+}
+
+.overview-group .compact-club strong {
+  overflow: visible;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .overview-group .club-badge.small {
