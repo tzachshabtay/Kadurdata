@@ -727,6 +727,7 @@ export function App() {
   const [clubMatchesLoading, setClubMatchesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const overviewSeasonDefaultApplied = useRef(Boolean(initialDeepLink.seasonId));
+  const pendingMatchSelection = useRef<{ seasonId: string; matchId: string; roundId: string | null } | null>(null);
 
   async function loadReferenceData() {
     setLoading(true);
@@ -965,8 +966,17 @@ export function App() {
   );
   useEffect(() => {
     if (seasonLoading || !roundId || !matches.length) return;
+    const pending = pendingMatchSelection.current;
+    if (pending?.seasonId === seasonId) {
+      const pendingMatch = matches.find((match) => match.match_id === pending.matchId);
+      if (!pendingMatch) return;
+      pendingMatchSelection.current = null;
+      setRoundId(pendingMatch.round_id ?? pending.roundId ?? "");
+      setMatchId(pending.matchId);
+      return;
+    }
     setMatchId((current) => roundMatches.some((match) => match.match_id === current) ? current : roundMatches[0]?.match_id ?? "");
-  }, [matches.length, roundId, roundMatches, seasonLoading]);
+  }, [matches, roundId, roundMatches, seasonId, seasonLoading]);
 
   useEffect(() => {
     async function loadMatchDetail() {
@@ -2115,9 +2125,16 @@ export function App() {
 
   function openMatch(match: Match) {
     if (match.competition_id !== competitionId || match.season_id !== seasonId) {
+      pendingMatchSelection.current = {
+        seasonId: match.season_id,
+        matchId: match.match_id,
+        roundId: match.round_id,
+      };
       setClubTournamentScope("selected");
       setCompetitionId(match.competition_id);
       setSeasonId(match.season_id);
+    } else {
+      pendingMatchSelection.current = null;
     }
     if (match.round_id) setRoundId(match.round_id);
     setMatchId(match.match_id);
@@ -5026,14 +5043,20 @@ const hebrewTeamNames: Record<string, string> = {
   "hapoel nof hagalil": "הפועל נוף הגליל",
   "hapoel petah tikva": "הפועל פתח תקווה",
   "hapoel raanana": "הפועל רעננה",
+  "hapoel ra'anana": "הפועל רעננה",
+  "hapoel ra'anana afc": "הפועל רעננה",
+  "hapoel ramat gan": "הפועל רמת גן",
+  "hapoel ramat gan giv'atayim": "הפועל רמת גן",
   "hapoel tel aviv": "הפועל תל אביב",
   "ironi tiberias": "עירוני טבריה",
   "maccabi bnei raina": "מכבי בני ריינה",
   "maccabi haifa": "מכבי חיפה",
+  "maccabi ahi nazareth": "מכבי אחי נצרת",
   "maccabi herzliya": "מכבי הרצליה",
   "maccabi netanya": "מכבי נתניה",
   "maccabi petah tikva": "מכבי פתח תקווה",
   "maccabi tel aviv": "מכבי תל אביב",
+  "ms kfar kassem": "מ.ס. כפר קאסם",
   "sc ashdod": "מ.ס. אשדוד",
   "sektzia ness ziona": "סקציה נס ציונה",
   "bnei yehuda tel aviv": "בני יהודה תל אביב",
