@@ -86,6 +86,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Continue when an athlete batch cannot be fetched after all retries.",
     )
+    parser.add_argument(
+        "--israeli-only",
+        action="store_true",
+        help="Resolve only identities positively identified as Israeli.",
+    )
     return parser.parse_args()
 
 
@@ -219,7 +224,12 @@ def fetch_json(url: str, *, retries: int, sleep_seconds: float) -> Any:
     raise RuntimeError(f"failed to fetch Hebrew athlete names: {last_error}")
 
 
-def player_mappings(cur: psycopg.Cursor, *, refresh: bool) -> dict[str, str]:
+def player_mappings(
+    cur: psycopg.Cursor,
+    *,
+    refresh: bool,
+    israeli_only: bool,
+) -> dict[str, str]:
     cur.execute(
         """
         select distinct
@@ -228,13 +238,28 @@ def player_mappings(cur: psycopg.Cursor, *, refresh: bool) -> dict[str, str]:
         from source.source_entity_ids mapping
         join source.sources source on source.id = mapping.source_id
         join core.players player on player.id = mapping.canonical_id
+        left join core.countries country on country.id = player.country_id
         where source.code = %s
           and mapping.entity_type = 'player'
           and mapping.canonical_id is not null
           and (%s or nullif(btrim(player.display_name_he), '') is null)
+          and (
+            not %s
+            or country.iso2 = 'IL'
+            or coalesce(
+              player.metadata ->> 'source_country_id',
+              player.metadata ->> '365_country_id'
+            ) = '6'
+            or exists (
+              select 1
+              from core.player_team_stints stint
+              where stint.player_id = player.id
+                and stint.metadata ->> 'transfermarkt_legionnaire_census' = 'true'
+            )
+          )
         order by mapping.source_entity_id
         """,
-        (SOURCE_CODE, refresh),
+        (SOURCE_CODE, refresh, israeli_only),
     )
     return {
         row["source_entity_id"]: row["player_id"]
@@ -243,7 +268,12 @@ def player_mappings(cur: psycopg.Cursor, *, refresh: bool) -> dict[str, str]:
     }
 
 
-def players_needing_hebrew(cur: psycopg.Cursor, *, refresh: bool) -> list[dict[str, Any]]:
+def players_needing_hebrew(
+    cur: psycopg.Cursor,
+    *,
+    refresh: bool,
+    israeli_only: bool,
+) -> list[dict[str, Any]]:
     cur.execute(
         """
         select
@@ -264,10 +294,24 @@ def players_needing_hebrew(cur: psycopg.Cursor, *, refresh: bool) -> list[dict[s
           ) as is_israeli
         from core.players player
         left join core.countries country on country.id = player.country_id
-        where %s or nullif(btrim(player.display_name_he), '') is null
+        where (%s or nullif(btrim(player.display_name_he), '') is null)
+          and (
+            not %s
+            or country.iso2 = 'IL'
+            or coalesce(
+              player.metadata ->> 'source_country_id',
+              player.metadata ->> '365_country_id'
+            ) = '6'
+            or exists (
+              select 1
+              from core.player_team_stints stint
+              where stint.player_id = player.id
+                and stint.metadata ->> 'transfermarkt_legionnaire_census' = 'true'
+            )
+          )
         order by player.display_name, player.id
         """,
-        (refresh,),
+        (refresh, israeli_only),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -590,7 +634,11 @@ def main() -> int:
 
     with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
-            mappings = player_mappings(cur, refresh=args.refresh)
+            mappings = player_mappings(
+                cur,
+                refresh=args.refresh,
+                israeli_only=args.israeli_only,
+            )
 
             names_by_source_player: dict[str, str] = {}
             failed_batches = 0
@@ -633,7 +681,11 @@ def main() -> int:
                 for source_player_id, hebrew_name in names_by_source_player.items()
             }
 
-            all_candidates = players_needing_hebrew(cur, refresh=args.refresh)
+            all_candidates = players_needing_hebrew(
+                cur,
+                refresh=args.refresh,
+                israeli_only=args.israeli_only,
+            )
             unresolved_players = [
                 player
                 for player in all_candidates

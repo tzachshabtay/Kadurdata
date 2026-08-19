@@ -154,8 +154,13 @@ jobs:
 
       - name: Populate Hebrew player names
         run: |
-          python scripts/backfill_hebrew_player_names.py \
-            --allow-fetch-failures \
-            --retries 4 \
-            --sleep 0.25 \
+          args=(
+            --allow-fetch-failures
+            --retries 4
+            --sleep 0.25
             --workers 6
+          )
+          if [ "$SEED_MODE" = "hebrew_names" ]; then
+            args+=(--israeli-only)
+          fi
+          python scripts/backfill_hebrew_player_names.py "${args[@]}"
