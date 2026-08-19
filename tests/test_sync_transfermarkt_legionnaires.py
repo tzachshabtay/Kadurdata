@@ -7,6 +7,7 @@ from scripts.sync_transfermarkt_legionnaires import (
     discover_players,
     parse_destination_countries,
     parse_legionnaire_players,
+    transfermarkt_web_url,
 )
 
 
@@ -74,6 +75,18 @@ class TransfermarktLegionnaireCensusTests(unittest.TestCase):
 
         self.assertEqual(current_season_name(date(2026, 8, 18)), "2026/2027")
         self.assertEqual(current_season_name(date(2026, 2, 18)), "2025/2026")
+
+    def test_builds_google_translate_fallback_url(self) -> None:
+        url = transfermarkt_web_url(
+            "https://www-transfermarkt-com.translate.goog",
+            "/spieler-statistik/legionaere",
+        )
+
+        self.assertEqual(
+            url,
+            "https://www-transfermarkt-com.translate.goog/spieler-statistik/legionaere"
+            "?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en",
+        )
 
     def test_uses_next_mirror_when_first_index_has_no_country_table(self) -> None:
         index_html = """

@@ -54,7 +54,9 @@ TRANSFERMARKT_WEB_BASES = (
     "https://www.transfermarkt.us",
     "https://www.transfermarkt.co.uk",
     "https://www.transfermarkt.de",
+    "https://www-transfermarkt-com.translate.goog",
 )
+TRANSFERMARKT_TRANSLATE_BASE = "https://www-transfermarkt-com.translate.goog"
 WEB_USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
@@ -110,6 +112,13 @@ def fetch_bytes(url: str, retries: int, sleep_seconds: float) -> bytes:
 
 def fetch_html(url: str, retries: int, sleep_seconds: float) -> str:
     return fetch_bytes(url, retries, sleep_seconds).decode("utf-8", errors="replace")
+
+
+def transfermarkt_web_url(base: str, path: str) -> str:
+    url = f"{base}{path}"
+    if base == TRANSFERMARKT_TRANSLATE_BASE:
+        return f"{url}?{urlencode({'_x_tr_sl': 'auto', '_x_tr_tl': 'en', '_x_tr_hl': 'en'})}"
+    return url
 
 
 def fetch_json(url: str, retries: int, sleep_seconds: float) -> dict[str, Any]:
@@ -229,7 +238,7 @@ def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], in
     for candidate_base in TRANSFERMARKT_WEB_BASES:
         try:
             candidate_html = fetch_html(
-                f"{candidate_base}{LEGIONNAIRE_INDEX}",
+                transfermarkt_web_url(candidate_base, LEGIONNAIRE_INDEX),
                 args.retries,
                 args.sleep,
             )
@@ -251,7 +260,11 @@ def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], in
     index_pages = max_page(index_soup)
     countries = parse_destination_countries(index_html)
     for page in range(2, index_pages + 1):
-        page_html = fetch_html(f"{web_base}{LEGIONNAIRE_INDEX}/page/{page}", args.retries, args.sleep)
+        page_html = fetch_html(
+            transfermarkt_web_url(web_base, f"{LEGIONNAIRE_INDEX}/page/{page}"),
+            args.retries,
+            args.sleep,
+        )
         countries.extend(parse_destination_countries(page_html))
     countries = list({country["country_id"]: country for country in countries}.values())
 
@@ -262,7 +275,7 @@ def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], in
             "/spieler-statistik/legionaere/statistik/stat/"
             f"land_id/74/land/{country['country_id']}/plus/0"
         )
-        html = fetch_html(f"{web_base}{path}", args.retries, args.sleep)
+        html = fetch_html(transfermarkt_web_url(web_base, path), args.retries, args.sleep)
         first_pages[country["country_id"]] = html
         pages = max_page(BeautifulSoup(html, "html.parser"))
         page_tasks.extend((country, page) for page in range(2, pages + 1))
@@ -279,10 +292,11 @@ def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], in
 
     def fetch_country_page(task: tuple[dict[str, str], int]) -> tuple[dict[str, str], str]:
         country, page = task
-        url = (
-            f"{web_base}/spieler-statistik/legionaere/statistik/stat/"
+        path = (
+            "/spieler-statistik/legionaere/statistik/stat/"
             f"land_id/74/land/{country['country_id']}/plus/0/page/{page}"
         )
+        url = transfermarkt_web_url(web_base, path)
         return country, fetch_html(url, args.retries, args.sleep)
 
     with ThreadPoolExecutor(max_workers=max(args.workers, 1)) as executor:
