@@ -632,23 +632,16 @@ input[type="search"]::-webkit-search-cancel-button {
   gap: 14px;
 }
 
-.overview-player-leaderboard {
-  margin-top: 30px;
-  padding: 18px;
-}
-
 .overview-feed-surface,
-.overview-ranking-surface {
+.overview-ranking-surface,
+.overview-group-leaders {
   min-height: 0;
   padding: 17px;
 }
 
-.overview-ranking-surface {
-  grid-column: 1 / -1;
-}
-
 .overview-group .score-list,
-.overview-group .mini-table-body {
+.overview-group .mini-table-body,
+.overview-group .leader-list {
   max-height: 420px;
   overflow-y: auto;
   scrollbar-gutter: stable;

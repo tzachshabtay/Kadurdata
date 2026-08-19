@@ -118,10 +118,29 @@ type LeaderboardQualification = {
   defaultValue: number;
   step: number;
 };
+type OverviewGroup = "topMen" | "lowerMen" | "youth" | "women";
+type OverviewLeagueTarget = {
+  key: OverviewGroup;
+  competition: Competition;
+  season: Season;
+};
+type OverviewLeagueEntry = OverviewLeagueTarget & {
+  players: SeasonPlayer[];
+  leaders: PlayerLeaderboardRow[];
+  loading: boolean;
+  error: string | null;
+};
 type PlayerChartMetric = Metric & {
   chartKey: string;
   chartMode: "single" | "paired";
   normalization: "raw" | "per90";
+};
+
+const overviewLeagueCompetitionNames: Record<OverviewGroup, string> = {
+  topMen: "Israeli Premier League",
+  lowerMen: "Liga Leumit",
+  youth: "Youth League",
+  women: "Women's Premier League",
 };
 type PlayerChartPoint = {
   match: number;
@@ -698,10 +717,16 @@ export function App() {
   const [allTournamentClubMatches, setAllTournamentClubMatches] = useState<Match[]>([]);
   const [allTournamentClubs, setAllTournamentClubs] = useState<Club[]>([]);
   const [allTournamentOverviewMatches, setAllTournamentOverviewMatches] = useState<Match[]>([]);
+  const [overviewLeaguePlayers, setOverviewLeaguePlayers] = useState<Partial<Record<OverviewGroup, SeasonPlayer[]>>>({});
+  const [overviewLeagueLeaders, setOverviewLeagueLeaders] = useState<Partial<Record<OverviewGroup, PlayerLeaderboardRow[]>>>({});
+  const [overviewLeagueErrors, setOverviewLeagueErrors] = useState<Partial<Record<OverviewGroup, string | null>>>({});
+  const [overviewLeaguePlayersLoading, setOverviewLeaguePlayersLoading] = useState(false);
+  const [overviewLeagueLeadersLoading, setOverviewLeagueLeadersLoading] = useState(false);
   const [allTournamentClubsLoading, setAllTournamentClubsLoading] = useState(false);
   const [allTournamentOverviewLoading, setAllTournamentOverviewLoading] = useState(false);
   const [clubMatchesLoading, setClubMatchesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const overviewSeasonDefaultApplied = useRef(Boolean(initialDeepLink.seasonId));
 
   async function loadReferenceData() {
     setLoading(true);
@@ -1128,8 +1153,9 @@ export function App() {
     let cancelled = false;
 
     async function loadLeaderboard() {
-      if (view !== "overview" || !seasonId || !leaderMetricCode) {
+      if (view !== "overview" || clubTournamentScope === "all" || !seasonId || !leaderMetricCode) {
         setLeaderboardRows([]);
+        setLeaderboardLoading(false);
         return;
       }
 
@@ -1165,7 +1191,7 @@ export function App() {
 
     void loadLeaderboard();
     return () => { cancelled = true; };
-  }, [leaderMetricCode, leaderRatingMinimumMinutes, players, seasonId, view]);
+  }, [clubTournamentScope, leaderMetricCode, leaderRatingMinimumMinutes, players, seasonId, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1319,15 +1345,35 @@ export function App() {
   const allTournamentSeasonOptions = useMemo(() => {
     const byName = new Map<string, Season>();
     seasons
-      .filter((season) => overviewCompetitionIds.has(season.competition_id) && /^\d{4}\/\d{4}$/.test(season.season_name))
-      .sort((a, b) => Number(b.completed_match_count > 0) - Number(a.completed_match_count > 0)
-        || dateValue(b.latest_match_at) - dateValue(a.latest_match_at)
+      .filter((season) => overviewCompetitionIds.has(season.competition_id)
+        && /^\d{4}\/\d{4}$/.test(season.season_name)
+        && Number(season.match_count) > 0)
+      .sort((a, b) => Number(b.season_name.slice(0, 4)) - Number(a.season_name.slice(0, 4))
+        || Number(b.competition_name === "Israeli Premier League") - Number(a.competition_name === "Israeli Premier League")
         || dateValue(b.start_date) - dateValue(a.start_date))
       .forEach((season) => {
         if (!byName.has(season.season_name)) byName.set(season.season_name, season);
       });
     return [...byName.values()];
   }, [overviewCompetitionIds, seasons]);
+  const overviewLeagueTargets = useMemo<OverviewLeagueTarget[]>(() => (
+    (Object.entries(overviewLeagueCompetitionNames) as Array<[OverviewGroup, string]>).flatMap(([key, competitionName]) => {
+      const competition = competitions.find((item) => item.name === competitionName);
+      const season = competition && seasons.find((item) => item.competition_id === competition.competition_id && item.season_name === currentSeason.season_name);
+      return competition && season ? [{ key, competition, season }] : [];
+    })
+  ), [competitions, currentSeason.season_name, seasons]);
+
+  useEffect(() => {
+    if (loading || overviewSeasonDefaultApplied.current || view !== "overview" || clubTournamentScope !== "all") return;
+    const latestSeasonName = allTournamentSeasonOptions[0]?.season_name;
+    const premierLeague = competitions.find((competition) => competition.name === "Israeli Premier League");
+    const latestPremierSeason = premierLeague && seasons.find((season) => season.competition_id === premierLeague.competition_id && season.season_name === latestSeasonName);
+    overviewSeasonDefaultApplied.current = true;
+    if (!premierLeague || !latestPremierSeason) return;
+    setCompetitionId(premierLeague.competition_id);
+    setSeasonId(latestPremierSeason.season_id);
+  }, [allTournamentSeasonOptions, clubTournamentScope, competitions, loading, seasons, view]);
   const allTournamentSeasonIds = useMemo(() => {
     const domesticClubCompetitionIds = new Set(competitions
       .filter((competition) => (competition.scope || "domestic") === "domestic" && competition.participant_type === "club")
@@ -1382,6 +1428,100 @@ export function App() {
     void loadAllTournamentOverview();
     return () => { cancelled = true; };
   }, [allTournamentOverviewSeasonIds, clubTournamentScope, refreshToken, view]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOverviewLeaguePlayers() {
+      if (view !== "overview" || clubTournamentScope !== "all") {
+        setOverviewLeaguePlayers({});
+        setOverviewLeaguePlayersLoading(false);
+        return;
+      }
+      setOverviewLeaguePlayersLoading(true);
+      if (!hasSupabaseConfig || !supabase) {
+        setOverviewLeaguePlayers(Object.fromEntries(overviewLeagueTargets.map((target) => [target.key, demoPlayers])));
+        setOverviewLeaguePlayersLoading(false);
+        return;
+      }
+
+      const client = supabase;
+      const results = await Promise.all(overviewLeagueTargets.map(async (target) => {
+        let result = await client
+          .rpc("api_season_players_for_season", { p_season_id: target.season.season_id })
+          .order("minutes", { ascending: false })
+          .limit(1000);
+        for (const delayMs of [500, 1500, 3000]) {
+          if (!isSchemaCacheMiss(result.error)) break;
+          await delay(delayMs);
+          result = await client
+            .rpc("api_season_players_for_season", { p_season_id: target.season.season_id })
+            .order("minutes", { ascending: false })
+            .limit(1000);
+        }
+        return [target.key, result.error ? [] : (result.data ?? []) as SeasonPlayer[]] as const;
+      }));
+      if (cancelled) return;
+      setOverviewLeaguePlayers(Object.fromEntries(results));
+      setOverviewLeaguePlayersLoading(false);
+    }
+
+    void loadOverviewLeaguePlayers();
+    return () => { cancelled = true; };
+  }, [clubTournamentScope, overviewLeagueTargets, refreshToken, view]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOverviewLeagueLeaderboards() {
+      if (view !== "overview" || clubTournamentScope !== "all" || !leaderMetricCode) {
+        setOverviewLeagueLeaders({});
+        setOverviewLeagueLeadersLoading(false);
+        return;
+      }
+      if (overviewLeaguePlayersLoading) return;
+      setOverviewLeagueLeadersLoading(true);
+      setOverviewLeagueErrors({});
+
+      if (leaderMetricCode.startsWith("season_")) {
+        setOverviewLeagueLeaders(Object.fromEntries(overviewLeagueTargets.map((target) => [
+          target.key,
+          makeSeasonSummaryLeaderboard(overviewLeaguePlayers[target.key] ?? [], target.season.season_id, leaderMetricCode),
+        ])));
+        setOverviewLeagueLeadersLoading(false);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) {
+        setOverviewLeagueLeaders(Object.fromEntries(overviewLeagueTargets.map((target) => [
+          target.key,
+          makeDemoLeaderboard(overviewLeaguePlayers[target.key] ?? demoPlayers, target.season.season_id, leaderMetricCode),
+        ])));
+        setOverviewLeagueLeadersLoading(false);
+        return;
+      }
+
+      const client = supabase;
+      const results = await Promise.all(overviewLeagueTargets.map(async (target) => {
+        const result = await client.rpc("api_player_leaderboard", {
+          p_season_id: target.season.season_id,
+          p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
+          p_min_minutes: isRatingMetricCode(leaderMetricCode) ? leaderRatingMinimumMinutes : 0,
+        });
+        const playersForLeague = overviewLeaguePlayers[target.key] ?? [];
+        return {
+          key: target.key,
+          rows: result.error ? [] : prepareLeaderboardRows((result.data ?? []) as PlayerLeaderboardRow[], playersForLeague, leaderMetricCode),
+          error: result.error?.message ?? null,
+        };
+      }));
+      if (cancelled) return;
+      setOverviewLeagueLeaders(Object.fromEntries(results.map((result) => [result.key, result.rows])));
+      setOverviewLeagueErrors(Object.fromEntries(results.map((result) => [result.key, result.error])));
+      setOverviewLeagueLeadersLoading(false);
+    }
+
+    void loadOverviewLeagueLeaderboards();
+    return () => { cancelled = true; };
+  }, [clubTournamentScope, leaderMetricCode, leaderRatingMinimumMinutes, overviewLeaguePlayers, overviewLeaguePlayersLoading, overviewLeagueTargets, view]);
   useEffect(() => {
     let cancelled = false;
 
@@ -1677,6 +1817,13 @@ export function App() {
   const explorerMinimum = explorerQualification ? explorerMinimums[explorerMetricCode] ?? explorerQualification.defaultValue : 0;
   const legionnaireMinimum = legionnaireQualification ? legionnaireMinimums[legionnaireMetricCode] ?? legionnaireQualification.defaultValue : 0;
   const qualifiedLeaderboardRows = filterLeaderboardRows(leaderboardRows, players, leaderQualification, leaderMinimum);
+  const overviewLeagueEntries = overviewLeagueTargets.map<OverviewLeagueEntry>((target) => ({
+    ...target,
+    players: overviewLeaguePlayers[target.key] ?? [],
+    leaders: overviewLeagueLeaders[target.key] ?? [],
+    loading: overviewLeaguePlayersLoading || overviewLeagueLeadersLoading,
+    error: overviewLeagueErrors[target.key] ?? null,
+  }));
   const filteredLegionnaires = useMemo(() => {
     const query = legionnaireQuery.trim().toLowerCase();
     return legionnaires.filter((player) => !query || [
@@ -1953,10 +2100,9 @@ export function App() {
     setClubTournamentScope("all");
     const premierLeague = competitions.find((competition) => competition.name === "Israeli Premier League");
     if (!premierLeague) return;
-    const matchingSeason = seasons.find((season) => season.competition_id === premierLeague.competition_id && season.season_name === currentSeason.season_name)
-      ?? seasons
-        .filter((season) => season.competition_id === premierLeague.competition_id && season.completed_match_count > 0)
-        .sort((a, b) => dateValue(b.latest_match_at) - dateValue(a.latest_match_at))[0];
+    const latestSeasonName = allTournamentSeasonOptions[0]?.season_name;
+    const matchingSeason = seasons.find((season) => season.competition_id === premierLeague.competition_id && season.season_name === latestSeasonName)
+      ?? latestSeasonWithData(seasons.filter((season) => season.competition_id === premierLeague.competition_id));
     setCompetitionId(premierLeague.competition_id);
     if (matchingSeason) setSeasonId(matchingSeason.season_id);
   }
@@ -1990,6 +2136,12 @@ export function App() {
     setExplorerMinimums((current) => ({ ...current, season_minutes: 0 }));
     setPlayerId(nextPlayerId);
     navigate("players");
+  }
+
+  function openOverviewPlayer(nextPlayerId: string, season: Season) {
+    setCompetitionId(season.competition_id);
+    setSeasonId(season.season_id);
+    openPlayer(nextPlayerId);
   }
 
   function openLegionnaire(player: Legionnaire) {
@@ -2128,10 +2280,7 @@ export function App() {
               seasonName={currentSeason.season_name}
               competitions={competitions}
               matches={allTournamentOverviewMatches}
-              leagueSeason={currentSeason}
-              seasonPlayers={players}
-              leagueStandings={standings}
-              leaders={qualifiedLeaderboardRows}
+              leagues={overviewLeagueEntries}
               metrics={leaderboardMetrics}
               metricCode={leaderMetricCode}
               setMetricCode={setLeaderMetricCode}
@@ -2140,12 +2289,10 @@ export function App() {
               setMinimum={(value) => setLeaderMinimums((current) => ({ ...current, [leaderMetricCode]: value }))}
               ratingMinimumMinutes={leaderRatingMinimumMinutes}
               setRatingMinimumMinutes={setLeaderRatingMinimumMinutes}
-              leaderboardLoading={leaderboardLoading}
-              leaderboardError={leaderboardError}
               loading={allTournamentOverviewLoading}
               openMatch={openMatch}
               openClub={openClub}
-              openPlayer={openPlayer}
+              openPlayer={openOverviewPlayer}
             />
           ) : (
             <OverviewView
@@ -2319,9 +2466,9 @@ export function App() {
   );
 }
 
-type OverviewGroup = "seniorMen" | "youth" | "women";
+type OverviewAudience = "seniorMen" | "youth" | "women";
 
-function competitionOverviewGroup(competition?: Competition): OverviewGroup {
+function competitionOverviewAudience(competition?: Competition): OverviewAudience {
   if (!competition) return "seniorMen";
   const ageGroup = (competition.age_group || "senior").toLowerCase();
   if (competition.scope === "national_youth" || ageGroup !== "senior") return "youth";
@@ -2408,10 +2555,7 @@ function AllTournamentsOverview({
   seasonName,
   competitions,
   matches,
-  leagueSeason,
-  seasonPlayers,
-  leagueStandings,
-  leaders,
+  leagues,
   metrics,
   metricCode,
   setMetricCode,
@@ -2420,8 +2564,6 @@ function AllTournamentsOverview({
   setMinimum,
   ratingMinimumMinutes,
   setRatingMinimumMinutes,
-  leaderboardLoading,
-  leaderboardError,
   loading,
   openMatch,
   openClub,
@@ -2430,10 +2572,7 @@ function AllTournamentsOverview({
   seasonName: string;
   competitions: Competition[];
   matches: Match[];
-  leagueSeason: Season;
-  seasonPlayers: SeasonPlayer[];
-  leagueStandings: Club[];
-  leaders: PlayerLeaderboardRow[];
+  leagues: OverviewLeagueEntry[];
   metrics: LeaderboardMetricOption[];
   metricCode: string;
   setMetricCode: (metric: string) => void;
@@ -2442,20 +2581,36 @@ function AllTournamentsOverview({
   setMinimum: (value: number) => void;
   ratingMinimumMinutes: number;
   setRatingMinimumMinutes: (value: number) => void;
-  leaderboardLoading: boolean;
-  leaderboardError: string | null;
   loading: boolean;
   openMatch: (match: Match) => void;
   openClub: (id: string) => void;
-  openPlayer: (id: string) => void;
+  openPlayer: (id: string, season: Season) => void;
 }) {
   const { language, text } = useLocale();
   const competitionById = new Map(competitions.map((competition) => [competition.competition_id, competition]));
   const groups: Array<{ key: OverviewGroup; label: string }> = [
-    { key: "seniorMen", label: text.seniorMen },
+    { key: "topMen", label: text.topLeagueClubs },
+    { key: "lowerMen", label: text.lowerLeagueClubs },
     { key: "youth", label: text.youthFootball },
     { key: "women", label: text.womensFootball },
   ];
+  const leagueByGroup = new Map(leagues.map((league) => [league.key, league]));
+  const topLeague = leagueByGroup.get("topMen");
+  const topLeagueTeamIds = new Set(matches
+    .filter((match) => match.competition_id === topLeague?.competition.competition_id)
+    .flatMap((match) => [match.home_team_id, match.away_team_id]));
+  const matchesByGroup = new Map<OverviewGroup, Match[]>(groups.map((group) => [group.key, []]));
+  matches.forEach((match) => {
+    const competition = competitionById.get(match.competition_id);
+    const audience = competitionOverviewAudience(competition);
+    if (audience === "youth" || audience === "women") {
+      matchesByGroup.get(audience)?.push(match);
+      return;
+    }
+    if (competition?.participant_type !== "club") return;
+    const involvesTopLeagueClub = topLeagueTeamIds.has(match.home_team_id) || topLeagueTeamIds.has(match.away_team_id);
+    matchesByGroup.get(involvesTopLeagueClub ? "topMen" : "lowerMen")?.push(match);
+  });
   const completedMatches = matches.filter(matchHasResult);
   const upcomingMatches = matches.filter((match) => !matchHasResult(match) && dateValue(match.scheduled_at) >= Date.now() - 6 * 60 * 60 * 1000);
   const teamIds = new Set(matches.flatMap((match) => [match.home_team_id, match.away_team_id]));
@@ -2474,26 +2629,19 @@ function AllTournamentsOverview({
       {loading ? <LoadingState /> : (
         <div className="overview-groups">
           {groups.map((group) => {
-            const groupMatches = matches.filter((match) => competitionOverviewGroup(competitionById.get(match.competition_id)) === group.key);
+            const groupMatches = matchesByGroup.get(group.key) ?? [];
             const results = groupMatches.filter(matchHasResult).sort((a, b) => dateValue(b.scheduled_at) - dateValue(a.scheduled_at)).slice(0, 8);
             const fixtures = groupMatches
               .filter((match) => !matchHasResult(match) && dateValue(match.scheduled_at) >= Date.now() - 6 * 60 * 60 * 1000)
               .sort((a, b) => dateValue(a.scheduled_at) - dateValue(b.scheduled_at))
               .slice(0, 8);
-            const preferredLeagueName = {
-              seniorMen: "Israeli Premier League",
-              youth: "Youth League",
-              women: "Women's Premier League",
-            }[group.key];
-            const leagueCompetition = competitions.find((competition) => competition.name === preferredLeagueName)
-              ?? competitions.find((competition) => competition.competition_type === "league"
-                && competition.scope === "domestic"
-                && competition.participant_type === "club"
-                && competitionOverviewGroup(competition) === group.key);
+            const league = leagueByGroup.get(group.key);
+            const leagueCompetition = league?.competition;
             const leagueMatches = leagueCompetition
-              ? groupMatches.filter((match) => match.competition_id === leagueCompetition.competition_id)
+              ? matches.filter((match) => match.competition_id === leagueCompetition.competition_id)
               : [];
             const standings = aggregateOverviewStandings(leagueMatches);
+            const qualifiedLeaders = filterLeaderboardRows(league?.leaders ?? [], league?.players ?? [], qualification, minimum);
             return (
               <section className="overview-group" key={group.key}>
                 <div className="overview-group-heading">
@@ -2515,8 +2663,8 @@ function AllTournamentsOverview({
                     </div>
                   </section>
                   <section className="surface overview-ranking-surface">
-                    <SectionHeading eyebrow={text.leagueTable} title={localizedCompetition(leagueCompetition, language)} />
-                    <div className="mini-table" aria-label={`${localizedCompetition(leagueCompetition, language)} ${text.leagueStandings}`}>
+                    <SectionHeading eyebrow={text.leagueTable} title={leagueCompetition ? localizedCompetition(leagueCompetition, language) : group.label} />
+                    <div className="mini-table" aria-label={`${leagueCompetition ? localizedCompetition(leagueCompetition, language) : group.label} ${text.leagueStandings}`}>
                       <div className="mini-table-head"><span>#</span><span>{text.team}</span><span>{text.goalDifferenceShort}</span><span>{text.pointsShort}</span></div>
                       <div className="mini-table-body">
                         {standings.length ? standings.map((club, index) => (
@@ -2530,32 +2678,31 @@ function AllTournamentsOverview({
                       </div>
                     </div>
                   </section>
+                  <section className="surface leaders-surface overview-group-leaders">
+                    <PlayerLeaderboardPanel
+                      scopeLabel={`${leagueCompetition ? localizedCompetition(leagueCompetition, language) : group.label} · ${text.playerLeaderboard}`}
+                      seasonPlayers={league?.players ?? []}
+                      standings={standings}
+                      leaders={qualifiedLeaders}
+                      metrics={metrics}
+                      metricCode={metricCode}
+                      setMetricCode={setMetricCode}
+                      qualification={qualification}
+                      minimum={minimum}
+                      setMinimum={setMinimum}
+                      ratingMinimumMinutes={ratingMinimumMinutes}
+                      setRatingMinimumMinutes={setRatingMinimumMinutes}
+                      loading={league?.loading ?? false}
+                      error={league?.error ?? null}
+                      openPlayer={(id) => { if (league) openPlayer(id, league.season); }}
+                    />
+                  </section>
                 </div>
               </section>
             );
           })}
         </div>
       )}
-
-      <section className="surface leaders-surface overview-player-leaderboard">
-        <PlayerLeaderboardPanel
-          scopeLabel={`${localizedSeasonCompetition(leagueSeason, language)} · ${text.playerLeaderboard}`}
-          seasonPlayers={seasonPlayers}
-          standings={leagueStandings}
-          leaders={leaders}
-          metrics={metrics}
-          metricCode={metricCode}
-          setMetricCode={setMetricCode}
-          qualification={qualification}
-          minimum={minimum}
-          setMinimum={setMinimum}
-          ratingMinimumMinutes={ratingMinimumMinutes}
-          setRatingMinimumMinutes={setRatingMinimumMinutes}
-          loading={leaderboardLoading}
-          error={leaderboardError}
-          openPlayer={openPlayer}
-        />
-      </section>
     </>
   );
 }
