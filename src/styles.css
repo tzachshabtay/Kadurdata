@@ -583,6 +583,82 @@ input[type="search"]::-webkit-search-cancel-button {
   gap: 18px;
 }
 
+.overview-groups {
+  display: grid;
+  gap: 30px;
+}
+
+.overview-group {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.overview-group + .overview-group {
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.overview-group-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  margin-bottom: 13px;
+}
+
+.overview-group-heading span {
+  grid-column: 1 / -1;
+  color: var(--teal);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.overview-group-heading h2 {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.overview-group-heading small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.overview-group-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.overview-feed-surface,
+.overview-ranking-surface {
+  min-height: 0;
+  padding: 17px;
+}
+
+.overview-group .score-list,
+.overview-group .mini-table-body {
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.overview-group .compact-match {
+  grid-template-columns: 72px minmax(86px, 1fr) auto minmax(86px, 1fr) 16px;
+  gap: 7px;
+}
+
+.overview-group .compact-club {
+  gap: 6px;
+}
+
+.overview-group .club-badge.small {
+  width: 28px;
+  height: 28px;
+}
+
 .round-surface {
   grid-row: span 2;
   padding: 20px;
@@ -3616,6 +3692,7 @@ html[dir="rtl"] .comparison-attribute-list button.active {
   }
 
   .overview-grid,
+  .overview-group-grid,
   .match-workspace,
   .club-workspace,
   .player-workspace {
@@ -3762,6 +3839,10 @@ html[dir="rtl"] .comparison-attribute-list button.active {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     min-height: 90px;
     gap: 8px;
+  }
+
+  .overview-group .compact-match {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
 
   .compact-match time {

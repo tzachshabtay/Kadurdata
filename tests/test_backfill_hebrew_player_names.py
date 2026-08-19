@@ -7,6 +7,8 @@ from scripts.backfill_hebrew_player_names import (
     extract_hebrew_names,
     game_url,
     is_365scores_athlete_id,
+    search_url,
+    select_transfermarkt_player,
 )
 
 
@@ -65,6 +67,36 @@ class HebrewPlayerNameTests(unittest.TestCase):
 
         self.assertIn("langId=2", url)
         self.assertIn("gameId=4461144", url)
+
+    def test_builds_english_search_request_for_unmapped_players(self) -> None:
+        url = search_url("Liel Abada")
+
+        self.assertIn("langId=1", url)
+        self.assertIn("query=Liel+Abada", url)
+
+    def test_transfermarkt_fallback_requires_unique_israeli_identity(self) -> None:
+        entities = {
+            "519514": {
+                "id": "519514",
+                "name": "Liel Abada",
+                "nationalityDetails": {
+                    "passportName": "ליאל עבדה",
+                    "nationalities": {"nationalityId": 74, "secondNationalityId": 0},
+                },
+            },
+            "other": {
+                "id": "other",
+                "name": "Liel Abada",
+                "nationalityDetails": {
+                    "nationalities": {"nationalityId": 1, "secondNationalityId": 0},
+                },
+            },
+        }
+
+        self.assertEqual(
+            select_transfermarkt_player("Liel Abada", ["519514", "other"], entities),
+            entities["519514"],
+        )
 
 
 if __name__ == "__main__":

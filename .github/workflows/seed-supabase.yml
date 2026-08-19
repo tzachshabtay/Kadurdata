@@ -92,6 +92,14 @@ jobs:
         if: env.SEED_MODE != 'legionnaires'
         run: python scripts/load_365scores_to_supabase.py
 
+      - name: Discover the full Israeli-abroad player census
+        run: |
+          python scripts/sync_transfermarkt_legionnaires.py \
+            --allow-fetch-failures \
+            --retries 4 \
+            --sleep 0.3 \
+            --workers 8
+
       - name: Fetch and flatten legionnaire data
         run: |
           args=(

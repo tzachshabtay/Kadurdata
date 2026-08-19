@@ -61,6 +61,17 @@ Risks:
 - Terms/licensing need review before public product use.
 - Historical pagination must be tested carefully; the sample results endpoint returned recent/known pages and pagination links.
 
+### Israeli players abroad census
+
+The legionnaire seed uses two complementary sources so discovery does not depend on players already present in the database:
+
+- Transfermarkt's Israelis-abroad country index enumerates current players and their destination clubs across every listed country. The seed follows every country and pagination page, including players whose club has no formal competition entry.
+- Each census identity is resolved against the 365Scores search endpoint by an exact normalized name and Israeli nationality. Resolved athlete IDs then enter the regular 365Scores profile, fixture, and per-match-stat pipeline.
+- Transfermarkt's player metadata supplies source-authored Hebrew passport names for Israeli players. The general Hebrew-name job also uses exact 365Scores search identities for unmapped players and reports every unresolved database row instead of silently accepting gaps.
+- Transfermarkt-only identities remain visible in the legionnaire directory with zero match statistics until a match-stat source can be resolved.
+
+The scheduled seed prints census player/country totals, 365Scores resolution totals, and bounded unresolved-name lists. A parser or source failure aborts the census instead of publishing a silently partial roster.
+
 ### 2. football.co.il official site and Parse managed API
 
 Status: Official public site has official league stats; Parse offers a managed API over football.co.il, but it does not currently expose per-match individual player lines.

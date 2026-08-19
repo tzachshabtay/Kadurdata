@@ -490,6 +490,7 @@ async function fetchPlayerSeasonHeatmapRows(playerId: string, seasonId: string, 
 
 function readDeepLinkState(): DeepLinkState {
   const params = new URLSearchParams(window.location.search);
+  const view = readViewFromHash();
   const language = params.get("lang");
   const side = params.get("side");
   const shotSide = params.get("shotSide");
@@ -504,7 +505,7 @@ function readDeepLinkState(): DeepLinkState {
 
   return {
     language: language === "he" || language === "en" ? language : null,
-    view: readViewFromHash(),
+    view,
     competitionId: params.get("competition") ?? "",
     seasonId: params.get("season") ?? "",
     roundId: params.get("round") ?? "",
@@ -530,7 +531,7 @@ function readDeepLinkState(): DeepLinkState {
     roleFilter: role && roleFilters.includes(role) ? role : "All",
     positionFilter: params.get("position") ?? "All",
     clubFilter: params.get("clubFilter") ?? "all",
-    clubTournamentScope: params.get("clubTournaments") === "all" ? "all" : "selected",
+    clubTournamentScope: params.get("clubTournaments") === "all" || (view === "overview" && !params.has("clubTournaments")) ? "all" : "selected",
     clubQuery: params.get("clubSearch") ?? "",
     playerQuery: params.get("playerSearch") ?? "",
     attributeQuery: params.get("attributeSearch") ?? "",
@@ -696,7 +697,9 @@ export function App() {
   const [legionnaireLeaderboardError, setLegionnaireLeaderboardError] = useState<string | null>(null);
   const [allTournamentClubMatches, setAllTournamentClubMatches] = useState<Match[]>([]);
   const [allTournamentClubs, setAllTournamentClubs] = useState<Club[]>([]);
+  const [allTournamentOverviewMatches, setAllTournamentOverviewMatches] = useState<Match[]>([]);
   const [allTournamentClubsLoading, setAllTournamentClubsLoading] = useState(false);
+  const [allTournamentOverviewLoading, setAllTournamentOverviewLoading] = useState(false);
   const [clubMatchesLoading, setClubMatchesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1294,6 +1297,37 @@ export function App() {
         .slice(0, 7),
     [currentRound, matches, roundMatches],
   );
+  const overviewCompetitionIds = useMemo(() => new Set(competitions
+    .filter((competition) => competition.scope !== "foreign_club")
+    .map((competition) => competition.competition_id)), [competitions]);
+  const allTournamentOverviewSeasonIds = useMemo(() => {
+    const selectedStartYear = Number(currentSeason.season_name.slice(0, 4)) || new Date().getFullYear();
+    const selectedStart = dateValue(currentSeason.start_date) || Date.UTC(selectedStartYear, 6, 1);
+    const selectedEnd = dateValue(currentSeason.end_date) || Date.UTC(selectedStartYear + 1, 5, 30, 23, 59, 59);
+    return seasons.filter((season) => {
+      if (!overviewCompetitionIds.has(season.competition_id)) return false;
+      if (season.season_name === currentSeason.season_name) return true;
+      const seasonYear = Number(season.season_name.slice(0, 4));
+      const calendarSeason = /^\d{4}$/.test(season.season_name);
+      const seasonStart = dateValue(season.start_date)
+        || (seasonYear ? Date.UTC(seasonYear, calendarSeason ? 0 : 6, 1) : 0);
+      const seasonEnd = dateValue(season.end_date)
+        || (seasonYear ? Date.UTC(calendarSeason ? seasonYear : seasonYear + 1, calendarSeason ? 11 : 5, calendarSeason ? 31 : 30, 23, 59, 59) : 0);
+      return seasonStart > 0 && seasonEnd >= selectedStart && seasonStart <= selectedEnd;
+    }).map((season) => season.season_id);
+  }, [currentSeason.end_date, currentSeason.season_name, currentSeason.start_date, overviewCompetitionIds, seasons]);
+  const allTournamentSeasonOptions = useMemo(() => {
+    const byName = new Map<string, Season>();
+    seasons
+      .filter((season) => overviewCompetitionIds.has(season.competition_id) && /^\d{4}\/\d{4}$/.test(season.season_name))
+      .sort((a, b) => Number(b.completed_match_count > 0) - Number(a.completed_match_count > 0)
+        || dateValue(b.latest_match_at) - dateValue(a.latest_match_at)
+        || dateValue(b.start_date) - dateValue(a.start_date))
+      .forEach((season) => {
+        if (!byName.has(season.season_name)) byName.set(season.season_name, season);
+      });
+    return [...byName.values()];
+  }, [overviewCompetitionIds, seasons]);
   const allTournamentSeasonIds = useMemo(() => {
     const domesticClubCompetitionIds = new Set(competitions
       .filter((competition) => (competition.scope || "domestic") === "domestic" && competition.participant_type === "club")
@@ -1302,6 +1336,52 @@ export function App() {
       .filter((season) => season.season_name === currentSeason.season_name && domesticClubCompetitionIds.has(season.competition_id))
       .map((season) => season.season_id);
   }, [competitions, currentSeason.season_name, seasons]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAllTournamentOverview() {
+      if (view !== "overview" || clubTournamentScope !== "all") {
+        setAllTournamentOverviewMatches([]);
+        setAllTournamentOverviewLoading(false);
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) {
+        setAllTournamentOverviewMatches(demoMatches);
+        setAllTournamentOverviewLoading(false);
+        return;
+      }
+      if (!allTournamentOverviewSeasonIds.length) {
+        setAllTournamentOverviewMatches([]);
+        setAllTournamentOverviewLoading(false);
+        return;
+      }
+
+      setAllTournamentOverviewLoading(true);
+      const [matchResult, teamAssetResult] = await Promise.all([
+        supabase.from("api_matches").select("*").in("season_id", allTournamentOverviewSeasonIds).order("scheduled_at").limit(3000),
+        supabase.from("api_team_assets").select("*"),
+      ]);
+      if (cancelled) return;
+      const firstError = matchResult.error ?? teamAssetResult.error;
+      if (firstError) {
+        setError(firstError.message);
+        setAllTournamentOverviewMatches([]);
+        setAllTournamentOverviewLoading(false);
+        return;
+      }
+      const assets = (teamAssetResult.data ?? []) as TeamAsset[];
+      const assetByTeamId = new Map(assets.map((asset) => [asset.team_id, asset]));
+      setAllTournamentOverviewMatches(((matchResult.data ?? []) as Omit<Match, "home_team_logo_url" | "away_team_logo_url">[]).map((match) => ({
+        ...match,
+        home_team_logo_url: assetByTeamId.get(match.home_team_id)?.logo_url ?? null,
+        away_team_logo_url: assetByTeamId.get(match.away_team_id)?.logo_url ?? null,
+      })));
+      setAllTournamentOverviewLoading(false);
+    }
+
+    void loadAllTournamentOverview();
+    return () => { cancelled = true; };
+  }, [allTournamentOverviewSeasonIds, clubTournamentScope, refreshToken, view]);
   useEffect(() => {
     let cancelled = false;
 
@@ -1870,6 +1950,7 @@ export function App() {
   ]);
 
   function navigate(nextView: View) {
+    if (nextView === "overview") setClubTournamentScope("all");
     setView(nextView);
     window.history.pushState(null, "", `#${nextView}`);
   }
@@ -1913,7 +1994,7 @@ export function App() {
     navigate("clubs");
   }
 
-  const showingAllTournaments = view === "clubs" && clubTournamentScope === "all";
+  const showingAllTournaments = (view === "clubs" || view === "overview") && clubTournamentScope === "all";
   const showingLegionnaires = view === "legionnaires";
 
   return (
@@ -1969,7 +2050,7 @@ export function App() {
               }}
             >
               {showingLegionnaires && <option value="foreign-leagues">{text.allForeignLeagues}</option>}
-              {!showingLegionnaires && view === "clubs" && <option value={allTournamentsValue}>{text.allTournaments}</option>}
+              {!showingLegionnaires && (view === "clubs" || view === "overview") && <option value={allTournamentsValue}>{text.allTournaments}</option>}
               {!showingLegionnaires && ([
                 ["domestic", text.domesticCompetitions],
                 ["european_club", text.europeanClubCompetitions],
@@ -1991,11 +2072,29 @@ export function App() {
           <label className="context-select">
             <span>{text.season}</span>
             <select
-              value={showingLegionnaires ? legionnaireSeasonName : seasonId}
-              onChange={(event) => showingLegionnaires ? setLegionnaireSeasonName(event.target.value) : setSeasonId(event.target.value)}
+              value={showingLegionnaires ? legionnaireSeasonName : showingAllTournaments ? currentSeason.season_name : seasonId}
+              onChange={(event) => {
+                if (showingLegionnaires) {
+                  setLegionnaireSeasonName(event.target.value);
+                  return;
+                }
+                if (showingAllTournaments) {
+                  const selectedName = event.target.value;
+                  const representative = seasons.find((season) => season.competition_id === competitionId && season.season_name === selectedName)
+                    ?? allTournamentSeasonOptions.find((season) => season.season_name === selectedName);
+                  if (representative) {
+                    setCompetitionId(representative.competition_id);
+                    setSeasonId(representative.season_id);
+                  }
+                  return;
+                }
+                setSeasonId(event.target.value);
+              }}
             >
               {showingLegionnaires ? legionnaireSeasonOptions.map((season, index) => (
                 <option key={season.name} value={season.name}>{season.name}{index === 0 ? ` · ${text.latest}` : ""}</option>
+              )) : showingAllTournaments ? allTournamentSeasonOptions.map((season, index) => (
+                <option key={season.season_name} value={season.season_name}>{season.season_name}{index === 0 ? ` · ${text.latest}` : ""}</option>
               )) : availableSeasons.map((season) => (
                 <option key={season.season_id} value={season.season_id}>{season.season_name}{season.season_id === latestDataSeason?.season_id ? ` · ${text.latest}` : ""}</option>
               ))}
@@ -2011,29 +2110,40 @@ export function App() {
         {loading || (seasonLoading && view !== "legionnaires") ? (
           <LoadingState />
         ) : view === "overview" ? (
-          <OverviewView
-            season={currentSeason}
-            hasLeagueTable={hasOfficialLeagueTable(currentCompetition)}
-            seasonPlayers={players}
-            round={currentRound}
-            roundMatches={overviewMatches}
-            standings={standings}
-            leaders={qualifiedLeaderboardRows}
-            metrics={leaderboardMetrics}
-            metricCode={leaderMetricCode}
-            setMetricCode={setLeaderMetricCode}
-            qualification={leaderQualification}
-            minimum={leaderMinimum}
-            setMinimum={(value) => setLeaderMinimums((current) => ({ ...current, [leaderMetricCode]: value }))}
-            ratingMinimumMinutes={leaderRatingMinimumMinutes}
-            setRatingMinimumMinutes={setLeaderRatingMinimumMinutes}
-            loading={leaderboardLoading}
-            error={leaderboardError}
-            openMatch={openMatch}
-            openClub={openClub}
-            openPlayer={openPlayer}
-            showMatches={() => navigate("matches")}
-          />
+          showingAllTournaments ? (
+            <AllTournamentsOverview
+              seasonName={currentSeason.season_name}
+              competitions={competitions}
+              matches={allTournamentOverviewMatches}
+              loading={allTournamentOverviewLoading}
+              openMatch={openMatch}
+              openClub={openClub}
+            />
+          ) : (
+            <OverviewView
+              season={currentSeason}
+              hasLeagueTable={hasOfficialLeagueTable(currentCompetition)}
+              seasonPlayers={players}
+              round={currentRound}
+              roundMatches={overviewMatches}
+              standings={standings}
+              leaders={qualifiedLeaderboardRows}
+              metrics={leaderboardMetrics}
+              metricCode={leaderMetricCode}
+              setMetricCode={setLeaderMetricCode}
+              qualification={leaderQualification}
+              minimum={leaderMinimum}
+              setMinimum={(value) => setLeaderMinimums((current) => ({ ...current, [leaderMetricCode]: value }))}
+              ratingMinimumMinutes={leaderRatingMinimumMinutes}
+              setRatingMinimumMinutes={setLeaderRatingMinimumMinutes}
+              loading={leaderboardLoading}
+              error={leaderboardError}
+              openMatch={openMatch}
+              openClub={openClub}
+              openPlayer={openPlayer}
+              showMatches={() => navigate("matches")}
+            />
+          )
         ) : view === "matches" ? (
           <MatchesView
             rounds={rounds}
@@ -2178,6 +2288,184 @@ export function App() {
       </main>
     </div>
     </LocaleContext.Provider>
+  );
+}
+
+type OverviewGroup = "seniorMen" | "youth" | "women";
+
+function competitionOverviewGroup(competition?: Competition): OverviewGroup {
+  if (!competition) return "seniorMen";
+  const ageGroup = (competition.age_group || "senior").toLowerCase();
+  if (competition.scope === "national_youth" || ageGroup !== "senior") return "youth";
+  return (competition.gender || "men").toLowerCase().startsWith("w") ? "women" : "seniorMen";
+}
+
+function matchHasResult(match: Match) {
+  return match.home_score !== null
+    && match.away_score !== null
+    && match.home_score >= 0
+    && match.away_score >= 0;
+}
+
+function aggregateOverviewStandings(matches: Match[]): Club[] {
+  const teams = new Map<string, Club>();
+  const ensureTeam = (match: Match, side: "home" | "away") => {
+    const teamId = side === "home" ? match.home_team_id : match.away_team_id;
+    const current = teams.get(teamId);
+    if (current) return current;
+    const team: Club = {
+      season_id: match.season_id,
+      competition_id: match.competition_id,
+      team_id: teamId,
+      team_name: side === "home" ? match.home_team_name : match.away_team_name,
+      team_name_he: side === "home" ? match.home_team_name_he : match.away_team_name_he,
+      short_name: side === "home" ? match.home_team_short_name : match.away_team_short_name,
+      city: null,
+      founded_year: null,
+      primary_color: side === "home" ? match.home_team_color : match.away_team_color,
+      secondary_color: null,
+      logo_url: side === "home" ? match.home_team_logo_url : match.away_team_logo_url,
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      goals_for: 0,
+      goals_against: 0,
+      goal_difference: 0,
+      points: 0,
+      last_played_at: null,
+    };
+    teams.set(teamId, team);
+    return team;
+  };
+
+  matches.forEach((match) => {
+    const home = ensureTeam(match, "home");
+    const away = ensureTeam(match, "away");
+    if (!matchHasResult(match)) return;
+    const homeScore = Number(match.home_score);
+    const awayScore = Number(match.away_score);
+    home.played += 1;
+    away.played += 1;
+    home.goals_for += homeScore;
+    home.goals_against += awayScore;
+    away.goals_for += awayScore;
+    away.goals_against += homeScore;
+    home.last_played_at = !home.last_played_at || dateValue(match.scheduled_at) > dateValue(home.last_played_at) ? match.scheduled_at : home.last_played_at;
+    away.last_played_at = !away.last_played_at || dateValue(match.scheduled_at) > dateValue(away.last_played_at) ? match.scheduled_at : away.last_played_at;
+    if (homeScore > awayScore) {
+      home.won += 1;
+      home.points += 3;
+      away.lost += 1;
+    } else if (awayScore > homeScore) {
+      away.won += 1;
+      away.points += 3;
+      home.lost += 1;
+    } else {
+      home.drawn += 1;
+      away.drawn += 1;
+      home.points += 1;
+      away.points += 1;
+    }
+    home.goal_difference = home.goals_for - home.goals_against;
+    away.goal_difference = away.goals_for - away.goals_against;
+  });
+  return [...teams.values()].sort((a, b) => b.points - a.points
+    || b.goal_difference - a.goal_difference
+    || b.goals_for - a.goals_for
+    || a.team_name.localeCompare(b.team_name));
+}
+
+function AllTournamentsOverview({
+  seasonName,
+  competitions,
+  matches,
+  loading,
+  openMatch,
+  openClub,
+}: {
+  seasonName: string;
+  competitions: Competition[];
+  matches: Match[];
+  loading: boolean;
+  openMatch: (match: Match) => void;
+  openClub: (id: string) => void;
+}) {
+  const { language, text } = useLocale();
+  const competitionById = new Map(competitions.map((competition) => [competition.competition_id, competition]));
+  const groups: Array<{ key: OverviewGroup; label: string }> = [
+    { key: "seniorMen", label: text.seniorMen },
+    { key: "youth", label: text.youthFootball },
+    { key: "women", label: text.womensFootball },
+  ];
+  const completedMatches = matches.filter(matchHasResult);
+  const upcomingMatches = matches.filter((match) => !matchHasResult(match) && dateValue(match.scheduled_at) >= Date.now() - 6 * 60 * 60 * 1000);
+  const teamIds = new Set(matches.flatMap((match) => [match.home_team_id, match.away_team_id]));
+  const competitionIds = new Set(matches.map((match) => match.competition_id));
+
+  return (
+    <>
+      <PageHeading eyebrow={`${text.allTournaments} · ${seasonName}`} title={text.israeliFootballOverview} description={text.allTournamentsOverviewDescription} />
+      <section className="stat-band" aria-label={text.seasonSummary}>
+        <Stat label={text.tournaments} value={numberFormatter.format(competitionIds.size)} note={text.acrossIsraeliFootball} />
+        <Stat label={text.results} value={numberFormatter.format(completedMatches.length)} note={text.completedMatches} />
+        <Stat label={text.nextFixtures} value={numberFormatter.format(upcomingMatches.length)} note={text.scheduledFixtures} />
+        <Stat label={text.teams} value={numberFormatter.format(teamIds.size)} note={text.acrossAllGroups} accent />
+      </section>
+
+      {loading ? <LoadingState /> : (
+        <div className="overview-groups">
+          {groups.map((group) => {
+            const groupMatches = matches.filter((match) => competitionOverviewGroup(competitionById.get(match.competition_id)) === group.key);
+            const results = groupMatches.filter(matchHasResult).sort((a, b) => dateValue(b.scheduled_at) - dateValue(a.scheduled_at)).slice(0, 8);
+            const fixtures = groupMatches
+              .filter((match) => !matchHasResult(match) && dateValue(match.scheduled_at) >= Date.now() - 6 * 60 * 60 * 1000)
+              .sort((a, b) => dateValue(a.scheduled_at) - dateValue(b.scheduled_at))
+              .slice(0, 8);
+            const standings = aggregateOverviewStandings(groupMatches);
+            return (
+              <section className="overview-group" key={group.key}>
+                <div className="overview-group-heading">
+                  <span>{text.competitionGroup}</span>
+                  <h2>{group.label}</h2>
+                  <small>{numberFormatter.format(groupMatches.length)} {text.matches.toLowerCase()}</small>
+                </div>
+                <div className="overview-group-grid">
+                  <section className="surface overview-feed-surface">
+                    <SectionHeading eyebrow={text.latestResults} title={text.lastPlayed} />
+                    <div className="score-list">
+                      {results.length ? results.map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />) : <EmptyState text={text.noRecentResults} />}
+                    </div>
+                  </section>
+                  <section className="surface overview-feed-surface">
+                    <SectionHeading eyebrow={text.nextFixtures} title={text.comingUp} />
+                    <div className="score-list">
+                      {fixtures.length ? fixtures.map((match) => <CompactMatch key={match.match_id} match={match} onClick={() => openMatch(match)} />) : <EmptyState text={text.noUpcomingFixtures} />}
+                    </div>
+                  </section>
+                  <section className="surface overview-ranking-surface">
+                    <SectionHeading eyebrow={text.overallLeaderboard} title={text.seasonForm} />
+                    <div className="mini-table" aria-label={`${group.label} ${text.overallLeaderboard}`}>
+                      <div className="mini-table-head"><span>#</span><span>{text.team}</span><span>{text.goalDifferenceShort}</span><span>{text.pointsShort}</span></div>
+                      <div className="mini-table-body">
+                        {standings.length ? standings.map((club, index) => (
+                          <button className="mini-table-row" key={club.team_id} type="button" onClick={() => openClub(club.team_id)}>
+                            <span className="rank">{index + 1}</span>
+                            <span className="club-cell"><ClubBadge name={localizedClubName(club, language)} logoUrl={club.logo_url} size="small" /><strong>{localizedClubName(club, language)}</strong></span>
+                            <span>{signed(club.goal_difference)}</span>
+                            <strong>{club.points}</strong>
+                          </button>
+                        )) : <EmptyState text={text.noLeaderboardData} />}
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }
 
