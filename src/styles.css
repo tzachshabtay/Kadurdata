@@ -3452,15 +3452,21 @@ html[dir="rtl"] button.multi-comparison-row.active {
 }
 
 .multi-comparison-head {
+  position: sticky;
+  z-index: 8;
+  top: 0;
+  min-width: max(100%, 700px);
   margin-bottom: 5px;
   border-block: 1px solid var(--line);
+  background: var(--panel-deep);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.22);
 }
 
 .multi-comparison-head > span {
   min-height: 48px;
   gap: 7px;
   color: var(--muted);
-  background: transparent;
+  background: var(--panel-deep);
   font-size: 9px;
   font-weight: 800;
 }
@@ -3485,12 +3491,41 @@ html[dir="rtl"] button.multi-comparison-row.active {
   font-size: 8px;
 }
 
-.multi-comparison-head strong {
+.multi-comparison-player-heading {
+  flex-direction: row;
+}
+
+.multi-comparison-player-select {
+  display: grid;
   min-width: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px;
+  color: var(--text);
+}
+
+.multi-comparison-player-select select {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 0;
   overflow: hidden;
   color: var(--text);
+  border: 0;
+  outline: 0;
+  appearance: none;
+  background: transparent;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.multi-comparison-player-select svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+  pointer-events: none;
 }
 
 .trend-heading {

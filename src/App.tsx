@@ -2514,6 +2514,7 @@ export function App() {
               setComparisonPlayerIds([]);
               setPlayerId(nextPlayerId);
             }}
+            replacePrimaryPlayer={setPlayerId}
             roles={roleFilters}
             roleFilter={roleFilter}
             setRoleFilter={(role) => { setRoleFilter(role); setPositionFilter("All"); }}
@@ -3700,6 +3701,7 @@ function PlayersView({
   comparisonSeasonHeatmaps,
   comparisonSeasonHeatmapLoading,
   selectPlayer,
+  replacePrimaryPlayer,
   roles,
   roleFilter,
   setRoleFilter,
@@ -3759,6 +3761,7 @@ function PlayersView({
   comparisonSeasonHeatmaps: Record<string, PlayerSeasonHeatmap[]>;
   comparisonSeasonHeatmapLoading: boolean;
   selectPlayer: (id: string) => void;
+  replacePrimaryPlayer: (id: string) => void;
   roles: RoleFilter[];
   roleFilter: RoleFilter;
   setRoleFilter: (role: RoleFilter) => void;
@@ -3822,12 +3825,24 @@ function PlayersView({
   const comparedPlayers = selectedPlayer ? [selectedPlayer, ...comparisonPlayers] : comparisonPlayers;
   const comparedPlayerNames = comparedPlayers.map((player) => localizedPlayerName(player, player.display_name, language));
   const multiComparisonGridTemplate = `minmax(150px, 1.35fr) repeat(${comparedPlayers.length}, minmax(105px, 1fr))`;
-  const comparisonOptions = [...allSeasonPlayers]
-    .filter((player) => player.player_id !== selectedPlayer?.player_id && !isManagementPlayer(player))
+  const comparablePlayers = [...allSeasonPlayers]
+    .filter((player) => !isManagementPlayer(player))
     .sort((a, b) => localizedPlayerName(a, a.display_name, language).localeCompare(
       localizedPlayerName(b, b.display_name, language),
       localeCode(language),
     ));
+  const comparisonOptions = comparablePlayers.filter((player) => player.player_id !== selectedPlayer?.player_id);
+  const comparedPlayerIds = new Set(comparedPlayers.map((player) => player.player_id));
+  const replaceComparedPlayer = (index: number, nextPlayerId: string) => {
+    if (!nextPlayerId || comparedPlayers.some((player, playerIndex) => playerIndex !== index && player.player_id === nextPlayerId)) return;
+    if (index === 0) {
+      replacePrimaryPlayer(nextPlayerId);
+      return;
+    }
+    const nextComparisonPlayerIds = comparisonPlayers.map((player) => player.player_id);
+    nextComparisonPlayerIds[index - 1] = nextPlayerId;
+    setComparisonPlayerIds(nextComparisonPlayerIds);
+  };
   const attributeGroups = useMemo(() => {
     const normalizedQuery = attributeQuery.trim().toLowerCase();
     const categoryOrder = selectedPlayer?.role_group === "Goalkeepers"
@@ -4062,20 +4077,39 @@ function PlayersView({
                   <>
                   {comparisonError && <p className="comparison-partial-error">{text.comparisonPartialLoadError}</p>}
                   <div className="attribute-scroll">
+                    {isMultiComparison && (
+                      <div className="multi-comparison-row multi-comparison-head" style={{ gridTemplateColumns: multiComparisonGridTemplate }}>
+                        <span>{text.attribute}</span>
+                        {comparedPlayers.map((player, index) => (
+                          <span className="multi-comparison-player-heading" key={player.player_id} title={comparedPlayerNames[index]}>
+                            <b>{initials(comparedPlayerNames[index])}</b>
+                            <label className="multi-comparison-player-select">
+                              <select
+                                aria-label={`${text.changeComparedPlayer}: ${comparedPlayerNames[index]}`}
+                                value={player.player_id}
+                                onChange={(event) => replaceComparedPlayer(index, event.target.value)}
+                              >
+                                {comparablePlayers.map((option) => (
+                                  <option
+                                    disabled={option.player_id !== player.player_id && comparedPlayerIds.has(option.player_id)}
+                                    key={option.player_id}
+                                    value={option.player_id}
+                                  >
+                                    {localizedPlayerName(option, option.display_name, language)}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown size={13} aria-hidden="true" />
+                            </label>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {attributeGroups.map((group) => (
                       <section className="attribute-group" key={group.category}>
                         <h4>{categoryName(group.category, language)}</h4>
                         {isMultiComparison ? (
                           <div className="multi-comparison-table">
-                            <div className="multi-comparison-row multi-comparison-head" style={{ gridTemplateColumns: multiComparisonGridTemplate }}>
-                              <span>{text.attribute}</span>
-                              {comparedPlayers.map((player, index) => (
-                                <span key={player.player_id} title={comparedPlayerNames[index]}>
-                                  <b>{initials(comparedPlayerNames[index])}</b>
-                                  <strong>{comparedPlayerNames[index]}</strong>
-                                </span>
-                              ))}
-                            </div>
                             {group.attributes.map((attribute) => {
                               const rankClasses = multiPlayerRankClasses(
                                 attribute.players.map((item) => item.summary.comparisonValue),
