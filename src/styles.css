@@ -3495,37 +3495,149 @@ html[dir="rtl"] button.multi-comparison-row.active {
   flex-direction: row;
 }
 
-.multi-comparison-player-select {
+.multi-comparison-player-trigger {
   display: grid;
+  width: 100%;
   min-width: 0;
+  min-height: 30px;
   flex: 1 1 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 3px;
+  padding: 3px 5px;
   color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  text-align: start;
 }
 
-.multi-comparison-player-select select {
-  width: 100%;
+.multi-comparison-player-trigger:hover,
+.multi-comparison-player-trigger.open {
+  color: var(--teal);
+  border-color: var(--green);
+  background: var(--raised);
+}
+
+.multi-comparison-player-trigger strong {
   min-width: 0;
-  padding: 3px 0;
   overflow: hidden;
-  color: var(--text);
-  border: 0;
-  outline: 0;
-  appearance: none;
-  background: transparent;
-  font: inherit;
   font-size: 9px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.multi-comparison-player-select svg {
+.multi-comparison-player-trigger svg {
   flex: 0 0 auto;
   color: var(--muted);
   pointer-events: none;
+}
+
+.multi-comparison-player-trigger.open svg {
+  transform: rotate(180deg);
+}
+
+.comparison-slot-menu {
+  position: fixed;
+  z-index: 120;
+  width: min(310px, calc(100vw - 16px));
+  padding: 8px;
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5);
+}
+
+.comparison-slot-menu > label {
+  display: flex;
+  width: 100%;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel-deep);
+}
+
+.comparison-slot-menu > label:focus-within {
+  color: var(--teal);
+  border-color: var(--green);
+}
+
+.comparison-slot-menu input {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 10px;
+}
+
+.comparison-slot-options {
+  max-height: 282px;
+  margin-top: 7px;
+  overflow-y: auto;
+}
+
+.comparison-slot-options > button {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  color: var(--text);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: start;
+}
+
+.comparison-slot-options > button:hover,
+.comparison-slot-options > button[aria-selected="true"] {
+  background: var(--raised);
+}
+
+.comparison-slot-options > button[aria-selected="true"] {
+  color: var(--teal);
+  box-shadow: inset 2px 0 var(--teal);
+}
+
+html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
+  box-shadow: inset -2px 0 var(--teal);
+}
+
+.comparison-slot-options > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.comparison-slot-options > button > span:nth-child(2) {
+  min-width: 0;
+}
+
+.comparison-slot-options strong,
+.comparison-slot-options small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-slot-options strong {
+  font-size: 11px;
+}
+
+.comparison-slot-options small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
 }
 
 .trend-heading {

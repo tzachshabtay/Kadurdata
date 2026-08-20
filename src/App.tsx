@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -3676,6 +3677,131 @@ function PlayerComparisonPicker({
   );
 }
 
+function ComparisonSlotPicker({
+  player,
+  playerName,
+  players,
+  selectedPlayerIds,
+  clubs,
+  onChange,
+}: {
+  player: SeasonPlayer;
+  playerName: string;
+  players: SeasonPlayer[];
+  selectedPlayerIds: Set<string>;
+  clubs: Club[];
+  onChange: (id: string) => void;
+}) {
+  const { language, text } = useLocale();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredPlayers = useMemo(() => players.filter((option) => {
+    if (!normalizedQuery) return true;
+    const position = playerPositionDetail(option);
+    return [
+      option.display_name,
+      option.display_name_he,
+      option.team_name,
+      localizedClubById(clubs, option.team_id, option.team_name, language),
+      position.code,
+      position.label,
+    ].filter(Boolean).some((value) => value!.toLowerCase().includes(normalizedQuery));
+  }).slice(0, 80), [clubs, language, normalizedQuery, players]);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(310, window.innerWidth - 16);
+      const menuHeight = 342;
+      const left = Math.min(
+        Math.max(8, language === "he" ? rect.right - width : rect.left),
+        window.innerWidth - width - 8,
+      );
+      const top = window.innerHeight - rect.bottom >= menuHeight
+        ? rect.bottom + 6
+        : Math.max(8, rect.top - menuHeight - 6);
+      setMenuPosition({ top, left });
+    };
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
+    };
+    updatePosition();
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [language, open]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={`${text.changeComparedPlayer}: ${playerName}`}
+        className={`multi-comparison-player-trigger${open ? " open" : ""}`}
+        title={`${text.changeComparedPlayer}: ${playerName}`}
+        type="button"
+        onClick={() => {
+          setQuery("");
+          setOpen((current) => !current);
+        }}
+      >
+        <strong>{playerName}</strong>
+        <ChevronDown size={13} aria-hidden="true" />
+      </button>
+      {open && createPortal(
+        <div className="comparison-slot-menu" ref={menuRef} style={menuPosition}>
+          <label>
+            <Search size={15} aria-hidden="true" />
+            <input autoFocus aria-label={text.searchPlayers} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.searchPlayers} />
+          </label>
+          <div className="comparison-slot-options" role="listbox" aria-label={`${text.changeComparedPlayer}: ${playerName}`}>
+            {filteredPlayers.length ? filteredPlayers.map((option) => {
+              const displayName = localizedPlayerName(option, option.display_name, language);
+              const selectedElsewhere = option.player_id !== player.player_id && selectedPlayerIds.has(option.player_id);
+              const selected = option.player_id === player.player_id;
+              return (
+                <button
+                  aria-disabled={selectedElsewhere}
+                  aria-selected={selected}
+                  disabled={selectedElsewhere}
+                  key={option.player_id}
+                  role="option"
+                  type="button"
+                  onClick={() => {
+                    onChange(option.player_id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="avatar">{initials(displayName)}</span>
+                  <span>
+                    <strong>{displayName}</strong>
+                    <small>{localizedClubById(clubs, option.team_id, option.team_name, language)} · {playerPositionDetail(option).code}</small>
+                  </span>
+                  {selected && <Check size={14} aria-hidden="true" />}
+                </button>
+              );
+            }) : <span className="compare-player-empty">{text.noPlayersForMetric}</span>}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 function PlayersView({
   players,
   allSeasonPlayers,
@@ -4083,24 +4209,14 @@ function PlayersView({
                         {comparedPlayers.map((player, index) => (
                           <span className="multi-comparison-player-heading" key={player.player_id} title={comparedPlayerNames[index]}>
                             <b>{initials(comparedPlayerNames[index])}</b>
-                            <label className="multi-comparison-player-select">
-                              <select
-                                aria-label={`${text.changeComparedPlayer}: ${comparedPlayerNames[index]}`}
-                                value={player.player_id}
-                                onChange={(event) => replaceComparedPlayer(index, event.target.value)}
-                              >
-                                {comparablePlayers.map((option) => (
-                                  <option
-                                    disabled={option.player_id !== player.player_id && comparedPlayerIds.has(option.player_id)}
-                                    key={option.player_id}
-                                    value={option.player_id}
-                                  >
-                                    {localizedPlayerName(option, option.display_name, language)}
-                                  </option>
-                                ))}
-                              </select>
-                              <ChevronDown size={13} aria-hidden="true" />
-                            </label>
+                            <ComparisonSlotPicker
+                              player={player}
+                              playerName={comparedPlayerNames[index]}
+                              players={comparablePlayers}
+                              selectedPlayerIds={comparedPlayerIds}
+                              clubs={clubs}
+                              onChange={(nextPlayerId) => replaceComparedPlayer(index, nextPlayerId)}
+                            />
                           </span>
                         ))}
                       </div>
