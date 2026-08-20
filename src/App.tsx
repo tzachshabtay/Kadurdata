@@ -448,17 +448,42 @@ async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
   const rows: PlayerHistory[] = [];
   const pageSize = 1000;
   let page = 0;
+  let useFastRpc = true;
   while (true) {
-    const result = await supabase
-      .from("api_player_history")
-      .select("*")
-      .eq("competition_id", competitionId)
-      .eq("player_id", playerId)
-      .order("scheduled_at")
-      .order("match_id")
-      .order("metric_code")
-      .order("source_id")
-      .range(page * pageSize, (page + 1) * pageSize - 1);
+    let result = useFastRpc
+      ? await supabase
+          .rpc("api_player_history_for_player", {
+            p_competition_id: competitionId,
+            p_player_id: playerId,
+          })
+          .order("scheduled_at")
+          .order("match_id")
+          .order("metric_code")
+          .order("source_id")
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+      : await supabase
+          .from("api_player_history")
+          .select("*")
+          .eq("competition_id", competitionId)
+          .eq("player_id", playerId)
+          .order("scheduled_at")
+          .order("match_id")
+          .order("metric_code")
+          .order("source_id")
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+    if (useFastRpc && isSchemaCacheMiss(result.error)) {
+      useFastRpc = false;
+      result = await supabase
+        .from("api_player_history")
+        .select("*")
+        .eq("competition_id", competitionId)
+        .eq("player_id", playerId)
+        .order("scheduled_at")
+        .order("match_id")
+        .order("metric_code")
+        .order("source_id")
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+    }
     if (result.error) return { rows: [] as PlayerHistory[], error: result.error.message };
     const pageRows = (result.data ?? []) as PlayerHistory[];
     rows.push(...pageRows);
