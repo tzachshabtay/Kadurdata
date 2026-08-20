@@ -210,6 +210,7 @@ const goalkeeperMetricCodes = new Set([
   "punches",
 ]);
 const lowerIsBetterMetricCodes = new Set([
+  "backward_passes",
   "big_chances_missed",
   "errors_leading_to_goal",
   "errors_leading_to_shot",
@@ -686,6 +687,7 @@ export function App() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [playerHistory, setPlayerHistory] = useState<PlayerHistory[]>([]);
   const [comparisonPlayerHistories, setComparisonPlayerHistories] = useState<Record<string, PlayerHistory[]>>({});
+  const [comparisonCohortPlayers, setComparisonCohortPlayers] = useState<SeasonPlayer[]>([]);
   const [playerValuations, setPlayerValuations] = useState<PlayerValuation[]>([]);
   const [comparisonPlayerValuations, setComparisonPlayerValuations] = useState<Record<string, PlayerValuation[]>>({});
   const [matchPlayerStats, setMatchPlayerStats] = useState<MatchPlayerStat[]>([]);
@@ -1104,7 +1106,10 @@ export function App() {
       }
       setComparisonLoading(true);
       setComparisonError(null);
-      const results = await Promise.all(playerIds.map(async (id) => [id, await fetchPlayerHistoryRows(competitionId, id)] as const));
+      const results = await Promise.all(playerIds.map(async (id) => {
+        const playerCompetitionId = comparisonCohortPlayers.find((player) => player.player_id === id)?.competition_id ?? competitionId;
+        return [id, await fetchPlayerHistoryRows(playerCompetitionId, id)] as const;
+      }));
       if (cancelled) return;
       setComparisonPlayerHistories(Object.fromEntries(results.map(([id, result]) => [id, result.rows])));
       setComparisonError(results.find(([, result]) => result.error)?.[1].error ?? null);
@@ -1113,7 +1118,7 @@ export function App() {
 
     void loadComparisonPlayerDetail();
     return () => { cancelled = true; };
-  }, [comparisonPlayerIds, competitionId, playerId, view]);
+  }, [comparisonCohortPlayers, comparisonPlayerIds, competitionId, playerId, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1202,10 +1207,13 @@ export function App() {
       }
 
       setComparisonPlayerHeatmapLoading(true);
-      const results = await Promise.all(playerIds.map(async (id) => [
-        id,
-        await fetchPlayerSeasonHeatmapRows(id, seasonId, matches),
-      ] as const));
+      const results = await Promise.all(playerIds.map(async (id) => {
+        const playerSeasonId = comparisonCohortPlayers.find((player) => player.player_id === id)?.season_id ?? seasonId;
+        return [
+          id,
+          await fetchPlayerSeasonHeatmapRows(id, playerSeasonId, playerSeasonId === seasonId ? matches : []),
+        ] as const;
+      }));
       if (cancelled) return;
       setComparisonPlayerSeasonHeatmaps(Object.fromEntries(results.map(([id, result]) => [id, result.rows])));
       setComparisonPlayerHeatmapLoading(false);
@@ -1213,7 +1221,7 @@ export function App() {
 
     void loadComparisonPlayerSeasonHeatmaps();
     return () => { cancelled = true; };
-  }, [comparisonPlayerIds, matches, playerId, refreshToken, seasonId, view]);
+  }, [comparisonCohortPlayers, comparisonPlayerIds, matches, playerId, refreshToken, seasonId, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1721,8 +1729,11 @@ export function App() {
     loanProfilePlayers.forEach((player) => {
       if (!byPlayerId.has(player.player_id)) byPlayerId.set(player.player_id, player);
     });
+    comparisonCohortPlayers.forEach((player) => {
+      if (!byPlayerId.has(player.player_id)) byPlayerId.set(player.player_id, player);
+    });
     return [...byPlayerId.values()];
-  }, [loanProfilePlayers, players, teamRoster]);
+  }, [comparisonCohortPlayers, loanProfilePlayers, players, teamRoster]);
   const selectedPlayer = profilePlayers.find((player) => player.player_id === playerId);
   const selectedPlayerLoan = useMemo(() => playerLoans
     .filter((loan) => loan.player_id === playerId)
@@ -2218,6 +2229,7 @@ export function App() {
   }
 
   function openPlayer(nextPlayerId: string) {
+    setComparisonCohortPlayers([]);
     setComparisonPlayerIds([]);
     setRoleFilter("All");
     setPositionFilter("All");
@@ -2236,10 +2248,36 @@ export function App() {
   }
 
   function openLegionnaire(player: Legionnaire) {
+    setComparisonCohortPlayers([]);
     setCompetitionId(player.competition_id);
     setSeasonId(player.season_id);
     setPlayerId(player.player_id);
     setComparisonPlayerIds([]);
+    navigate("players");
+  }
+
+  function compareTopPlayers(nextPlayers: SeasonPlayer[], nextMetricCode: string) {
+    const uniquePlayers = [...new Map(nextPlayers.map((player) => [player.player_id, player])).values()].slice(0, 5);
+    if (uniquePlayers.length < 2) return;
+    const primaryPlayer = uniquePlayers[0];
+    const sourceMetricCode = leaderboardSourceMetricCode(nextMetricCode);
+    const desiredChartMetricCode = sourceMetricCode === "season_minutes" ? "minutes" : nextMetricCode;
+    const chartMetric = playerChartMetrics.find((metric) => metric.chartKey === desiredChartMetricCode)
+      ?? playerChartMetrics.find((metric) => metric.chartKey === sourceMetricCode);
+
+    setComparisonCohortPlayers(uniquePlayers);
+    if (primaryPlayer.season_id !== seasonId) setSeasonPlayerLoadSucceeded(false);
+    setCompetitionId(primaryPlayer.competition_id);
+    setSeasonId(primaryPlayer.season_id);
+    setRoleFilter("All");
+    setPositionFilter("All");
+    setClubFilter("all");
+    setPlayerQuery("");
+    setAttributeQuery("");
+    setExplorerMetricCode(nextMetricCode);
+    setPlayerId(primaryPlayer.player_id);
+    setComparisonPlayerIds(uniquePlayers.slice(1).map((player) => player.player_id));
+    if (chartMetric) setMetricCode(chartMetric.chartKey);
     navigate("players");
   }
 
@@ -2384,6 +2422,7 @@ export function App() {
               openMatch={openMatch}
               openClub={openClub}
               openPlayer={openOverviewPlayer}
+              compareTopPlayers={compareTopPlayers}
             />
           ) : (
             <OverviewView
@@ -2407,6 +2446,7 @@ export function App() {
               openMatch={openMatch}
               openClub={openClub}
               openPlayer={openPlayer}
+              compareTopPlayers={compareTopPlayers}
               showMatches={() => navigate("matches")}
             />
           )
@@ -2466,6 +2506,7 @@ export function App() {
             leaderboardError={squadLeaderboardError}
             openMatch={openMatch}
             openPlayer={openPlayer}
+            compareTopPlayers={compareTopPlayers}
           />
         ) : view === "legionnaires" ? (
           <LegionnairesView
@@ -2485,6 +2526,7 @@ export function App() {
             loading={legionnaireLoading || legionnaireLeaderboardLoading}
             error={legionnaireError ?? legionnaireLeaderboardError}
             openPlayer={openLegionnaire}
+            compareTopPlayers={compareTopPlayers}
           />
         ) : (
           <PlayersView
@@ -2501,6 +2543,7 @@ export function App() {
             setRankingRatingMinimumMinutes={setExplorerRatingMinimumMinutes}
             rankingLoading={explorerLeaderboardLoading}
             rankingError={explorerLeaderboardError}
+            compareTopPlayers={compareTopPlayers}
             allPlayersCount={players.length}
             selectedPlayer={selectedPlayer}
             selectedPlayerLoan={selectedPlayerLoan}
@@ -2512,6 +2555,7 @@ export function App() {
             comparisonSeasonHeatmaps={comparisonPlayerSeasonHeatmaps}
             comparisonSeasonHeatmapLoading={comparisonPlayerHeatmapLoading}
             selectPlayer={(nextPlayerId) => {
+              setComparisonCohortPlayers([]);
               setComparisonPlayerIds([]);
               setPlayerId(nextPlayerId);
             }}
@@ -2660,6 +2704,7 @@ function AllTournamentsOverview({
   openMatch,
   openClub,
   openPlayer,
+  compareTopPlayers,
 }: {
   seasonName: string;
   competitions: Competition[];
@@ -2677,6 +2722,7 @@ function AllTournamentsOverview({
   openMatch: (match: Match) => void;
   openClub: (id: string) => void;
   openPlayer: (id: string, season: Season) => void;
+  compareTopPlayers: (players: SeasonPlayer[], metricCode: string) => void;
 }) {
   const { language, text } = useLocale();
   const competitionById = new Map(competitions.map((competition) => [competition.competition_id, competition]));
@@ -2787,6 +2833,7 @@ function AllTournamentsOverview({
                       loading={league?.loading ?? false}
                       error={league?.error ?? null}
                       openPlayer={(id) => { if (league) openPlayer(id, league.season); }}
+                      compareTopPlayers={compareTopPlayers}
                     />
                   </section>
                 </div>
@@ -2796,6 +2843,35 @@ function AllTournamentsOverview({
         </div>
       )}
     </>
+  );
+}
+
+function CompareTopFiveButton({
+  players,
+  metricCode,
+  loading = false,
+  onCompare,
+  compact = false,
+}: {
+  players: SeasonPlayer[];
+  metricCode: string;
+  loading?: boolean;
+  onCompare: (players: SeasonPlayer[], metricCode: string) => void;
+  compact?: boolean;
+}) {
+  const { text } = useLocale();
+  const topPlayers = [...new Map(players.map((player) => [player.player_id, player])).values()].slice(0, 5);
+  return (
+    <button
+      className={`compare-top-five${compact ? " compact" : ""}`}
+      disabled={loading || topPlayers.length < 2}
+      title={text.compareTopFive}
+      type="button"
+      onClick={() => onCompare(topPlayers, metricCode)}
+    >
+      <ArrowLeftRight size={14} aria-hidden="true" />
+      <span>{text.compareTopFive}</span>
+    </button>
   );
 }
 
@@ -2815,6 +2891,7 @@ function PlayerLeaderboardPanel({
   loading,
   error,
   openPlayer,
+  compareTopPlayers,
 }: {
   scopeLabel: string;
   seasonPlayers: SeasonPlayer[];
@@ -2831,6 +2908,7 @@ function PlayerLeaderboardPanel({
   loading: boolean;
   error: string | null;
   openPlayer: (id: string) => void;
+  compareTopPlayers: (players: SeasonPlayer[], metricCode: string) => void;
 }) {
   const { language, text } = useLocale();
   const selectedMetric = metrics.find((metric) => metric.code === metricCode);
@@ -2838,18 +2916,25 @@ function PlayerLeaderboardPanel({
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
   const minutesByPlayer = new Map(seasonPlayers.map((player) => [player.player_id, Number(player.minutes)]));
   const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
+  const rankedPlayers = leaders.flatMap((leader) => {
+    const player = seasonPlayerById.get(leader.player_id);
+    return player ? [player] : [];
+  });
 
   return (
     <>
       <div className="leaderboard-heading">
         <div><span>{scopeLabel}</span><h2>{selectedMetric?.name ?? text.performance}</h2></div>
-        <label className="leader-metric-select">
-          <span>{text.sortBy}</span>
-          <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
-            <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-            <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-          </select>
-        </label>
+        <div className="leaderboard-actions">
+          <label className="leader-metric-select">
+            <span>{text.sortBy}</span>
+            <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
+              <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+              <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+            </select>
+          </label>
+          <CompareTopFiveButton players={rankedPlayers} metricCode={metricCode} loading={loading} onCompare={compareTopPlayers} />
+        </div>
       </div>
       {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
       <div className="leader-list">
@@ -2889,6 +2974,7 @@ function OverviewView({
   openMatch,
   openClub,
   openPlayer,
+  compareTopPlayers,
   showMatches,
 }: {
   season: Season;
@@ -2911,6 +2997,7 @@ function OverviewView({
   openMatch: (match: Match) => void;
   openClub: (id: string) => void;
   openPlayer: (id: string) => void;
+  compareTopPlayers: (players: SeasonPlayer[], metricCode: string) => void;
   showMatches: () => void;
 }) {
   const { language, text } = useLocale();
@@ -2988,6 +3075,7 @@ function OverviewView({
             loading={loading}
             error={error}
             openPlayer={openPlayer}
+            compareTopPlayers={compareTopPlayers}
           />
         </section>
       </div>
@@ -3164,6 +3252,7 @@ function ClubsView({
   leaderboardError,
   openMatch,
   openPlayer,
+  compareTopPlayers,
 }: {
   clubs: Club[];
   selectedClub?: Club;
@@ -3193,6 +3282,7 @@ function ClubsView({
   leaderboardError: string | null;
   openMatch: (match: Match) => void;
   openPlayer: (id: string) => void;
+  compareTopPlayers: (players: SeasonPlayer[], metricCode: string) => void;
 }) {
   const { language, text } = useLocale();
   const recent = matches.filter(isCompletedMatch).slice(0, 5);
@@ -3200,6 +3290,7 @@ function ClubsView({
   const loanLeaderboardByPlayerId = new Map(loanLeaderboardRows.map((row) => [row.player_id, row]));
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
   const matchMetrics = metrics.filter((metric) => metric.kind === "match");
+  const rankedSquadPlayers = squadRows.flatMap(({ player, ranking }) => ranking ? [player] : []);
   const normalizedQuery = query.trim().toLowerCase();
   const visibleClubs = (allTournaments ? [...clubs].sort((a, b) => localizedClubName(a, language).localeCompare(localizedClubName(b, language), localeCode(language))) : clubs)
     .filter((club) => !normalizedQuery || [localizedClubName(club, language), club.team_name, club.team_name_he, club.city]
@@ -3251,13 +3342,16 @@ function ClubsView({
                 <section className="surface squad-panel">
                   <div className="squad-leaderboard-heading">
                     <div><span>{squad.length} {text.players.toLowerCase()}, {loans.length} {text.loaned.toLowerCase()}</span><h2>{text.seasonSquad}</h2></div>
-                    <label className="leader-metric-select squad-metric-select">
-                      <span>{text.rankBy}</span>
-                      <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
-                        <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-                        <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-                      </select>
-                    </label>
+                    <div className="leaderboard-actions squad-leaderboard-actions">
+                      <label className="leader-metric-select squad-metric-select">
+                        <span>{text.rankBy}</span>
+                        <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
+                          <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                          <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                        </select>
+                      </label>
+                      <CompareTopFiveButton players={rankedSquadPlayers} metricCode={metricCode} loading={leaderboardLoading} onCompare={compareTopPlayers} />
+                    </div>
                   </div>
                   {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={qualifiedSquadCount} loading={leaderboardLoading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
                   {leaderboardError && <p className="panel-inline-error">{text.squadLoadError}</p>}
@@ -3406,6 +3500,7 @@ function LegionnairesView({
   loading,
   error,
   openPlayer,
+  compareTopPlayers,
 }: {
   seasonName: string;
   players: Array<{ player: Legionnaire; ranking: PlayerLeaderboardRow }>;
@@ -3423,6 +3518,7 @@ function LegionnairesView({
   loading: boolean;
   error: string | null;
   openPlayer: (player: Legionnaire) => void;
+  compareTopPlayers: (players: SeasonPlayer[], metricCode: string) => void;
 }) {
   const { language, text } = useLocale();
   const seasonMetrics = metrics.filter((metric) => metric.kind === "season");
@@ -3437,7 +3533,7 @@ function LegionnairesView({
       />
       <section className="surface legionnaires-board">
         <div className="legionnaires-toolbar">
-          <div>
+          <div className="legionnaires-title">
             <span>{text.playerLeaderboard}</span>
             <h2>{selectedMetric?.name ?? text.performance}</h2>
           </div>
@@ -3445,13 +3541,16 @@ function LegionnairesView({
             <Search size={17} />
             <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.searchPlayers} />
           </label>
-          <label className="player-ranking-select legionnaire-metric-select">
-            <span>{text.rankBy}</span>
-            <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
-              <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-              <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
-            </select>
-          </label>
+          <div className="leaderboard-actions legionnaire-ranking-actions">
+            <label className="player-ranking-select legionnaire-metric-select">
+              <span>{text.rankBy}</span>
+              <select value={metricCode} onChange={(event) => setMetricCode(event.target.value)}>
+                <optgroup label={text.seasonSummaryGroup}>{seasonMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+                <optgroup label={text.matchMetricsGroup}>{matchMetrics.map((metric) => <option key={metric.code} value={metric.code}>{metric.name}</option>)}</optgroup>
+              </select>
+            </label>
+            <CompareTopFiveButton players={players.map(({ player }) => player)} metricCode={metricCode} loading={loading} onCompare={compareTopPlayers} />
+          </div>
         </div>
         {qualification && (
           <LeaderboardQualificationFilter
@@ -3816,6 +3915,7 @@ function PlayersView({
   setRankingRatingMinimumMinutes,
   rankingLoading,
   rankingError,
+  compareTopPlayers,
   allPlayersCount,
   selectedPlayer,
   selectedPlayerLoan,
@@ -3876,6 +3976,7 @@ function PlayersView({
   setRankingRatingMinimumMinutes: (value: number) => void;
   rankingLoading: boolean;
   rankingError: string | null;
+  compareTopPlayers: (players: SeasonPlayer[], metricCode: string) => void;
   allPlayersCount: number;
   selectedPlayer?: SeasonPlayer;
   selectedPlayerLoan?: PlayerLoan;
@@ -4136,13 +4237,16 @@ function PlayersView({
         <aside className="surface player-directory">
           <div className="rail-heading player-ranking-heading">
             <strong>{numberFormatter.format(players.length)} {text.results}</strong>
-            <label className="player-ranking-select">
-              <span>{text.rankBy}</span>
-              <select aria-label={text.rankPlayersBy} value={rankingMetricCode} onChange={(event) => setRankingMetricCode(event.target.value)}>
-                <optgroup label={text.seasonSummaryGroup}>{seasonRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
-                <optgroup label={text.matchMetricsGroup}>{matchRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
-              </select>
-            </label>
+            <div className="player-ranking-controls">
+              <label className="player-ranking-select">
+                <span>{text.rankBy}</span>
+                <select aria-label={text.rankPlayersBy} value={rankingMetricCode} onChange={(event) => setRankingMetricCode(event.target.value)}>
+                  <optgroup label={text.seasonSummaryGroup}>{seasonRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
+                  <optgroup label={text.matchMetricsGroup}>{matchRankingMetrics.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</optgroup>
+                </select>
+              </label>
+              <CompareTopFiveButton players={players} metricCode={rankingMetricCode} loading={rankingLoading} onCompare={compareTopPlayers} compact />
+            </div>
           </div>
           {rankingQualification && (
             <div className="directory-qualification">
@@ -5153,13 +5257,13 @@ function playerComparisonClass(
 ) {
   if (value === null || otherValue === null) return "";
   if (Math.abs(value - otherValue) < 0.000001) return "tie";
-  const lowerIsBetter = lowerIsBetterMetricCodes.has(metricCode);
+  const lowerIsBetter = isLowerBetterMetric(metricCode);
   const isBetter = lowerIsBetter ? value < otherValue : value > otherValue;
   return isBetter ? "better" : "worse";
 }
 
 function multiPlayerRankClasses(values: (number | null)[], metricCode: string) {
-  const lowerIsBetter = lowerIsBetterMetricCodes.has(metricCode);
+  const lowerIsBetter = isLowerBetterMetric(metricCode);
   const distinctValues = [...new Set(values.filter((value): value is number => value !== null && Number.isFinite(value)))]
     .sort((a, b) => lowerIsBetter ? a - b : b - a);
   return values.map((value) => {
@@ -5169,6 +5273,10 @@ function multiPlayerRankClasses(values: (number | null)[], metricCode: string) {
     if (rank === 2) return "rank-second";
     return "rank-rest";
   });
+}
+
+function isLowerBetterMetric(metricCode: string) {
+  return lowerIsBetterMetricCodes.has(leaderboardSourceMetricCode(metricCode).replace(/::paired$/, ""));
 }
 
 function playerAttributeCategory(metric: Pick<Metric, "code">): PlayerAttributeCategory {
@@ -5560,12 +5668,18 @@ function roleLabel(role: RoleFilter, language: Language) {
   return ({ Goalkeepers: "GK", Defenders: "DEF", Midfielders: "MID", Attackers: "FWD" } as Record<string, string>)[role];
 }
 
-function compareLeaderboardRows(a: PlayerLeaderboardRow, b: PlayerLeaderboardRow) {
-  const aValue = a.leaderboard_value === null ? Number.NEGATIVE_INFINITY : Number(a.leaderboard_value);
-  const bValue = b.leaderboard_value === null ? Number.NEGATIVE_INFINITY : Number(b.leaderboard_value);
+function compareLeaderboardRows(a: PlayerLeaderboardRow, b: PlayerLeaderboardRow, metricCode: string) {
+  const lowerIsBetter = isLowerBetterMetric(metricCode);
+  const missingValue = lowerIsBetter ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+  const aNumericValue = Number(a.leaderboard_value);
+  const bNumericValue = Number(b.leaderboard_value);
+  const aValue = a.leaderboard_value === null || !Number.isFinite(aNumericValue) ? missingValue : aNumericValue;
+  const bValue = b.leaderboard_value === null || !Number.isFinite(bNumericValue) ? missingValue : bNumericValue;
   const aSecondary = a.value_type === "percentage" ? Number(a.denominator_value ?? 0) : Number(a.sample_size);
   const bSecondary = b.value_type === "percentage" ? Number(b.denominator_value ?? 0) : Number(b.sample_size);
-  return bValue - aValue || bSecondary - aSecondary || a.display_name.localeCompare(b.display_name);
+  return (lowerIsBetter ? aValue - bValue : bValue - aValue)
+    || bSecondary - aSecondary
+    || a.display_name.localeCompare(b.display_name);
 }
 
 function getLeaderboardQualification(metric?: LeaderboardMetricOption): LeaderboardQualification | null {
@@ -5659,7 +5773,7 @@ function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPla
   const eligibleRows = isGoalkeepingMetricCode(metricCode)
     ? rows.filter((row) => roleByPlayer.get(row.player_id) === "Goalkeepers")
     : rows;
-  if (!metricCode.endsWith("::per90")) return [...eligibleRows].sort(compareLeaderboardRows);
+  if (!metricCode.endsWith("::per90")) return [...eligibleRows].sort((a, b) => compareLeaderboardRows(a, b, metricCode));
 
   const minutesByPlayer = new Map(players.map((player) => [player.player_id, Number(player.minutes)]));
   return eligibleRows.map((row): PlayerLeaderboardRow => {
@@ -5675,7 +5789,7 @@ function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPla
       leaderboard_value: value,
       average_value: value,
     };
-  }).sort(compareLeaderboardRows);
+  }).sort((a, b) => compareLeaderboardRows(a, b, metricCode));
 }
 
 function makeSeasonSummaryLeaderboard(players: SeasonPlayer[], seasonId: string, metricCode: string) {
@@ -5702,7 +5816,7 @@ function makeSeasonSummaryLeaderboard(players: SeasonPlayer[], seasonId: string,
       numerator_value: null,
       denominator_value: null,
     };
-  }).sort(compareLeaderboardRows);
+  }).sort((a, b) => compareLeaderboardRows(a, b, metricCode));
 }
 
 function makeDemoLeaderboard(players: SeasonPlayer[], seasonId: string, metricCode: string) {

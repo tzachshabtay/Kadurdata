@@ -1007,6 +1007,49 @@ input[type="search"]::-webkit-search-cancel-button {
   font-weight: 750;
 }
 
+.leaderboard-actions {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.compare-top-five {
+  display: inline-flex;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--teal);
+  border: 1px solid var(--green);
+  border-radius: 5px;
+  background: var(--green-deep);
+  font-size: 9px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.compare-top-five:hover:not(:disabled) {
+  color: #07110d;
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.compare-top-five:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.compare-top-five.compact {
+  width: 100%;
+  height: 30px;
+  padding-inline: 7px;
+  font-size: 8px;
+}
+
 .qualification-filter {
   display: flex;
   align-items: center;
@@ -2431,14 +2474,14 @@ tr:last-child td {
 
 .legionnaires-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(210px, 300px) 230px;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 300px) minmax(340px, auto);
   align-items: end;
   gap: 14px;
   padding: 16px 18px;
   border-bottom: 1px solid var(--line);
 }
 
-.legionnaires-toolbar > div > span {
+.legionnaires-title > span {
   color: var(--green);
   font-size: 8px;
   font-weight: 850;
@@ -2456,6 +2499,11 @@ tr:last-child td {
 
 .legionnaire-metric-select select {
   width: 100%;
+}
+
+.legionnaire-ranking-actions .legionnaire-metric-select {
+  min-width: 220px;
+  flex: 1 1 auto;
 }
 
 .legionnaires-board > .qualification-filters,
@@ -2580,7 +2628,15 @@ tr:last-child td {
 
 .player-ranking-heading {
   flex: 0 0 auto;
-  min-height: 62px;
+  min-height: 104px;
+  align-items: start;
+  padding-block: 10px;
+}
+
+.player-ranking-controls {
+  display: grid;
+  width: 182px;
+  gap: 6px;
 }
 
 .player-ranking-select {
@@ -4086,7 +4142,7 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
     grid-template-columns: minmax(0, 1fr) 230px;
   }
 
-  .legionnaires-toolbar > div {
+  .legionnaires-title {
     grid-column: 1 / -1;
   }
 }
@@ -4143,7 +4199,7 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
     padding: 14px;
   }
 
-  .legionnaires-toolbar > div {
+  .legionnaires-title {
     grid-column: auto;
   }
 
@@ -4321,6 +4377,16 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
   }
 
   .leader-metric-select select {
+    width: 100%;
+  }
+
+  .leaderboard-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .compare-top-five {
     width: 100%;
   }
 
