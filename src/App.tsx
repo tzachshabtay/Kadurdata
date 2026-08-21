@@ -443,6 +443,13 @@ function isSchemaCacheMiss(error: { code?: string; message?: string } | null) {
   return error?.code === "PGRST202" || error?.message?.toLowerCase().includes("schema cache") === true;
 }
 
+function isRetryableSupabaseError(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return isSchemaCacheMiss(error)
+    || message.includes("statement timeout")
+    || message.includes("canceling statement");
+}
+
 function delay(milliseconds: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
@@ -1380,7 +1387,7 @@ export function App() {
 
       let result = await supabase.rpc("api_legionnaires", { p_season_name: legionnaireSeasonName });
       for (const delayMs of [500, 1500, 3000]) {
-        if (!isSchemaCacheMiss(result.error)) break;
+        if (!isRetryableSupabaseError(result.error)) break;
         await delay(delayMs);
         result = await supabase.rpc("api_legionnaires", { p_season_name: legionnaireSeasonName });
       }
@@ -1903,13 +1910,20 @@ export function App() {
         return;
       }
 
-      const result = isValuationMetricCode(legionnaireMetricCode)
-        ? await supabase.rpc("api_legionnaire_valuation_leaderboard", { p_season_name: legionnaireSeasonName })
-        : await supabase.rpc("api_legionnaire_leaderboard", {
+      const client = supabase;
+      const requestLeaderboard = () => isValuationMetricCode(legionnaireMetricCode)
+        ? client.rpc("api_legionnaire_valuation_leaderboard", { p_season_name: legionnaireSeasonName })
+        : client.rpc("api_legionnaire_leaderboard", {
           p_season_name: legionnaireSeasonName,
           p_metric_code: leaderboardSourceMetricCode(legionnaireMetricCode),
           p_min_minutes: ratingMinimumForMetric(legionnaireMetricCode, legionnaireRatingMinimumMinutes),
         });
+      let result = await requestLeaderboard();
+      for (const delayMs of [500, 1500, 3000]) {
+        if (!isRetryableSupabaseError(result.error)) break;
+        await delay(delayMs);
+        result = await requestLeaderboard();
+      }
       if (cancelled) return;
       if (result.error) {
         setLegionnaireLeaderboardError(result.error.message);
