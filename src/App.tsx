@@ -780,6 +780,11 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const overviewSeasonDefaultApplied = useRef(Boolean(initialDeepLink.seasonId));
   const pendingMatchSelection = useRef<{ seasonId: string; matchId: string; roundId: string | null } | null>(null);
+  const pendingPlayerSelection = useRef<{ seasonId: string; playerId: string } | null>(
+    initialDeepLink.seasonId && initialDeepLink.playerId
+      ? { seasonId: initialDeepLink.seasonId, playerId: initialDeepLink.playerId }
+      : null,
+  );
 
   async function loadReferenceData() {
     setLoading(true);
@@ -854,6 +859,9 @@ export function App() {
       setShotSide(next.shotSide);
       setShotPlayerId(next.shotPlayerId);
       setClubId(next.clubId);
+      pendingPlayerSelection.current = next.seasonId && next.playerId
+        ? { seasonId: next.seasonId, playerId: next.playerId }
+        : null;
       setPlayerId(next.playerId);
       setComparisonPlayerIds(next.comparisonPlayerIds);
       if (next.metricCode) setMetricCode(next.metricCode);
@@ -1008,6 +1016,10 @@ export function App() {
       setRoundId((current) => nextRounds.some((round) => round.round_id === current) ? current : latestPlayedRound?.round_id ?? "");
       setClubId((current) => nextClubs.some((club) => club.team_id === current) ? current : nextClubs[0]?.team_id ?? "");
       setPlayerId((current) => {
+        const pendingPlayer = pendingPlayerSelection.current;
+        if (pendingPlayer?.seasonId === seasonId) {
+          return pendingPlayer.playerId;
+        }
         if (playerResult.error && current) return current;
         return nextPlayers.some((player) => player.player_id === current)
           || nextPlayerLoans.some((loan) => loan.player_id === current)
@@ -1756,6 +1768,44 @@ export function App() {
     return [...byPlayerId.values()];
   }, [comparisonCohortPlayers, loanProfilePlayers, players, teamRoster]);
   const selectedPlayer = profilePlayers.find((player) => player.player_id === playerId);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLegionnaireProfileFallback() {
+      if (
+        view !== "players"
+        || loading
+        || selectedPlayer
+        || !playerId
+        || currentSeason.season_id !== seasonId
+        || currentCompetition?.scope !== "foreign_club"
+        || !hasSupabaseConfig
+        || !supabase
+      ) return;
+
+      let result = await supabase.rpc("api_legionnaires", { p_season_name: currentSeason.season_name });
+      for (const delayMs of [500, 1500, 3000]) {
+        if (!isRetryableSupabaseError(result.error)) break;
+        await delay(delayMs);
+        result = await supabase.rpc("api_legionnaires", { p_season_name: currentSeason.season_name });
+      }
+      if (cancelled) return;
+
+      const fallback = ((result.data ?? []) as Legionnaire[]).find((player) => player.player_id === playerId);
+      if (fallback) {
+        setComparisonCohortPlayers((current) => [
+          fallback,
+          ...current.filter((player) => player.player_id !== fallback.player_id),
+        ].slice(0, 5));
+      } else if (pendingPlayerSelection.current?.playerId === playerId) {
+        pendingPlayerSelection.current = null;
+        setComparisonCohortPlayers((current) => [...current]);
+      }
+    }
+
+    void loadLegionnaireProfileFallback();
+    return () => { cancelled = true; };
+  }, [currentCompetition?.scope, currentSeason.season_id, currentSeason.season_name, loading, playerId, seasonId, selectedPlayer, view]);
   const selectedPlayerLoan = useMemo(() => playerLoans
     .filter((loan) => loan.player_id === playerId)
     .sort((a, b) => dateValue(b.started_on) - dateValue(a.started_on))[0], [playerId, playerLoans]);
@@ -2026,10 +2076,12 @@ export function App() {
     return player ? [player] : [];
   });
   useEffect(() => {
-    if (view !== "players" || explorerLeaderboardLoading || selectedPlayerLoan || !rankedExplorerPlayers.length || rankedExplorerPlayers.some((player) => player.player_id === playerId)) return;
+    const hasPinnedProfile = comparisonCohortPlayers.some((player) => player.player_id === playerId);
+    const hasPendingProfile = pendingPlayerSelection.current?.playerId === playerId;
+    if (view !== "players" || explorerLeaderboardLoading || selectedPlayerLoan || hasPinnedProfile || hasPendingProfile || !rankedExplorerPlayers.length || rankedExplorerPlayers.some((player) => player.player_id === playerId)) return;
     setComparisonPlayerIds([]);
     setPlayerId(rankedExplorerPlayers[0].player_id);
-  }, [explorerLeaderboardLoading, playerId, rankedExplorerPlayers, selectedPlayerLoan, view]);
+  }, [comparisonCohortPlayers, explorerLeaderboardLoading, playerId, rankedExplorerPlayers, selectedPlayerLoan, view]);
   const clubMatches = useMemo(
     () => clubTournamentScope === "all" && view === "clubs"
       ? allTournamentClubMatches
@@ -2257,6 +2309,11 @@ export function App() {
     window.history.pushState(null, "", `#${nextView}`);
   }
 
+  function clearPinnedPlayerProfile() {
+    pendingPlayerSelection.current = null;
+    setComparisonCohortPlayers([]);
+  }
+
   function openMatch(match: Match) {
     if (match.competition_id !== competitionId || match.season_id !== seasonId) {
       pendingMatchSelection.current = {
@@ -2277,8 +2334,9 @@ export function App() {
     navigate("matches");
   }
 
-  function openPlayer(nextPlayerId: string) {
-    setComparisonCohortPlayers([]);
+  function openPlayer(nextPlayerId: string, targetSeasonId?: string, profileFallback?: SeasonPlayer) {
+    pendingPlayerSelection.current = targetSeasonId ? { seasonId: targetSeasonId, playerId: nextPlayerId } : null;
+    setComparisonCohortPlayers(profileFallback ? [profileFallback] : []);
     setComparisonPlayerIds([]);
     setRoleFilter("All");
     setPositionFilter("All");
@@ -2293,16 +2351,13 @@ export function App() {
   function openOverviewPlayer(nextPlayerId: string, season: Season) {
     setCompetitionId(season.competition_id);
     setSeasonId(season.season_id);
-    openPlayer(nextPlayerId);
+    openPlayer(nextPlayerId, season.season_id);
   }
 
   function openLegionnaire(player: Legionnaire) {
-    setComparisonCohortPlayers([]);
     setCompetitionId(player.competition_id);
     setSeasonId(player.season_id);
-    setPlayerId(player.player_id);
-    setComparisonPlayerIds([]);
-    navigate("players");
+    openPlayer(player.player_id, player.season_id, player);
   }
 
   function compareTopPlayers(nextPlayers: SeasonPlayer[], nextMetricCode: string) {
@@ -2315,7 +2370,10 @@ export function App() {
       ?? playerChartMetrics.find((metric) => metric.chartKey === sourceMetricCode);
 
     setComparisonCohortPlayers(uniquePlayers);
-    if (primaryPlayer.season_id !== seasonId) setSeasonPlayerLoadSucceeded(false);
+    if (primaryPlayer.season_id !== seasonId) {
+      pendingPlayerSelection.current = { seasonId: primaryPlayer.season_id, playerId: primaryPlayer.player_id };
+      setSeasonPlayerLoadSucceeded(false);
+    }
     setCompetitionId(primaryPlayer.competition_id);
     setSeasonId(primaryPlayer.season_id);
     setRoleFilter("All");
@@ -2383,6 +2441,7 @@ export function App() {
               value={showingLegionnaires ? "foreign-leagues" : showingAllTournaments ? allTournamentsValue : competitionId}
               disabled={showingLegionnaires}
               onChange={(event) => {
+                if (view === "players") clearPinnedPlayerProfile();
                 if (event.target.value === allTournamentsValue) {
                   if (view === "overview") selectAllTournamentOverview();
                   else setClubTournamentScope("all");
@@ -2417,6 +2476,7 @@ export function App() {
             <select
               value={showingLegionnaires ? legionnaireSeasonName : showingAllTournaments ? currentSeason.season_name : seasonId}
               onChange={(event) => {
+                if (view === "players") clearPinnedPlayerProfile();
                 if (showingLegionnaires) {
                   setLegionnaireSeasonName(event.target.value);
                   return;
@@ -2604,11 +2664,14 @@ export function App() {
             comparisonSeasonHeatmaps={comparisonPlayerSeasonHeatmaps}
             comparisonSeasonHeatmapLoading={comparisonPlayerHeatmapLoading}
             selectPlayer={(nextPlayerId) => {
-              setComparisonCohortPlayers([]);
+              clearPinnedPlayerProfile();
               setComparisonPlayerIds([]);
               setPlayerId(nextPlayerId);
             }}
-            replacePrimaryPlayer={setPlayerId}
+            replacePrimaryPlayer={(nextPlayerId) => {
+              pendingPlayerSelection.current = null;
+              setPlayerId(nextPlayerId);
+            }}
             roles={roleFilters}
             roleFilter={roleFilter}
             setRoleFilter={(role) => { setRoleFilter(role); setPositionFilter("All"); }}
