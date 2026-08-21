@@ -23,7 +23,12 @@ on:
         required: false
         default: ""
   schedule:
-    - cron: "17 3 * * *"
+    - cron: "17 1-23/2 * * *"
+    - cron: "47 2 * * *"
+
+concurrency:
+  group: seed-supabase
+  cancel-in-progress: false
 
 jobs:
   seed:
@@ -35,6 +40,8 @@ jobs:
       SEED_LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_limit || '0' }}
       SEED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_mode || 'recent' }}
       COMPETITION_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.competition_ids || '' }}
+      RUN_MATCH_REFRESH: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '17 1-23/2 * * *' }}
+      RUN_MAINTENANCE: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '47 2 * * *' }}
 
     steps:
       - name: Checkout
@@ -60,7 +67,7 @@ jobs:
         run: python scripts/apply_migrations.py
 
       - name: Fetch and flatten 365Scores data
-        if: env.SEED_MODE != 'legionnaires' && env.SEED_MODE != 'hebrew_names'
+        if: env.RUN_MATCH_REFRESH == 'true' && env.SEED_MODE != 'legionnaires' && env.SEED_MODE != 'hebrew_names'
         run: |
           args=(
             --all-israeli-competitions
@@ -90,11 +97,11 @@ jobs:
           python scripts/ingest_365scores.py "${args[@]}"
 
       - name: Load Supabase
-        if: env.SEED_MODE != 'legionnaires' && env.SEED_MODE != 'hebrew_names'
+        if: env.RUN_MATCH_REFRESH == 'true' && env.SEED_MODE != 'legionnaires' && env.SEED_MODE != 'hebrew_names'
         run: python scripts/load_365scores_to_supabase.py
 
       - name: Discover the full Israeli-abroad player census
-        if: env.SEED_MODE != 'hebrew_names'
+        if: env.RUN_MAINTENANCE == 'true' && env.SEED_MODE != 'hebrew_names'
         run: |
           python scripts/sync_transfermarkt_legionnaires.py \
             --allow-fetch-failures \
@@ -103,7 +110,7 @@ jobs:
             --workers 8
 
       - name: Fetch and flatten legionnaire data
-        if: env.SEED_MODE != 'hebrew_names'
+        if: env.RUN_MATCH_REFRESH == 'true' && env.SEED_MODE != 'hebrew_names'
         run: |
           args=(
             --allow-fetch-failures
@@ -131,11 +138,11 @@ jobs:
           python scripts/ingest_legionnaires.py "${args[@]}"
 
       - name: Load legionnaire data
-        if: env.SEED_MODE != 'hebrew_names'
+        if: env.RUN_MATCH_REFRESH == 'true' && env.SEED_MODE != 'hebrew_names'
         run: python scripts/load_365scores_to_supabase.py --processed-dir data/processed/legionnaires
 
       - name: Synchronize FotMob rosters and loans
-        if: env.SEED_MODE != 'hebrew_names'
+        if: env.RUN_MAINTENANCE == 'true' && env.SEED_MODE != 'hebrew_names'
         run: |
           python scripts/sync_fotmob_loans.py \
             --allow-fetch-failures \
@@ -144,7 +151,7 @@ jobs:
             --workers 6
 
       - name: Synchronize historical Transfermarkt loans
-        if: env.SEED_MODE != 'hebrew_names'
+        if: env.RUN_MAINTENANCE == 'true' && env.SEED_MODE != 'hebrew_names'
         run: |
           python scripts/sync_transfermarkt_loans.py \
             --lookback-years 2 \
@@ -153,6 +160,7 @@ jobs:
             --workers 6
 
       - name: Populate Hebrew team names
+        if: env.RUN_MAINTENANCE == 'true'
         run: |
           python scripts/backfill_hebrew_team_names.py \
             --allow-fetch-failures \
@@ -161,6 +169,7 @@ jobs:
             --workers 6
 
       - name: Populate Hebrew player names
+        if: env.RUN_MAINTENANCE == 'true'
         run: |
           args=(
             --allow-fetch-failures

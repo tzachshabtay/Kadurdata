@@ -333,6 +333,19 @@ def get_or_create_season(
     }
     mapped = get_mapping(cur, source_id, "season", source_entity_id)
     if mapped:
+        canonical = execute_one(
+            cur,
+            """
+            select id
+            from core.seasons
+            where competition_id = %s
+              and name = %s
+              and id <> %s
+            """,
+            (competition_id, name, mapped),
+        )
+        if canonical:
+            mapped = canonical["id"]
         cur.execute(
             """
             update core.seasons

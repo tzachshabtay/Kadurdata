@@ -28,10 +28,12 @@ Use the Supabase Postgres connection string for `SUPABASE_DB_URL`. The seed GitH
 3. keep UEFA/international fixtures involving an Israeli club or Israel national side
 4. fetch every match-bearing source season and load match, team, and player stats
 
-Scheduled runs use a recent rolling window across every competition. Manual
-runs use 2010/11 as the lower bound and load every result page and current fixture
-season still exposed by 365Scores. Older winner/standings-only history is not
-loaded from 365Scores because it has no match payloads. The separate
+Scheduled match refreshes run every two hours with a recent rolling window
+across every competition. Legionnaire census discovery, rosters, loans, and
+Hebrew-name maintenance run daily. Manual runs use 2010/11 as the lower bound
+and load every result page and current fixture season still exposed by
+365Scores. Older winner/standings-only history is not loaded from 365Scores
+because it has no match payloads. The separate
 `Seed FotMob History` workflow fills Ligat Ha'Al seasons from 2010/11 through
 2024/25 with fixtures and results, plus player-match stats wherever FotMob's
 historical match pages expose them.
