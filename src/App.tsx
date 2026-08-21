@@ -136,6 +136,7 @@ type PlayerChartMetric = Metric & {
   chartKey: string;
   chartMode: "single" | "paired";
   normalization: "raw" | "per90";
+  minimumMatchMinutes?: number;
 };
 
 const overviewLeagueCompetitionNames: Record<OverviewGroup, string> = {
@@ -1251,7 +1252,7 @@ export function App() {
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
         p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
-        p_min_minutes: isRatingMetricCode(leaderMetricCode) ? leaderRatingMinimumMinutes : 0,
+        p_min_minutes: ratingMinimumForMetric(leaderMetricCode, leaderRatingMinimumMinutes),
       });
       if (cancelled) return;
       if (result.error) {
@@ -1291,7 +1292,7 @@ export function App() {
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
         p_metric_code: leaderboardSourceMetricCode(squadMetricCode),
-        p_min_minutes: isRatingMetricCode(squadMetricCode) ? squadRatingMinimumMinutes : 0,
+        p_min_minutes: ratingMinimumForMetric(squadMetricCode, squadRatingMinimumMinutes),
       });
       if (cancelled) return;
       if (result.error) {
@@ -1331,7 +1332,7 @@ export function App() {
       const result = await supabase.rpc("api_player_leaderboard", {
         p_season_id: seasonId,
         p_metric_code: leaderboardSourceMetricCode(explorerMetricCode),
-        p_min_minutes: isRatingMetricCode(explorerMetricCode) ? explorerRatingMinimumMinutes : 0,
+        p_min_minutes: ratingMinimumForMetric(explorerMetricCode, explorerRatingMinimumMinutes),
       });
       if (cancelled) return;
       if (result.error) {
@@ -1578,7 +1579,7 @@ export function App() {
         const result = await client.rpc("api_player_leaderboard", {
           p_season_id: target.season.season_id,
           p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
-          p_min_minutes: isRatingMetricCode(leaderMetricCode) ? leaderRatingMinimumMinutes : 0,
+          p_min_minutes: ratingMinimumForMetric(leaderMetricCode, leaderRatingMinimumMinutes),
         });
         const playersForLeague = overviewLeaguePlayers[target.key] ?? [];
         return {
@@ -1773,6 +1774,17 @@ export function App() {
             chartMode: "single",
             normalization: "raw",
           };
+          if (metric.code === "rating_365") {
+            return [
+              rawMetric,
+              {
+                ...rawMetric,
+                name: text.ratingFull90,
+                chartKey: `${metric.code}::full90`,
+                minimumMatchMinutes: 90,
+              },
+            ];
+          }
           return metric.value_type === "count" && metric.code !== "minutes"
             ? [
                 rawMetric,
@@ -1787,7 +1799,7 @@ export function App() {
           { ...metric, name: per90Name(groupName, language), chartKey: `${metric.code}::per90`, chartMode: "paired", normalization: "per90" },
         ];
       });
-  }, [language, playerMetrics]);
+  }, [language, playerMetrics, text.ratingFull90]);
   const playerViewMetrics = useMemo(
     () => selectedPlayer?.role_group === "Goalkeepers" && comparisonPlayers.every((player) => player.role_group === "Goalkeepers")
       ? playerChartMetrics
@@ -1812,12 +1824,15 @@ export function App() {
           denominator_metric_code: metric.denominator_metric_code,
           kind: "match",
         };
+        if (metric.code === "rating_365") {
+          return [rawMetric, { ...rawMetric, code: `${metric.code}::full90`, name: text.ratingFull90 }];
+        }
         return metric.value_type === "count" && metric.code !== "minutes"
           ? [rawMetric, { ...rawMetric, code: `${metric.code}::per90`, name: per90Name(localizedName, language), value_type: "rate" }]
           : [rawMetric];
       }),
     ],
-    [language, playerMetrics],
+    [language, playerMetrics, text.ratingFull90],
   );
   const explorerLeaderboardMetrics = useMemo(() => {
     if (roleFilter === "All") return leaderboardMetrics;
@@ -1873,7 +1888,7 @@ export function App() {
       const result = await supabase.rpc("api_legionnaire_leaderboard", {
         p_season_name: legionnaireSeasonName,
         p_metric_code: leaderboardSourceMetricCode(legionnaireMetricCode),
-        p_min_minutes: isRatingMetricCode(legionnaireMetricCode) ? legionnaireRatingMinimumMinutes : 0,
+        p_min_minutes: ratingMinimumForMetric(legionnaireMetricCode, legionnaireRatingMinimumMinutes),
       });
       if (cancelled) return;
       if (result.error) {
@@ -2936,7 +2951,7 @@ function PlayerLeaderboardPanel({
           <CompareTopFiveButton players={rankedPlayers} metricCode={metricCode} loading={loading} onCompare={compareTopPlayers} />
         </div>
       </div>
-      {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
+      {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={leaders.length} loading={loading} ratingMinimumMinutes={hasConfigurableRatingMinimum(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
       <div className="leader-list">
         {loading ? <InlineLoading /> : error ? <EmptyState text={text.leaderboardLoadError} /> : leaders.length ? leaders.map((player, index) => {
           const seasonPlayer = seasonPlayerById.get(player.player_id);
@@ -3353,7 +3368,7 @@ function ClubsView({
                       <CompareTopFiveButton players={rankedSquadPlayers} metricCode={metricCode} loading={leaderboardLoading} onCompare={compareTopPlayers} />
                     </div>
                   </div>
-                  {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={qualifiedSquadCount} loading={leaderboardLoading} ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
+                  {qualification && <LeaderboardQualificationFilter qualification={qualification} minimum={minimum} setMinimum={setMinimum} qualifiedCount={qualifiedSquadCount} loading={leaderboardLoading} ratingMinimumMinutes={hasConfigurableRatingMinimum(metricCode) ? ratingMinimumMinutes : null} setRatingMinimumMinutes={setRatingMinimumMinutes} />}
                   {leaderboardError && <p className="panel-inline-error">{text.squadLoadError}</p>}
                   <div className="squad-list">
                     {squadRows.length || loans.length ? <>
@@ -3559,7 +3574,7 @@ function LegionnairesView({
             setMinimum={setMinimum}
             qualifiedCount={players.length}
             loading={loading}
-            ratingMinimumMinutes={isRatingMetricCode(metricCode) ? ratingMinimumMinutes : null}
+            ratingMinimumMinutes={hasConfigurableRatingMinimum(metricCode) ? ratingMinimumMinutes : null}
             setRatingMinimumMinutes={setRatingMinimumMinutes}
           />
         )}
@@ -4250,7 +4265,7 @@ function PlayersView({
           </div>
           {rankingQualification && (
             <div className="directory-qualification">
-              <LeaderboardQualificationFilter qualification={rankingQualification} minimum={rankingMinimum} setMinimum={setRankingMinimum} qualifiedCount={players.length} loading={rankingLoading} ratingMinimumMinutes={isRatingMetricCode(rankingMetricCode) ? rankingRatingMinimumMinutes : null} setRatingMinimumMinutes={setRankingRatingMinimumMinutes} />
+              <LeaderboardQualificationFilter qualification={rankingQualification} minimum={rankingMinimum} setMinimum={setRankingMinimum} qualifiedCount={players.length} loading={rankingLoading} ratingMinimumMinutes={hasConfigurableRatingMinimum(rankingMetricCode) ? rankingRatingMinimumMinutes : null} setRatingMinimumMinutes={setRankingRatingMinimumMinutes} />
             </div>
           )}
           <div className="player-list">
@@ -5160,10 +5175,13 @@ function buildTeamComparisons(rows: MatchTeamStat[], language: Language) {
   });
 }
 
-function aggregatePlayerHistory(rows: PlayerHistory[], metric?: Metric, includeYear = false, language: Language = "en"): PlayerChartPoint[] {
+function aggregatePlayerHistory(rows: PlayerHistory[], metric?: PlayerChartMetric, includeYear = false, language: Language = "en"): PlayerChartPoint[] {
   const grouped = new Map<string, PlayerHistory[]>();
   rows.forEach((row) => grouped.set(row.match_id, [...(grouped.get(row.match_id) ?? []), row]));
-  return [...grouped.values()].map((matchRows, index): PlayerChartPoint => {
+  return [...grouped.values()]
+    .filter((matchRows) => !metric?.minimumMatchMinutes
+      || Number(matchRows[0]?.minutes_played ?? 0) >= metric.minimumMatchMinutes)
+    .map((matchRows, index): PlayerChartPoint => {
     const row = matchRows[0];
     const metricValue = (code?: string | null) => {
       if (!code) return null;
@@ -5207,7 +5225,10 @@ function summarizePlayerAttribute(historyRows: PlayerHistory[], metric: PlayerCh
     metric.numerator_metric_code,
     metric.denominator_metric_code,
   ].filter((code): code is string => Boolean(code)));
-  const hasObservation = historyRows.some((row) => observedCodes.has(row.metric_code)
+  const eligibleHistoryRows = metric.minimumMatchMinutes
+    ? historyRows.filter((row) => Number(row.minutes_played ?? 0) >= metric.minimumMatchMinutes!)
+    : historyRows;
+  const hasObservation = eligibleHistoryRows.some((row) => observedCodes.has(row.metric_code)
     && row.value_numeric !== null
     && isUsableMetricValue(row.metric_code, Number(row.value_numeric)));
   const values = points.map((point) => point.value).filter((value): value is number => value !== null && Number.isFinite(value));
@@ -5761,11 +5782,24 @@ function explorerRankingSampleLabel(
 }
 
 function leaderboardSourceMetricCode(metricCode: string) {
-  return metricCode.replace(/::per90$/, "");
+  return metricCode.replace(/::(?:per90|full90)$/, "");
 }
 
 function isRatingMetricCode(metricCode: string) {
   return leaderboardSourceMetricCode(metricCode) === "rating_365";
+}
+
+function isFull90RatingMetricCode(metricCode: string) {
+  return metricCode === "rating_365::full90";
+}
+
+function ratingMinimumForMetric(metricCode: string, configuredMinimum: number) {
+  if (isFull90RatingMetricCode(metricCode)) return 90;
+  return isRatingMetricCode(metricCode) ? configuredMinimum : 0;
+}
+
+function hasConfigurableRatingMinimum(metricCode: string) {
+  return isRatingMetricCode(metricCode) && !isFull90RatingMetricCode(metricCode);
 }
 
 function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPlayer[], metricCode: string) {
