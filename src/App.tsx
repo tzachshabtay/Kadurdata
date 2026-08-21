@@ -216,6 +216,7 @@ const lowerIsBetterMetricCodes = new Set([
   "errors_leading_to_goal",
   "errors_leading_to_shot",
   "fouls_committed",
+  "fouls_made",
   "goals_conceded",
   "offsides",
   "penalties_committed",
