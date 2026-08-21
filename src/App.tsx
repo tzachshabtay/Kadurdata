@@ -273,6 +273,7 @@ const seasonLeaderboardMetrics: LeaderboardMetricOption[] = [
   { code: "season_appearances", name: "Appearances", value_type: "count", denominator_metric_code: null, kind: "season" },
   { code: "season_starts", name: "Starts", value_type: "count", denominator_metric_code: null, kind: "season" },
   { code: "season_minutes", name: "Minutes played", value_type: "count", denominator_metric_code: null, kind: "season" },
+  { code: "current_valuation", name: "Estimated transfer value", value_type: "currency", denominator_metric_code: null, kind: "season" },
 ];
 const comparisonMetrics = [
   "team_possession",
@@ -813,7 +814,10 @@ export function App() {
     setCompetitionId((current) => current || defaultCompetition?.competition_id || "");
     setSeasonId((current) => current || defaultSeason?.season_id || "");
     setMetricCode((current) => current || preferredMetric(nextMetrics));
-    setLeaderMetricCode((current) => nextMetrics.some((metric) => metric.code === leaderboardSourceMetricCode(current)) ? current : preferredMetric(nextMetrics));
+    setLeaderMetricCode((current) => isValuationMetricCode(current)
+      || nextMetrics.some((metric) => metric.code === leaderboardSourceMetricCode(current))
+      ? current
+      : preferredMetric(nextMetrics));
     setLoading(false);
   }
 
@@ -1250,11 +1254,13 @@ export function App() {
         return;
       }
 
-      const result = await supabase.rpc("api_player_leaderboard", {
-        p_season_id: seasonId,
-        p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
-        p_min_minutes: ratingMinimumForMetric(leaderMetricCode, leaderRatingMinimumMinutes),
-      });
+      const result = isValuationMetricCode(leaderMetricCode)
+        ? await supabase.rpc("api_player_valuation_leaderboard", { p_season_id: seasonId })
+        : await supabase.rpc("api_player_leaderboard", {
+          p_season_id: seasonId,
+          p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
+          p_min_minutes: ratingMinimumForMetric(leaderMetricCode, leaderRatingMinimumMinutes),
+        });
       if (cancelled) return;
       if (result.error) {
         setLeaderboardError(result.error.message);
@@ -1290,11 +1296,13 @@ export function App() {
         return;
       }
 
-      const result = await supabase.rpc("api_player_leaderboard", {
-        p_season_id: seasonId,
-        p_metric_code: leaderboardSourceMetricCode(squadMetricCode),
-        p_min_minutes: ratingMinimumForMetric(squadMetricCode, squadRatingMinimumMinutes),
-      });
+      const result = isValuationMetricCode(squadMetricCode)
+        ? await supabase.rpc("api_player_valuation_leaderboard", { p_season_id: seasonId })
+        : await supabase.rpc("api_player_leaderboard", {
+          p_season_id: seasonId,
+          p_metric_code: leaderboardSourceMetricCode(squadMetricCode),
+          p_min_minutes: ratingMinimumForMetric(squadMetricCode, squadRatingMinimumMinutes),
+        });
       if (cancelled) return;
       if (result.error) {
         setSquadLeaderboardError(result.error.message);
@@ -1330,11 +1338,13 @@ export function App() {
         return;
       }
 
-      const result = await supabase.rpc("api_player_leaderboard", {
-        p_season_id: seasonId,
-        p_metric_code: leaderboardSourceMetricCode(explorerMetricCode),
-        p_min_minutes: ratingMinimumForMetric(explorerMetricCode, explorerRatingMinimumMinutes),
-      });
+      const result = isValuationMetricCode(explorerMetricCode)
+        ? await supabase.rpc("api_player_valuation_leaderboard", { p_season_id: seasonId })
+        : await supabase.rpc("api_player_leaderboard", {
+          p_season_id: seasonId,
+          p_metric_code: leaderboardSourceMetricCode(explorerMetricCode),
+          p_min_minutes: ratingMinimumForMetric(explorerMetricCode, explorerRatingMinimumMinutes),
+        });
       if (cancelled) return;
       if (result.error) {
         setExplorerLeaderboardError(result.error.message);
@@ -1577,11 +1587,13 @@ export function App() {
 
       const client = supabase;
       const results = await Promise.all(overviewLeagueTargets.map(async (target) => {
-        const result = await client.rpc("api_player_leaderboard", {
-          p_season_id: target.season.season_id,
-          p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
-          p_min_minutes: ratingMinimumForMetric(leaderMetricCode, leaderRatingMinimumMinutes),
-        });
+        const result = isValuationMetricCode(leaderMetricCode)
+          ? await client.rpc("api_player_valuation_leaderboard", { p_season_id: target.season.season_id })
+          : await client.rpc("api_player_leaderboard", {
+            p_season_id: target.season.season_id,
+            p_metric_code: leaderboardSourceMetricCode(leaderMetricCode),
+            p_min_minutes: ratingMinimumForMetric(leaderMetricCode, leaderRatingMinimumMinutes),
+          });
         const playersForLeague = overviewLeaguePlayers[target.key] ?? [];
         return {
           key: target.key,
@@ -1815,7 +1827,12 @@ export function App() {
   }, [metricCode, playerMetrics, playerViewMetrics]);
   const leaderboardMetrics = useMemo<LeaderboardMetricOption[]>(
     () => [
-      ...seasonLeaderboardMetrics.map((metric) => ({ ...metric, name: metricName(metric.code, metric.name, language) })),
+      ...seasonLeaderboardMetrics.map((metric) => ({
+        ...metric,
+        name: metric.code === "current_valuation"
+          ? text.estimatedTransferValue
+          : metricName(metric.code, metric.name, language),
+      })),
       ...playerMetrics.flatMap((metric): LeaderboardMetricOption[] => {
         const localizedName = metricName(metric.code, metric.name, language);
         const rawMetric: LeaderboardMetricOption = {
@@ -1833,7 +1850,7 @@ export function App() {
           : [rawMetric];
       }),
     ],
-    [language, playerMetrics, text.ratingFull90],
+    [language, playerMetrics, text.estimatedTransferValue, text.ratingFull90],
   );
   const explorerLeaderboardMetrics = useMemo(() => {
     if (roleFilter === "All") return leaderboardMetrics;
@@ -1886,11 +1903,13 @@ export function App() {
         return;
       }
 
-      const result = await supabase.rpc("api_legionnaire_leaderboard", {
-        p_season_name: legionnaireSeasonName,
-        p_metric_code: leaderboardSourceMetricCode(legionnaireMetricCode),
-        p_min_minutes: ratingMinimumForMetric(legionnaireMetricCode, legionnaireRatingMinimumMinutes),
-      });
+      const result = isValuationMetricCode(legionnaireMetricCode)
+        ? await supabase.rpc("api_legionnaire_valuation_leaderboard", { p_season_name: legionnaireSeasonName })
+        : await supabase.rpc("api_legionnaire_leaderboard", {
+          p_season_name: legionnaireSeasonName,
+          p_metric_code: leaderboardSourceMetricCode(legionnaireMetricCode),
+          p_min_minutes: ratingMinimumForMetric(legionnaireMetricCode, legionnaireRatingMinimumMinutes),
+        });
       if (cancelled) return;
       if (result.error) {
         setLegionnaireLeaderboardError(result.error.message);
@@ -2960,7 +2979,7 @@ function PlayerLeaderboardPanel({
             <button key={player.player_id} type="button" onClick={() => openPlayer(player.player_id)}>
               <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
               <span className="leader-copy"><strong>{localizedPlayerName(seasonPlayer, player.display_name, language)}</strong><small>{localizedClubById(standings, player.team_id, player.team_name, language)}</small></span>
-              <span className="leader-value"><strong>{formatMetricWithRatio(player.leaderboard_value, player.value_type, player.numerator_value, player.denominator_value)}</strong><small>{leaderboardSampleLabel(player, qualification, minutesByPlayer, language)}</small></span>
+              <span className="leader-value"><strong>{formatLeaderboardValue(player, language)}</strong><small>{leaderboardSampleLabel(player, qualification, minutesByPlayer, language)}</small></span>
             </button>
           );
         }) : <EmptyState text={qualification ? text.noMinimumSamplePlayers : text.noLeaderboardData} />}
@@ -3380,7 +3399,7 @@ function ClubsView({
                             <span className="squad-rank">{ranking ? String(index + 1).padStart(2, "0") : "--"}</span>
                             <span className="avatar">{initials(playerName)}</span>
                             <span><strong>{playerName}</strong><small>{`${playerPositionDetail(player).code} · ${localizedPlayerPosition(player, language).label}`}</small></span>
-                            <em>{ranking ? formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value) : leaderboardLoading ? <Loader2 className="spin" size={12} aria-label={text.updatingRanking} /> : "-"}</em>
+                            <em>{ranking ? formatLeaderboardValue(ranking, language) : leaderboardLoading ? <Loader2 className="spin" size={12} aria-label={text.updatingRanking} /> : "-"}</em>
                           </button>
                         );
                       })}
@@ -3399,7 +3418,7 @@ function ClubsView({
                             <span className="squad-rank" title={text.loaned}><ArrowUpRight size={12} aria-hidden="true" /></span>
                             <span className="avatar">{initials(playerName)}</span>
                             <span><strong>{playerName}</strong><small>{position} · ({text.loanedTo} {destinationName})</small></span>
-                            <em>{ranking ? formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value) : "-"}</em>
+                            <em>{ranking ? formatLeaderboardValue(ranking, language) : "-"}</em>
                           </button>
                         );
                       })}
@@ -3610,7 +3629,7 @@ function LegionnairesView({
                   </span>
                   <span className="legionnaire-club"><ClubBadge name={player.team_name ?? text.freeAgent} logoUrl={player.team_logo_url} size="small" /><strong>{player.team_name ?? text.freeAgent}</strong></span>
                   <span className="legionnaire-league">{competitionName}</span>
-                  <span className="legionnaire-value"><strong>{formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value)}</strong><small>{explorerRankingSampleLabel(ranking, player, qualification, language)}</small></span>
+                  <span className="legionnaire-value"><strong>{formatLeaderboardValue(ranking, language)}</strong><small>{explorerRankingSampleLabel(ranking, player, qualification, language)}</small></span>
                 </button>
               );
             }) : <EmptyState text={qualification ? text.noMinimumSamplePlayers : text.noLegionnaires} />}
@@ -4278,7 +4297,7 @@ function PlayersView({
                   <span className="avatar">{initials(displayName)}</span>
                   <span className="player-copy"><strong>{displayName}</strong><small>{localizedClubById(clubs, player.team_id, player.team_name ?? text.freeAgent, language)} · {playerPositionDetail(player).code}</small></span>
                   <span className="player-numbers">
-                    <strong>{ranking ? formatMetricWithRatio(ranking.leaderboard_value, ranking.value_type, ranking.numerator_value, ranking.denominator_value) : "-"}</strong>
+                    <strong>{ranking ? formatLeaderboardValue(ranking, language) : "-"}</strong>
                     <small>{ranking ? explorerRankingSampleLabel(ranking, player, rankingQualification, language) : ""}</small>
                   </span>
                 </button>
@@ -5758,8 +5777,13 @@ function leaderboardSampleLabel(
   minutesByPlayer: Map<string, number>,
   language: Language,
 ) {
+  if (row.value_type === "currency") {
+    return row.valuation_date
+      ? `${textByLanguage[language].valuationAsOf} ${formatValuationDate(row.valuation_date, language)}`
+      : textByLanguage[language].estimatedTransferValue;
+  }
   const aggregation = language === "he"
-    ? ({ total: "סך הכול", average: "ממוצע", weighted: "משוקלל" } as Record<string, string>)[row.aggregation]
+    ? ({ total: "סך הכול", average: "ממוצע", weighted: "משוקלל", latest: "עדכני" } as Record<string, string>)[row.aggregation]
     : row.aggregation;
   return qualification?.source === "minutes"
     ? `${aggregation} · ${numberFormatter.format(minutesByPlayer.get(row.player_id) ?? 0)} ${textByLanguage[language].minutes}`
@@ -5772,6 +5796,11 @@ function explorerRankingSampleLabel(
   qualification: LeaderboardQualification | null,
   language: Language,
 ) {
+  if (row.value_type === "currency") {
+    return row.valuation_date
+      ? `${textByLanguage[language].valuationAsOf} ${formatValuationDate(row.valuation_date, language)}`
+      : textByLanguage[language].estimatedTransferValue;
+  }
   if (qualification?.source === "minutes") return `${numberFormatter.format(Math.round(Number(player.minutes)))} ${language === "he" ? "דק׳" : "min"}`;
   if (qualification?.source === "denominator") {
     return `${numberFormatter.format(Math.round(Number(row.denominator_value ?? 0)))} ${qualificationUnit(qualification.unit, language)}`;
@@ -5784,6 +5813,10 @@ function explorerRankingSampleLabel(
 
 function leaderboardSourceMetricCode(metricCode: string) {
   return metricCode.replace(/::(?:per90|full90)$/, "");
+}
+
+function isValuationMetricCode(metricCode: string) {
+  return leaderboardSourceMetricCode(metricCode) === "current_valuation";
 }
 
 function isRatingMetricCode(metricCode: string) {
@@ -5921,6 +5954,18 @@ function formatValuation(value: number, currency: string, language: Language) {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+}
+
+function formatLeaderboardValue(row: PlayerLeaderboardRow, language: Language) {
+  if (row.value_type === "currency" && row.leaderboard_value !== null) {
+    return formatValuation(Number(row.leaderboard_value), row.currency ?? "EUR", language);
+  }
+  return formatMetricWithRatio(
+    row.leaderboard_value,
+    row.value_type,
+    row.numerator_value,
+    row.denominator_value,
+  );
 }
 
 function formatValuationDate(value: string, language: Language, short = false) {

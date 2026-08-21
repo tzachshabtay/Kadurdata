@@ -156,6 +156,10 @@ def contains_hebrew(value: str) -> bool:
     return any("\u0590" <= character <= "\u05ff" for character in value)
 
 
+def clean_hebrew_name(value: str) -> Optional[str]:
+    return extract_transfermarkt_hebrew_text(value)
+
+
 def extract_hebrew_names(payload: dict[str, Any]) -> dict[str, str]:
     names: dict[str, str] = {}
     athletes = payload.get("athletes")
@@ -169,9 +173,9 @@ def extract_hebrew_names(payload: dict[str, Any]) -> dict[str, str]:
         name = athlete.get("name")
         if athlete_id is None or not isinstance(name, str):
             continue
-        normalized_name = name.strip()
-        if normalized_name and contains_hebrew(normalized_name):
-            names[str(athlete_id)] = normalized_name
+        cleaned_name = clean_hebrew_name(name)
+        if cleaned_name:
+            names[str(athlete_id)] = cleaned_name
     return names
 
 
@@ -188,12 +192,12 @@ def extract_game_hebrew_names(payload: dict[str, Any]) -> dict[str, str]:
         name = member.get("name")
         if not isinstance(name, str):
             continue
-        normalized_name = name.strip()
-        if not normalized_name or not contains_hebrew(normalized_name):
+        cleaned_name = clean_hebrew_name(name)
+        if not cleaned_name:
             continue
         for identifier in (member.get("athleteId"), member.get("id")):
             if identifier is not None:
-                names[str(identifier)] = normalized_name
+                names[str(identifier)] = cleaned_name
     return names
 
 
@@ -208,8 +212,7 @@ def extract_transliterated_name(payload: Any) -> Optional[str]:
         and isinstance(segment[0], str)
         and segment[0].strip()
     ]
-    translated = "".join(translated_parts).strip()
-    return translated if translated and contains_hebrew(translated) else None
+    return clean_hebrew_name("".join(translated_parts))
 
 
 def fetch_json(url: str, *, retries: int, sleep_seconds: float) -> Any:
@@ -323,15 +326,15 @@ def clean_mixed_hebrew_names(cur: psycopg.Cursor) -> int:
         """
         select player.id::text as player_id, player.display_name_he
         from core.players player
-        where player.display_name_he ~ '[A-Za-z]'
-          and player.display_name_he ~ '[\u0590-\u05ff]'
+        where player.display_name_he ~ '[\u0590-\u05ff]'
         """
     )
-    cleaned = {
-        str(row["player_id"]): extract_transfermarkt_hebrew_text(row["display_name_he"])
-        for row in cur.fetchall()
-    }
-    cleaned = {player_id: name for player_id, name in cleaned.items() if name}
+    cleaned = {}
+    for row in cur.fetchall():
+        current_name = str(row["display_name_he"]).strip()
+        cleaned_name = clean_hebrew_name(current_name)
+        if cleaned_name and cleaned_name != current_name:
+            cleaned[str(row["player_id"])] = cleaned_name
     for player_id, name in cleaned.items():
         cur.execute(
             "update core.players set display_name_he = %s where id = %s::uuid",
@@ -626,7 +629,9 @@ def update_players(
         "copy hebrew_player_name_stage (player_id, display_name_he) from stdin"
     ) as copy:
         for player_id, display_name_he in names_by_player_id.items():
-            copy.write_row((player_id, display_name_he))
+            cleaned_name = clean_hebrew_name(display_name_he)
+            if cleaned_name:
+                copy.write_row((player_id, cleaned_name))
 
     cur.execute(
         """

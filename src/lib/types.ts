@@ -178,13 +178,15 @@ export type PlayerLeaderboardRow = {
   metric_code: string;
   metric_name: string;
   value_type: string;
-  aggregation: "total" | "average" | "weighted";
+  aggregation: "total" | "average" | "weighted" | "latest";
   sample_size: number;
   leaderboard_value: number | null;
   total_value: number | null;
   average_value: number | null;
   numerator_value: number | null;
   denominator_value: number | null;
+  currency?: string | null;
+  valuation_date?: string | null;
 };
 
 export type Metric = {

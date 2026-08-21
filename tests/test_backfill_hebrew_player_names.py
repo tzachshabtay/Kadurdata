@@ -4,6 +4,7 @@ from unittest.mock import patch
 from scripts.backfill_hebrew_player_names import (
     athletes_url,
     chunked,
+    clean_hebrew_name,
     extract_game_hebrew_names,
     extract_hebrew_names,
     extract_transliterated_name,
@@ -17,6 +18,11 @@ from scripts.backfill_hebrew_player_names import (
 
 
 class HebrewPlayerNameTests(unittest.TestCase):
+    def test_removes_non_hebrew_suffixes_and_prefixes(self) -> None:
+        self.assertEqual(clean_hebrew_name("עדן קארצב , Карцев Эден Вадимович"), "עדן קארצב")
+        self.assertEqual(clean_hebrew_name("דיא סבע ‎ضياء سبع"), "דיא סבע")
+        self.assertEqual(clean_hebrew_name("Шевяков Даниил, דניאל שביאקוב"), "דניאל שביאקוב")
+
     def test_extracts_only_valid_hebrew_names(self) -> None:
         payload = {
             "athletes": [

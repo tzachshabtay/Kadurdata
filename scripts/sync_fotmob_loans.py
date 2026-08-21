@@ -18,8 +18,10 @@ from urllib.request import Request, urlopen
 
 try:
     from scripts.ingest_fotmob import page_props
+    from scripts.player_identity import canonical_player_name
 except ModuleNotFoundError:
     from ingest_fotmob import page_props
+    from player_identity import canonical_player_name
 
 
 BASE_URL = "https://www.fotmob.com"
@@ -399,7 +401,16 @@ def main() -> int:
             team_rows = list(cur.execute("select id::text, name from core.teams").fetchall())
             player_rows = list(cur.execute("select id::text, display_name from core.players").fetchall())
             team_by_name = unique_name_index(team_rows, "name", "id")
-            player_by_name = unique_name_index(player_rows, "display_name", "id")
+            player_groups: dict[str, list[str]] = {}
+            for player_row in player_rows:
+                player_groups.setdefault(
+                    canonical_player_name(str(player_row["display_name"])),
+                    [],
+                ).append(str(player_row["id"]))
+            player_by_name = {
+                name: ids[0] if len(set(ids)) == 1 else None
+                for name, ids in player_groups.items()
+            }
             team_mapping = {
                 str(row["source_entity_id"]): str(row["canonical_id"])
                 for row in cur.execute(
@@ -440,7 +451,8 @@ def main() -> int:
             def ensure_player(player_data: dict[str, Any], import_kind: str) -> str:
                 source_player_id = str(player_data["source_player_id"])
                 player_name = str(player_data["player_name"])
-                canonical_id = player_mapping.get(source_player_id) or player_by_name.get(normalized_name(player_name))
+                player_key = canonical_player_name(player_name)
+                canonical_id = player_mapping.get(source_player_id) or player_by_name.get(player_key)
                 metadata = {
                     "formation_position": player_data.get("formation_position"),
                     f"fotmob_{import_kind}_import": True,
@@ -456,7 +468,7 @@ def main() -> int:
                         (player_name, player_data.get("primary_position"), json.dumps(metadata)),
                     ).fetchone()
                     canonical_id = str(row["id"])
-                    player_by_name[normalized_name(player_name)] = canonical_id
+                    player_by_name[player_key] = canonical_id
                 else:
                     cur.execute(
                         """

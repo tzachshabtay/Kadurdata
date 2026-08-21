@@ -19,17 +19,21 @@ from urllib.request import Request, urlopen
 from bs4 import BeautifulSoup
 
 try:
+    from scripts.player_identity import canonical_player_name
     from scripts.sync_fotmob_loans import normalized_name, unique_name_index, upsert_mapping
     from scripts.sync_transfermarkt_loans import (
         POSITION_GROUPS,
+        extract_hebrew_text,
         fetch_entities,
         get_source,
         hebrew_name,
     )
 except ModuleNotFoundError:
+    from player_identity import canonical_player_name
     from sync_fotmob_loans import normalized_name, unique_name_index, upsert_mapping
     from sync_transfermarkt_loans import (
         POSITION_GROUPS,
+        extract_hebrew_text,
         fetch_entities,
         get_source,
         hebrew_name,
@@ -312,7 +316,7 @@ def discover_players(args: argparse.Namespace) -> tuple[list[dict[str, Any]], in
             )
 
     deduped = list({row["source_player_id"]: row for row in rows}.values())
-    deduped.sort(key=lambda row: normalized_name(str(row["player_name"])))
+    deduped.sort(key=lambda row: canonical_player_name(str(row["player_name"])))
     return (deduped[: args.limit] if args.limit > 0 else deduped), len(countries)
 
 
@@ -331,13 +335,13 @@ def resolve_scores365_player(
     row: dict[str, Any], retries: int, sleep_seconds: float
 ) -> Optional[dict[str, Any]]:
     payload = fetch_json(scores365_search_url(str(row["player_name"])), retries, sleep_seconds)
-    wanted = normalized_name(str(row["player_name"]))
+    wanted = canonical_player_name(str(row["player_name"]))
     candidates = [
         athlete
         for athlete in payload.get("athletes") or []
         if isinstance(athlete, dict)
         and int(athlete.get("nationalityId") or 0) == SCORES365_COUNTRY_ID
-        and normalized_name(str(athlete.get("name") or "")) == wanted
+        and canonical_player_name(str(athlete.get("name") or "")) == wanted
     ]
     if len(candidates) == 1:
         return candidates[0]
@@ -385,6 +389,43 @@ def role_from_player(player: dict[str, Any], listed_position: Optional[str]) -> 
     if value:
         return "Attacker"
     return None
+
+
+def preferred_player_index(
+    rows: list[dict[str, Any]],
+    key_for_row: Any,
+) -> dict[Any, Optional[str]]:
+    grouped: dict[Any, list[dict[str, Any]]] = {}
+    for row in rows:
+        key = key_for_row(row)
+        if key:
+            grouped.setdefault(key, []).append(row)
+
+    preferred: dict[Any, Optional[str]] = {}
+    for key, candidates in grouped.items():
+        unique_candidates = {str(candidate["id"]): candidate for candidate in candidates}
+        ranked = sorted(
+            unique_candidates.values(),
+            key=lambda candidate: (
+                bool(candidate.get("has_365scores_identity")),
+                bool(candidate.get("has_appearances")),
+            ),
+            reverse=True,
+        )
+        best_score = (
+            bool(ranked[0].get("has_365scores_identity")),
+            bool(ranked[0].get("has_appearances")),
+        )
+        tied = [
+            candidate
+            for candidate in ranked
+            if (
+                bool(candidate.get("has_365scores_identity")),
+                bool(candidate.get("has_appearances")),
+            ) == best_score
+        ]
+        preferred[key] = str(ranked[0]["id"]) if len(tied) == 1 else None
+    return preferred
 
 
 def main() -> int:
@@ -467,10 +508,42 @@ def main() -> int:
                 ).fetchone()
             israel_country_id = str(israel_row["id"])
 
-            player_rows = list(cur.execute("select id::text, display_name from core.players").fetchall())
+            player_rows = list(cur.execute(
+                """
+                select
+                  player.id::text,
+                  player.display_name,
+                  player.display_name_he,
+                  player.date_of_birth,
+                  exists (
+                    select 1
+                    from source.source_entity_ids mapping
+                    where mapping.source_id = %s
+                      and mapping.entity_type = 'player'
+                      and mapping.canonical_id = player.id
+                  ) as has_365scores_identity,
+                  exists (
+                    select 1
+                    from core.player_match_appearances appearance
+                    where appearance.player_id = player.id
+                  ) as has_appearances
+                from core.players player
+                """,
+                (scores365_source_id,),
+            ).fetchall())
             team_rows = list(cur.execute("select id::text, name from core.teams").fetchall())
             competition_rows = list(cur.execute("select id::text, name from core.competitions").fetchall())
-            player_by_name = unique_name_index(player_rows, "display_name", "id")
+            player_by_name = preferred_player_index(
+                player_rows,
+                lambda player: canonical_player_name(str(player["display_name"])),
+            )
+            player_by_hebrew_birth = preferred_player_index(
+                player_rows,
+                lambda player: (
+                    extract_hebrew_text(player.get("display_name_he")),
+                    str(player.get("date_of_birth") or ""),
+                ) if player.get("display_name_he") and player.get("date_of_birth") else None,
+            )
             team_by_name = unique_name_index(team_rows, "name", "id")
             competition_by_name = unique_name_index(competition_rows, "name", "id")
 
@@ -508,11 +581,6 @@ def main() -> int:
                 tm_player = transfermarkt_players.get(source_player_id) or {}
                 scores_player = scores365_matches.get(source_player_id)
                 scores_id = str(scores_player["id"]) if scores_player else ""
-                canonical_id = (
-                    tm_player_mapping.get(source_player_id)
-                    or (scores_player_mapping.get(scores_id) if scores_id else None)
-                    or player_by_name.get(normalized_name(str(row["player_name"])))
-                )
                 attributes = tm_player.get("attributes") if isinstance(tm_player.get("attributes"), dict) else {}
                 position = attributes.get("position") if isinstance(attributes.get("position"), dict) else {}
                 formation_position = str(position.get("shortName") or position.get("name") or row.get("listed_position") or "").strip() or None
@@ -520,6 +588,12 @@ def main() -> int:
                 life_dates = tm_player.get("lifeDates") if isinstance(tm_player.get("lifeDates"), dict) else {}
                 date_of_birth = str(life_dates.get("dateOfBirth") or "")[:10] or None
                 name_he = hebrew_name(tm_player)
+                canonical_id = (
+                    (scores_player_mapping.get(scores_id) if scores_id else None)
+                    or player_by_hebrew_birth.get((name_he, date_of_birth))
+                    or player_by_name.get(canonical_player_name(str(row["player_name"])))
+                    or tm_player_mapping.get(source_player_id)
+                )
                 metadata = json.dumps(
                     {
                         "source_country_id": SCORES365_COUNTRY_ID,
@@ -549,7 +623,9 @@ def main() -> int:
                             ),
                         ).fetchone()["id"]
                     )
-                    player_by_name[normalized_name(str(row["player_name"]))] = canonical_id
+                    player_by_name[canonical_player_name(str(row["player_name"]))] = canonical_id
+                    if name_he and date_of_birth:
+                        player_by_hebrew_birth[(name_he, date_of_birth)] = canonical_id
                 else:
                     cur.execute(
                         """
@@ -571,6 +647,24 @@ def main() -> int:
                     "core.players",
                     canonical_id,
                     str(row["player_name"]),
+                )
+                cur.execute(
+                    """
+                    update source.source_entity_ids
+                    set canonical_id = %s,
+                        source_name = %s,
+                        last_seen_at = now()
+                    where source_id = %s
+                      and entity_type = 'player'
+                      and source_entity_id = %s
+                      and mapping_status = 'auto'
+                    """,
+                    (
+                        canonical_id,
+                        str(row["player_name"]),
+                        transfermarkt_source_id,
+                        source_player_id,
+                    ),
                 )
                 tm_player_mapping[source_player_id] = canonical_id
                 if scores_id:

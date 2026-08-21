@@ -36,6 +36,9 @@ class TransfermarktLoanTests(unittest.TestCase):
     def test_reconciles_transfermarkt_player_name_variants(self) -> None:
         self.assertEqual(canonical_player_name("Roy Nawi"), "roy navi")
         self.assertEqual(canonical_player_name("Itay Zafrani"), "itai zafrani")
+        self.assertEqual(canonical_player_name("Idan Toklomati"), "idan toklomaty")
+        self.assertEqual(canonical_player_name("Gabi Kanichowsky"), "gabi kanikovski")
+        self.assertEqual(canonical_player_name("Tay Abed"), "tai abed")
 
     def test_normalizes_club_suffixes_for_automatic_discovery(self) -> None:
         self.assertEqual(normalized_team_name("Maccabi Tel Aviv FC"), "maccabi tel aviv")

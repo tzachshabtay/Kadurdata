@@ -17,8 +17,10 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 try:
+    from scripts.player_identity import canonical_player_name
     from scripts.sync_fotmob_loans import candidate_teams, normalized_name, unique_name_index, upsert_mapping
 except ModuleNotFoundError:
+    from player_identity import canonical_player_name
     from sync_fotmob_loans import candidate_teams, normalized_name, unique_name_index, upsert_mapping
 
 
@@ -50,10 +52,6 @@ KNOWN_TEAM_IDS = {
     "maccabi tel aviv": "119",
     "sc ashdod": "6105",
 }
-PLAYER_NAME_ALIASES = {
-    "itay zafrani": "itai zafrani",
-    "roy nawi": "roy navi",
-}
 POSITION_GROUPS = {
     "GOALKEEPER": "Goalkeeper",
     "DEFENDER": "Defender",
@@ -82,14 +80,16 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def canonical_player_name(value: str) -> str:
-    normalized = normalized_name(value)
-    return PLAYER_NAME_ALIASES.get(normalized, normalized)
-
-
 def normalized_team_name(value: str) -> str:
     tokens = normalized_name(value).split()
     return " ".join(token for token in tokens if token not in {"fc", "sc", "afc", "cf"})
+
+
+def unique_player_name_index(rows: list[dict[str, Any]]) -> dict[str, Optional[str]]:
+    grouped: dict[str, list[str]] = {}
+    for row in rows:
+        grouped.setdefault(canonical_player_name(str(row["display_name"])), []).append(str(row["id"]))
+    return {name: ids[0] if len(set(ids)) == 1 else None for name, ids in grouped.items()}
 
 
 def team_search_terms(value: str) -> list[str]:
@@ -449,7 +449,7 @@ def main() -> int:
             team_rows = list(cur.execute("select id::text, name from core.teams").fetchall())
             player_rows = list(cur.execute("select id::text, display_name from core.players").fetchall())
             team_by_name = unique_name_index(team_rows, "name", "id")
-            player_by_name = unique_name_index(player_rows, "display_name", "id")
+            player_by_name = unique_player_name_index(player_rows)
             team_mapping = {
                 str(row["source_entity_id"]): str(row["canonical_id"])
                 for row in cur.execute(

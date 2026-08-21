@@ -7,11 +7,37 @@ from scripts.sync_transfermarkt_legionnaires import (
     discover_players,
     parse_destination_countries,
     parse_legionnaire_players,
+    preferred_player_index,
+    resolve_scores365_player,
     transfermarkt_web_url,
 )
 
 
 class TransfermarktLegionnaireCensusTests(unittest.TestCase):
+    def test_prefers_existing_match_identity_when_aliases_collide(self) -> None:
+        players = [
+            {"id": "transfermarkt-only", "display_name": "Roy Nawi", "has_365scores_identity": False, "has_appearances": False},
+            {"id": "canonical", "display_name": "Roy Navi", "has_365scores_identity": True, "has_appearances": True},
+        ]
+
+        index = preferred_player_index(players, lambda player: player["display_name"].replace("w", "v"))
+
+        self.assertEqual(index["Roy Navi"], "canonical")
+
+    @patch("scripts.sync_transfermarkt_legionnaires.fetch_json")
+    def test_matches_known_name_variants_to_365scores_identity(self, fetch_json) -> None:
+        fetch_json.return_value = {
+            "athletes": [{"id": 123, "name": "Roy Navi", "nationalityId": 6}]
+        }
+
+        resolved = resolve_scores365_player(
+            {"player_name": "Roy Nawi", "team_name": "Kryvbas"},
+            retries=0,
+            sleep_seconds=0,
+        )
+
+        self.assertEqual(resolved["id"], 123)
+
     def test_parses_destination_country(self) -> None:
         html = """
         <div id="yw1"><table class="items"><tbody><tr>
