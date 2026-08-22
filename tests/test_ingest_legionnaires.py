@@ -1,23 +1,62 @@
 import unittest
 
 from scripts.ingest_legionnaires import (
+    athlete_games_in_window,
     chunked,
     completed_games,
     discover_historical_affiliations,
     discover_legionnaires,
     filter_legionnaire_player_rows,
     foreign_club_for_game,
+    games_requiring_details,
     is_domestic_league,
 )
 
 
 class LegionnaireDiscoveryTests(unittest.TestCase):
+    def test_athlete_history_keeps_league_cup_and_european_matches(self):
+        def wrapper(match_id, competition_id, start_time):
+            return {
+                "relatedCompetitor": 100,
+                "game": {
+                    "id": match_id,
+                    "competitionId": competition_id,
+                    "seasonNum": 20,
+                    "startTime": start_time,
+                    "homeCompetitor": {"id": 100, "type": 1, "countryId": 1},
+                    "awayCompetitor": {"id": 101, "type": 1, "countryId": 1},
+                },
+            }
+
+        games = athlete_games_in_window(
+            {10: [
+                wrapper(1, 200, "2025-08-01T18:00:00+00:00"),
+                wrapper(2, 201, "2025-09-01T18:00:00+00:00"),
+                wrapper(3, 202, "2025-10-01T18:00:00+00:00"),
+            ]},
+            {100: {"id": 100, "countryId": 1}},
+            "2025-07-01",
+            "2026-06-30",
+        )
+
+        self.assertEqual([game["id"] for game in games], [1, 2, 3])
+
     def test_chunked_keeps_every_id(self):
         self.assertEqual(chunked([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]])
 
     def test_completed_games_do_not_depend_on_catalog_stat_flags(self):
         games = [{"id": 1, "statusGroup": 4}, {"id": 2, "statusGroup": 1}]
         self.assertEqual(completed_games(games), [{"id": 1, "statusGroup": 4}])
+
+    def test_incremental_backfill_fetches_only_completed_matches_without_stats(self):
+        games = [
+            {"id": 1, "statusGroup": 4},
+            {"id": 2, "statusGroup": 4},
+            {"id": 3, "statusGroup": 1},
+        ]
+
+        self.assertEqual(games_requiring_details(games, {1}, True), [games[1]])
+        self.assertEqual(games_requiring_details(games, {1}, False), games[:2])
 
     def test_only_discovered_israeli_athletes_are_written(self):
         rows = [
@@ -145,8 +184,6 @@ class LegionnaireDiscoveryTests(unittest.TestCase):
             games_by_athlete,
             competitors,
             competitions,
-            "2025-07-01",
-            "2026-06-30",
         )
 
         self.assertEqual(len(rows), 2)
@@ -154,6 +191,28 @@ class LegionnaireDiscoveryTests(unittest.TestCase):
         self.assertEqual(historical["club_name"], "Historical FC")
         self.assertEqual(historical["competition_name"], "Historical League")
         self.assertEqual(historical["season_num"], 20)
+
+    def test_historical_affiliations_are_not_limited_by_the_refresh_window(self):
+        rows = discover_historical_affiliations(
+            [],
+            [{"id": 10, "name": "Israeli Abroad", "nationalityId": 6}],
+            {10: [{
+                "relatedCompetitor": 100,
+                "game": {
+                    "id": 1,
+                    "competitionId": 200,
+                    "seasonNum": 20,
+                    "startTime": "2025-08-01T18:00:00+00:00",
+                    "homeCompetitor": {"id": 100, "type": 1, "countryId": 1},
+                    "awayCompetitor": {"id": 101, "type": 1, "countryId": 1},
+                },
+            }]},
+            {100: {"id": 100, "name": "Historical FC", "countryId": 1, "mainCompetitionId": 200}},
+            {200: {"id": 200, "name": "Historical League"}},
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["is_current"])
 
 
 if __name__ == "__main__":

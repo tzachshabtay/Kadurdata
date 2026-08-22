@@ -566,12 +566,9 @@ def main() -> int:
             tm_competition_mapping = mappings(transfermarkt_source_id, "competition")
 
             cur.execute(
-                "delete from core.player_team_stints where metadata ->> 'discovery' = 'transfermarkt_legionnaires'"
-            )
-            cur.execute(
                 """
                 update core.player_team_stints
-                set metadata = metadata - 'transfermarkt_legionnaire_census' - 'transfermarkt_is_current'
+                set metadata = metadata || '{"transfermarkt_is_current": false}'::jsonb
                 where metadata ? 'transfermarkt_legionnaire_census'
                 """
             )

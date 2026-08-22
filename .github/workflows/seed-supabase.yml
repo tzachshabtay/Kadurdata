@@ -110,7 +110,7 @@ jobs:
             --workers 8
 
       - name: Fetch and flatten legionnaire data
-        if: env.RUN_MATCH_REFRESH == 'true' && env.SEED_MODE != 'hebrew_names'
+        if: (env.RUN_MATCH_REFRESH == 'true' || env.RUN_MAINTENANCE == 'true') && env.SEED_MODE != 'hebrew_names'
         run: |
           args=(
             --allow-fetch-failures
@@ -119,7 +119,14 @@ jobs:
             --sleep 0.25
             --workers 8
           )
-          if [ "$SEED_MODE" = "fixtures" ]; then
+          if [ "$SEED_MODE" = "legionnaires" ] || { [ "$RUN_MAINTENANCE" = "true" ] && [ "$RUN_MATCH_REFRESH" != "true" ]; }; then
+            args+=(
+              --start-date "$(date -u -d '900 days ago' +%F)"
+              --end-date "$(date -u -d '370 days' +%F)"
+              --athlete-games-only
+              --missing-details-only
+            )
+          elif [ "$SEED_MODE" = "fixtures" ]; then
             args+=(--fixtures-only)
           elif [ "$SEED_MODE" = "recent" ]; then
             args+=(
@@ -138,7 +145,7 @@ jobs:
           python scripts/ingest_legionnaires.py "${args[@]}"
 
       - name: Load legionnaire data
-        if: env.RUN_MATCH_REFRESH == 'true' && env.SEED_MODE != 'hebrew_names'
+        if: (env.RUN_MATCH_REFRESH == 'true' || env.RUN_MAINTENANCE == 'true') && env.SEED_MODE != 'hebrew_names'
         run: python scripts/load_365scores_to_supabase.py --processed-dir data/processed/legionnaires
 
       - name: Synchronize FotMob rosters and loans
