@@ -23,6 +23,7 @@ from load_365scores_to_supabase import (
     load_fixtures,
     load_player_rows,
     read_csv,
+    to_float,
     upsert_mapping,
 )
 
@@ -50,6 +51,11 @@ def parse_args() -> argparse.Namespace:
         "--skip-existing-player-stats",
         action="store_true",
         help="Load a player appearance only when another source has not already supplied stats.",
+    )
+    parser.add_argument(
+        "--prefer-source-appearance-minutes",
+        action="store_true",
+        help="Refresh canonical minutes from FotMob even when another source already supplied stats.",
     )
     return parser.parse_args()
 
@@ -219,7 +225,8 @@ def filter_player_rows(
     indexes: dict[str, Any],
     existing_players_only: bool,
     skip_existing_player_stats: bool,
-) -> tuple[list[dict[str, str]], int, int]:
+    prefer_source_appearance_minutes: bool,
+) -> tuple[list[dict[str, str]], int, int, int]:
     candidates: list[tuple[dict[str, str], str, str, str]] = []
     missing_players = 0
     for row in rows:
@@ -228,14 +235,14 @@ def filter_player_rows(
             if existing_players_only:
                 missing_players += 1
                 continue
-            return rows, 0, 0
+            return rows, 0, 0, 0
         match_id = indexes["matches"].get(row.get("game_id") or "")
         team_id = indexes["teams"].get(row.get("team_id") or "")
         if match_id and team_id:
             candidates.append((row, str(match_id), str(player_id), str(team_id)))
 
     if not skip_existing_player_stats or not candidates:
-        return [item[0] for item in candidates], missing_players, 0
+        return [item[0] for item in candidates], missing_players, 0, 0
 
     match_ids = sorted({item[1] for item in candidates})
     player_ids = sorted({item[2] for item in candidates})
@@ -254,12 +261,32 @@ def filter_player_rows(
         (str(row["match_id"]), str(row["player_id"]), str(row["team_id"]))
         for row in cur.fetchall()
     }
+    updated_minutes = 0
+    if prefer_source_appearance_minutes:
+        minute_updates = [
+            (to_float(row.get("stat_minutes_value")), match_id, player_id, team_id)
+            for row, match_id, player_id, team_id in candidates
+            if (match_id, player_id, team_id) in existing
+            and to_float(row.get("stat_minutes_value")) is not None
+        ]
+        if minute_updates:
+            cur.executemany(
+                """
+                update core.player_match_appearances
+                set minutes_played = %s
+                where match_id = %s
+                  and player_id = %s
+                  and team_id = %s
+                """,
+                minute_updates,
+            )
+            updated_minutes = len(minute_updates)
     filtered = [
         row
         for row, match_id, player_id, team_id in candidates
         if (match_id, player_id, team_id) not in existing
     ]
-    return filtered, missing_players, len(candidates) - len(filtered)
+    return filtered, missing_players, len(candidates) - len(filtered), updated_minutes
 
 
 def main() -> int:
@@ -333,13 +360,14 @@ def main() -> int:
                 )
                 conn.commit()
                 season_players = player_groups.get(season_num, [])
-                season_players, missing_players, skipped_existing = filter_player_rows(
+                season_players, missing_players, skipped_existing, updated_minutes = filter_player_rows(
                     cur,
                     source_id,
                     season_players,
                     indexes,
                     args.existing_players_only,
                     args.skip_existing_player_stats,
+                    args.prefer_source_appearance_minutes,
                 )
                 load_player_rows(
                     conn,
@@ -355,7 +383,8 @@ def main() -> int:
                     f"loaded FotMob {manifest_season(manifest, season_num).get('name', season_num)}: "
                     f"{len(indexes['matches'])} matches ({mapped_matches} matched across sources), "
                     f"{len(season_players)} player rows "
-                    f"({skipped_existing} existing rows skipped, {missing_players} unmapped players skipped)",
+                    f"({skipped_existing} existing rows skipped, {updated_minutes} minute totals refreshed, "
+                    f"{missing_players} unmapped players skipped)",
                     flush=True,
                 )
 

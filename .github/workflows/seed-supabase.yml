@@ -184,7 +184,8 @@ jobs:
           python scripts/load_fotmob_to_supabase.py \
             --processed-dir data/processed/fotmob-legionnaires \
             --existing-players-only \
-            --skip-existing-player-stats
+            --skip-existing-player-stats \
+            --prefer-source-appearance-minutes
 
       - name: Synchronize historical Transfermarkt loans
         if: env.RUN_MAINTENANCE == 'true' && env.SEED_MODE != 'fotmob_backfill' && env.SEED_MODE != 'hebrew_names'
