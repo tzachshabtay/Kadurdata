@@ -749,6 +749,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [seasonPlayerLoadSucceeded, setSeasonPlayerLoadSucceeded] = useState(false);
+  const [playerContextLoading, setPlayerContextLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
@@ -785,6 +786,13 @@ export function App() {
       ? { seasonId: initialDeepLink.seasonId, playerId: initialDeepLink.playerId }
       : null,
   );
+  const playerContextRequest = useRef(0);
+
+  useEffect(() => {
+    if (view === "players") return;
+    playerContextRequest.current += 1;
+    setPlayerContextLoading(false);
+  }, [view]);
 
   async function loadReferenceData() {
     setLoading(true);
@@ -936,6 +944,8 @@ export function App() {
   }, [availableSeasons, competitionId, latestDataSeason, loading, seasonId]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadSeasonData() {
       if (!seasonId) return;
       setSeasonLoading(true);
@@ -986,6 +996,7 @@ export function App() {
         liveClient.rpc("api_team_rosters_for_season", { p_season_id: seasonId }),
         liveClient.from("api_team_assets").select("*"),
       ]);
+      if (cancelled) return;
       const firstError = roundResult.error ?? matchResult.error ?? clubResult.error ?? playerResult.error ?? teamAssetResult.error;
       if (firstError) setError(firstError.message);
 
@@ -1020,17 +1031,13 @@ export function App() {
         if (pendingPlayer?.seasonId === seasonId) {
           return pendingPlayer.playerId;
         }
-        if (playerResult.error && current) return current;
-        return nextPlayers.some((player) => player.player_id === current)
-          || nextPlayerLoans.some((loan) => loan.player_id === current)
-          || nextTeamRoster.some((player) => player.player_id === current)
-          ? current
-          : nextPlayers[0]?.player_id ?? nextTeamRoster[0]?.player_id ?? nextPlayerLoans[0]?.player_id ?? "";
+        return current || (nextPlayers[0]?.player_id ?? nextTeamRoster[0]?.player_id ?? nextPlayerLoans[0]?.player_id ?? "");
       });
       setSeasonLoading(false);
     }
 
     void loadSeasonData();
+    return () => { cancelled = true; };
   }, [refreshToken, seasonId]);
 
   const roundMatches = useMemo(
@@ -2078,7 +2085,7 @@ export function App() {
   useEffect(() => {
     const hasPinnedProfile = comparisonCohortPlayers.some((player) => player.player_id === playerId);
     const hasPendingProfile = pendingPlayerSelection.current?.playerId === playerId;
-    if (view !== "players" || explorerLeaderboardLoading || selectedPlayerLoan || hasPinnedProfile || hasPendingProfile || !rankedExplorerPlayers.length || rankedExplorerPlayers.some((player) => player.player_id === playerId)) return;
+    if (view !== "players" || playerId || explorerLeaderboardLoading || selectedPlayerLoan || hasPinnedProfile || hasPendingProfile || !rankedExplorerPlayers.length) return;
     setComparisonPlayerIds([]);
     setPlayerId(rankedExplorerPlayers[0].player_id);
   }, [comparisonCohortPlayers, explorerLeaderboardLoading, playerId, rankedExplorerPlayers, selectedPlayerLoan, view]);
@@ -2316,7 +2323,68 @@ export function App() {
 
   function preparePlayerContextChange() {
     pendingPlayerSelection.current = null;
-    if (!comparisonPlayerIds.length) setComparisonCohortPlayers([]);
+    const preservedPlayers = [selectedPlayer, ...comparisonPlayers].filter((player): player is SeasonPlayer => Boolean(player));
+    if (preservedPlayers.length) {
+      setComparisonCohortPlayers([...new Map(preservedPlayers.map((player) => [player.player_id, player])).values()]);
+    }
+  }
+
+  async function changePlayerSeason(targetSeason: Season) {
+    preparePlayerContextChange();
+    if (!playerId || !hasSupabaseConfig || !supabase) {
+      pendingPlayerSelection.current = playerId ? { seasonId: targetSeason.season_id, playerId } : null;
+      setSeasonId(targetSeason.season_id);
+      return;
+    }
+
+    const requestId = ++playerContextRequest.current;
+    const requestedIds = [playerId, ...comparisonPlayerIds];
+    const fallbackById = new Map(profilePlayers.map((player) => [player.player_id, player]));
+    const client = supabase;
+    setPlayerContextLoading(true);
+
+    const resolved = await Promise.all(requestedIds.map(async (requestedPlayerId) => {
+      try {
+        let result = await client.rpc("api_player_context_for_season", {
+          p_player_id: requestedPlayerId,
+          p_season_name: targetSeason.season_name,
+        });
+        for (const delayMs of [500, 1500, 3000]) {
+          if (!isRetryableSupabaseError(result.error)) break;
+          await delay(delayMs);
+          result = await client.rpc("api_player_context_for_season", {
+            p_player_id: requestedPlayerId,
+            p_season_name: targetSeason.season_name,
+          });
+        }
+        return result.error ? null : ((result.data ?? [])[0] as SeasonPlayer | undefined) ?? null;
+      } catch {
+        return null;
+      }
+    }));
+
+    if (playerContextRequest.current !== requestId) return;
+    const primaryContext = resolved[0];
+    const resolvedPlayers = resolved.map((player, index) => player ?? fallbackById.get(requestedIds[index])).filter((player): player is SeasonPlayer => Boolean(player));
+    setComparisonCohortPlayers([...new Map(resolvedPlayers.map((player) => [player.player_id, player])).values()]);
+
+    if (primaryContext) {
+      const nextComparisonIds = resolved.slice(1).map((player, index) => (
+        player?.player_id ?? comparisonPlayerIds[index]
+      )).filter((id, index, ids) => Boolean(id) && id !== primaryContext.player_id && ids.indexOf(id) === index).slice(0, 4);
+      pendingPlayerSelection.current = { seasonId: primaryContext.season_id, playerId: primaryContext.player_id };
+      setSeasonPlayerLoadSucceeded(false);
+      setClubTournamentScope("selected");
+      setCompetitionId(primaryContext.competition_id);
+      setSeasonId(primaryContext.season_id);
+      setPlayerId(primaryContext.player_id);
+      setComparisonPlayerIds(nextComparisonIds);
+    } else {
+      pendingPlayerSelection.current = { seasonId: targetSeason.season_id, playerId };
+      setSeasonPlayerLoadSucceeded(false);
+      setSeasonId(targetSeason.season_id);
+    }
+    setPlayerContextLoading(false);
   }
 
   function openMatch(match: Match) {
@@ -2480,8 +2548,8 @@ export function App() {
             <span>{text.season}</span>
             <select
               value={showingLegionnaires ? legionnaireSeasonName : showingAllTournaments ? currentSeason.season_name : seasonId}
+              disabled={playerContextLoading}
               onChange={(event) => {
-                if (view === "players") preparePlayerContextChange();
                 if (showingLegionnaires) {
                   setLegionnaireSeasonName(event.target.value);
                   return;
@@ -2494,6 +2562,11 @@ export function App() {
                     setCompetitionId(representative.competition_id);
                     setSeasonId(representative.season_id);
                   }
+                  return;
+                }
+                if (view === "players") {
+                  const targetSeason = seasons.find((season) => season.season_id === event.target.value);
+                  if (targetSeason) void changePlayerSeason(targetSeason);
                   return;
                 }
                 setSeasonId(event.target.value);
