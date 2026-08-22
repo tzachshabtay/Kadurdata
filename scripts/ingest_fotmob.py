@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -49,6 +50,19 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated seasons. Blank imports every historical season not covered by 365Scores.",
     )
     parser.add_argument("--fixtures-only", action="store_true")
+    parser.add_argument("--league-id", type=int, default=LEAGUE_ID)
+    parser.add_argument("--league-slug", default=LEAGUE_SLUG)
+    parser.add_argument("--competition-name", default=COMPETITION_NAME)
+    parser.add_argument("--source-competition-name", default="Ligat ha'Al")
+    parser.add_argument(
+        "--season-labels",
+        help="Comma-separated source=canonical season labels, for example 2025=2025/2026.",
+    )
+    parser.add_argument(
+        "--israeli-legionnaires-only",
+        action="store_true",
+        help="Use Supabase mappings to fetch only clubs and players associated with Israeli players.",
+    )
     parser.add_argument("--limit", type=int, default=0, help="Limit matches per season for a smoke run.")
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--retries", type=int, default=3)
@@ -82,6 +96,97 @@ def page_props(html: str) -> dict[str, Any]:
 def league_url(season: Optional[str] = None) -> str:
     url = f"{BASE_URL}/leagues/{LEAGUE_ID}/overview/{LEAGUE_SLUG}"
     return f"{url}?season={quote(season)}" if season else url
+
+
+def configured_league_url(league_id: int, league_slug: str, season: Optional[str] = None) -> str:
+    url = f"{BASE_URL}/leagues/{league_id}/overview/{league_slug}"
+    return f"{url}?season={quote(season)}" if season else url
+
+
+def parse_season_labels(raw: Optional[str]) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for item in (raw or "").split(","):
+        if not item.strip():
+            continue
+        source, separator, canonical = item.partition("=")
+        if not separator or not source.strip() or not canonical.strip():
+            raise SystemExit(f"invalid season label mapping: {item}")
+        labels[source.strip()] = canonical.strip()
+    return labels
+
+
+def normalized_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+
+
+def legionnaire_source_filters(
+    database_url: str,
+    competition_name: str,
+) -> tuple[set[str], set[str], set[str]]:
+    import psycopg
+    from psycopg.rows import dict_row
+
+    israel_predicate = """
+      (
+        country.iso2 = 'IL'
+        or coalesce(player.metadata ->> 'source_country_id', player.metadata ->> '365_country_id') = '6'
+      )
+    """
+    with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                select distinct mapping.source_entity_id, player.display_name
+                from source.sources catalog
+                join source.source_entity_ids mapping
+                  on mapping.source_id = catalog.id
+                 and mapping.entity_type = 'player'
+                 and mapping.canonical_id is not null
+                join core.players player on player.id = mapping.canonical_id
+                left join core.countries country on country.id = player.country_id
+                where catalog.code = 'fotmob'
+                  and {israel_predicate}
+                """
+            )
+            players = cur.fetchall()
+            cur.execute(
+                f"""
+                with israeli_players as (
+                  select player.id
+                  from core.players player
+                  left join core.countries country on country.id = player.country_id
+                  where {israel_predicate}
+                ), affiliated_teams as (
+                  select stint.player_id, stint.team_id
+                  from core.player_team_stints stint
+                  join core.seasons season on season.id = stint.season_id
+                  join core.competitions competition on competition.id = season.competition_id
+                  where competition.name = %s
+                  union
+                  select appearance.player_id, appearance.team_id
+                  from core.player_match_appearances appearance
+                  join core.matches season_match on season_match.id = appearance.match_id
+                  join core.seasons season on season.id = season_match.season_id
+                  join core.competitions competition on competition.id = season.competition_id
+                  where competition.name = %s
+                )
+                select distinct mapping.source_entity_id
+                from affiliated_teams affiliation
+                join israeli_players player on player.id = affiliation.player_id
+                join source.sources catalog on catalog.code = 'fotmob'
+                join source.source_entity_ids mapping
+                  on mapping.source_id = catalog.id
+                 and mapping.entity_type = 'team'
+                 and mapping.canonical_id = affiliation.team_id
+                """,
+                (competition_name, competition_name),
+            )
+            teams = cur.fetchall()
+    return (
+        {str(row["source_entity_id"]) for row in players},
+        {normalized_name(str(row["display_name"])) for row in players},
+        {str(row["source_entity_id"]) for row in teams},
+    )
 
 
 def season_start_year(season: str) -> int:
@@ -135,7 +240,11 @@ def stage_and_round(match: dict[str, Any]) -> tuple[int, Optional[int], str]:
     return stage_num, round_number, text
 
 
-def fixture_row(match: dict[str, Any], season: str) -> dict[str, Any]:
+def fixture_row(
+    match: dict[str, Any],
+    season: str,
+    competition_id: int = LEAGUE_ID,
+) -> dict[str, Any]:
     status = match.get("status") or {}
     home_score, away_score = score_pair(status)
     stage_num, round_num, round_name = stage_and_round(match)
@@ -143,7 +252,7 @@ def fixture_row(match: dict[str, Any], season: str) -> dict[str, Any]:
     away = match.get("away") or {}
     return {
         "game_id": match.get("id"),
-        "competition_id": LEAGUE_ID,
+        "competition_id": competition_id,
         "season_num": season_start_year(season),
         "stage_num": stage_num,
         "round_num": round_num,
@@ -283,7 +392,33 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     args = parse_args()
-    root_props = page_props(fetch_text(league_url(), args.retries, args.sleep))
+    season_labels = parse_season_labels(args.season_labels)
+    target_player_ids: set[str] = set()
+    target_player_names: set[str] = set()
+    target_team_ids: set[str] = set()
+    if args.israeli_legionnaires_only:
+        database_url = os.environ.get("SUPABASE_DB_URL")
+        if not database_url:
+            raise SystemExit("SUPABASE_DB_URL is required with --israeli-legionnaires-only")
+        target_player_ids, target_player_names, target_team_ids = legionnaire_source_filters(
+            database_url,
+            args.competition_name,
+        )
+        if not target_player_ids and not target_player_names:
+            raise SystemExit("no mapped Israeli FotMob players were found")
+        print(
+            f"targeting {len(target_player_ids)} Israeli players across "
+            f"{len(target_team_ids)} mapped {args.competition_name} clubs",
+            flush=True,
+        )
+
+    root_props = page_props(
+        fetch_text(
+            configured_league_url(args.league_id, args.league_slug),
+            args.retries,
+            args.sleep,
+        )
+    )
     available = root_props.get("allAvailableSeasons") or []
     seasons = selected_seasons(available, args.seasons)
     fixtures: list[dict[str, Any]] = []
@@ -291,17 +426,30 @@ def main() -> int:
     failures: list[dict[str, Any]] = []
 
     for season in seasons:
-        props = page_props(fetch_text(league_url(season), args.retries, args.sleep))
+        props = page_props(
+            fetch_text(
+                configured_league_url(args.league_id, args.league_slug, season),
+                args.retries,
+                args.sleep,
+            )
+        )
         matches = ((props.get("fixtures") or {}).get("allMatches") or [])
+        if target_team_ids:
+            matches = [
+                match
+                for match in matches
+                if str((match.get("home") or {}).get("id")) in target_team_ids
+                or str((match.get("away") or {}).get("id")) in target_team_ids
+            ]
         if args.limit:
             matches = matches[: args.limit]
-        season_rows = [fixture_row(match, season) for match in matches]
+        season_rows = [fixture_row(match, season, args.league_id) for match in matches]
         fixtures.extend(season_rows)
         dates = sorted(row["start_time"][:10] for row in season_rows if row.get("start_time"))
         season_metadata.append(
             {
                 "num": season_start_year(season),
-                "name": season,
+                "name": season_labels.get(season, season),
                 "start_date": dates[0] if dates else None,
                 "end_date": dates[-1] if dates else None,
                 "match_count": len(season_rows),
@@ -320,9 +468,28 @@ def main() -> int:
             }
             for future in as_completed(futures):
                 rows, failure = future.result()
+                if target_player_ids or target_player_names:
+                    rows = [
+                        row
+                        for row in rows
+                        if str(row.get("athlete_id") or "") in target_player_ids
+                        or normalized_name(str(row.get("player_name") or "")) in target_player_names
+                    ]
                 player_rows.extend(rows)
                 if failure:
                     failures.append(failure)
+
+    if target_player_ids or target_player_names:
+        target_games = {str(row["game_id"]) for row in player_rows}
+        fixtures = [row for row in fixtures if str(row.get("game_id")) in target_games]
+        for season in season_metadata:
+            season_rows = [
+                row for row in fixtures if str(row.get("season_num")) == str(season["num"])
+            ]
+            dates = sorted(row["start_time"][:10] for row in season_rows if row.get("start_time"))
+            season["start_date"] = dates[0] if dates else None
+            season["end_date"] = dates[-1] if dates else None
+            season["match_count"] = len(season_rows)
 
     args.processed_dir.mkdir(parents=True, exist_ok=True)
     write_csv(args.processed_dir / "fotmob_fixtures.csv", fixtures)
@@ -336,9 +503,10 @@ def main() -> int:
         },
         "competitions": [
             {
-                "id": LEAGUE_ID,
-                "name": COMPETITION_NAME,
-                "source_name": "Ligat ha'Al",
+                "id": args.league_id,
+                "name": args.competition_name,
+                "source_name": args.source_competition_name,
+                "scope": "foreign_club" if args.israeli_legionnaires_only else "domestic",
                 "competition_type": "league",
                 "gender": "men",
                 "age_group": "senior",
@@ -347,7 +515,7 @@ def main() -> int:
         ],
         "fixture_count": len(fixtures),
         "player_row_count": len(player_rows),
-        "detail_fixture_count": len(detail_fixtures) if not args.fixtures_only else 0,
+        "detail_fixture_count": len(fixtures) if not args.fixtures_only else 0,
         "failure_count": len(failures),
         "failures": failures,
     }

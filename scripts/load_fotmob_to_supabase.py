@@ -14,8 +14,10 @@ import psycopg
 from psycopg.rows import dict_row
 
 from load_365scores_to_supabase import (
+    competition_country_id,
     execute_one,
     get_mapping,
+    get_or_create_competition,
     get_or_create_country,
     get_or_create_season,
     load_fixtures,
@@ -39,6 +41,16 @@ COMPETITION_NAME = "Israeli Premier League"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Load historical FotMob rows into Supabase.")
     parser.add_argument("--processed-dir", type=Path, default=PROCESSED_DIR)
+    parser.add_argument(
+        "--existing-players-only",
+        action="store_true",
+        help="Ignore source players that are not already mapped to a canonical player.",
+    )
+    parser.add_argument(
+        "--skip-existing-player-stats",
+        action="store_true",
+        help="Load a player appearance only when another source has not already supplied stats.",
+    )
     return parser.parse_args()
 
 
@@ -69,36 +81,48 @@ def get_source(cur: psycopg.Cursor, manifest: dict[str, Any]) -> str:
     return row["id"]
 
 
-def get_competition(cur: psycopg.Cursor, source_id: str, country_id: str) -> str:
-    mapped = get_mapping(cur, source_id, "competition", COMPETITION_SOURCE_ID)
+def manifest_competition(manifest: dict[str, Any]) -> dict[str, Any]:
+    competitions = manifest.get("competitions") or []
+    if not competitions:
+        raise SystemExit("FotMob manifest contains no competition")
+    return competitions[0]
+
+
+def get_competition(
+    cur: psycopg.Cursor,
+    source_id: str,
+    israel_country_id: str,
+    competition: dict[str, Any],
+) -> str:
+    competition_source_id = str(competition.get("id") or COMPETITION_SOURCE_ID)
+    competition_name = str(competition.get("name") or COMPETITION_NAME)
+    country_id = competition_country_id(israel_country_id, competition)
+    mapped = get_mapping(cur, source_id, "competition", competition_source_id)
     if mapped:
         return mapped
     row = execute_one(
         cur,
-        "select id from core.competitions where country_id = %s and name = %s",
-        (country_id, COMPETITION_NAME),
+        """
+        select id
+        from core.competitions
+        where lower(name) = lower(%s)
+          and (country_id = %s or (country_id is null and %s::uuid is null))
+        order by id
+        limit 1
+        """,
+        (competition_name, country_id, country_id),
     )
     if not row:
-        row = execute_one(
-            cur,
-            """
-            insert into core.competitions (country_id, name, competition_type, gender)
-            values (%s, %s, 'league', 'men')
-            returning id
-            """,
-            (country_id, COMPETITION_NAME),
-        )
-    assert row is not None
+        return get_or_create_competition(cur, source_id, country_id, competition)
     upsert_mapping(
         cur,
         source_id,
         "competition",
-        COMPETITION_SOURCE_ID,
+        competition_source_id,
         "core.competitions",
         row["id"],
-        "Ligat ha'Al",
-        "ligat_haal",
-        {"fotmob_league_id": 127},
+        str(competition.get("source_name") or competition_name),
+        metadata={"fotmob_league_id": competition.get("id")},
     )
     return row["id"]
 
@@ -144,6 +168,100 @@ def manifest_season(manifest: dict[str, Any], season_num: str) -> dict[str, Any]
     return next((season for season in seasons if str(season.get("num")) == season_num), {})
 
 
+def seed_match_mappings(
+    cur: psycopg.Cursor,
+    source_id: str,
+    season_id: str,
+    rows: list[dict[str, str]],
+) -> int:
+    mapped_count = 0
+    for row in rows:
+        source_match_id = row.get("game_id") or ""
+        if not source_match_id or get_mapping(cur, source_id, "match", source_match_id):
+            continue
+        home_team_id = get_mapping(cur, source_id, "team", row.get("home_team_id") or "")
+        away_team_id = get_mapping(cur, source_id, "team", row.get("away_team_id") or "")
+        scheduled_at = row.get("start_time")
+        if not home_team_id or not away_team_id or not scheduled_at:
+            continue
+        cur.execute(
+            """
+            select id
+            from core.matches
+            where season_id = %s
+              and home_team_id = %s
+              and away_team_id = %s
+              and abs(extract(epoch from (scheduled_at - %s::timestamptz))) <= 21600
+            order by abs(extract(epoch from (scheduled_at - %s::timestamptz))), id
+            limit 2
+            """,
+            (season_id, home_team_id, away_team_id, scheduled_at, scheduled_at),
+        )
+        candidates = cur.fetchall()
+        if len(candidates) != 1:
+            continue
+        upsert_mapping(
+            cur,
+            source_id,
+            "match",
+            source_match_id,
+            "core.matches",
+            candidates[0]["id"],
+        )
+        mapped_count += 1
+    return mapped_count
+
+
+def filter_player_rows(
+    cur: psycopg.Cursor,
+    source_id: str,
+    rows: list[dict[str, str]],
+    indexes: dict[str, Any],
+    existing_players_only: bool,
+    skip_existing_player_stats: bool,
+) -> tuple[list[dict[str, str]], int, int]:
+    candidates: list[tuple[dict[str, str], str, str, str]] = []
+    missing_players = 0
+    for row in rows:
+        player_id = get_mapping(cur, source_id, "player", row.get("athlete_id") or "")
+        if not player_id:
+            if existing_players_only:
+                missing_players += 1
+                continue
+            return rows, 0, 0
+        match_id = indexes["matches"].get(row.get("game_id") or "")
+        team_id = indexes["teams"].get(row.get("team_id") or "")
+        if match_id and team_id:
+            candidates.append((row, str(match_id), str(player_id), str(team_id)))
+
+    if not skip_existing_player_stats or not candidates:
+        return [item[0] for item in candidates], missing_players, 0
+
+    match_ids = sorted({item[1] for item in candidates})
+    player_ids = sorted({item[2] for item in candidates})
+    cur.execute(
+        """
+        select distinct appearance.match_id, appearance.player_id, appearance.team_id
+        from core.player_match_appearances appearance
+        join obs.player_match_stats stats on stats.appearance_id = appearance.id
+        where appearance.match_id = any(%s::uuid[])
+          and appearance.player_id = any(%s::uuid[])
+          and stats.source_id <> %s
+        """,
+        (match_ids, player_ids, source_id),
+    )
+    existing = {
+        (str(row["match_id"]), str(row["player_id"]), str(row["team_id"]))
+        for row in cur.fetchall()
+    }
+    filtered = [
+        row
+        for row, match_id, player_id, team_id in candidates
+        if (match_id, player_id, team_id) not in existing
+    ]
+    return filtered, missing_players, len(candidates) - len(filtered)
+
+
 def main() -> int:
     args = parse_args()
     database_url = os.environ.get("SUPABASE_DB_URL")
@@ -152,6 +270,8 @@ def main() -> int:
     fixtures = read_csv(args.processed_dir / "fotmob_fixtures.csv")
     players = read_csv(args.processed_dir / "fotmob_player_match_stats.csv")
     manifest = read_manifest(args.processed_dir)
+    competition = manifest_competition(manifest)
+    competition_source_id = str(competition.get("id") or COMPETITION_SOURCE_ID)
     if not fixtures:
         raise SystemExit("processed FotMob fixture file contains no rows")
 
@@ -184,7 +304,7 @@ def main() -> int:
         with conn.cursor() as cur:
             source_id = get_source(cur, manifest)
             country_id = get_or_create_country(cur)
-            competition_id = get_competition(cur, source_id, country_id)
+            competition_id = get_competition(cur, source_id, country_id, competition)
             seed_entity_mappings(cur, source_id, "team", "core.teams", team_sources, "name")
             seed_entity_mappings(cur, source_id, "player", "core.players", player_sources, "display_name")
             conn.commit()
@@ -194,9 +314,15 @@ def main() -> int:
                     cur,
                     source_id,
                     competition_id,
-                    COMPETITION_SOURCE_ID,
+                    competition_source_id,
                     season_fixtures,
                     manifest_season(manifest, season_num),
+                )
+                mapped_matches = seed_match_mappings(
+                    cur,
+                    source_id,
+                    season_id,
+                    season_fixtures,
                 )
                 indexes = load_fixtures(
                     cur,
@@ -207,6 +333,14 @@ def main() -> int:
                 )
                 conn.commit()
                 season_players = player_groups.get(season_num, [])
+                season_players, missing_players, skipped_existing = filter_player_rows(
+                    cur,
+                    source_id,
+                    season_players,
+                    indexes,
+                    args.existing_players_only,
+                    args.skip_existing_player_stats,
+                )
                 load_player_rows(
                     conn,
                     cur,
@@ -219,7 +353,9 @@ def main() -> int:
                 conn.commit()
                 print(
                     f"loaded FotMob {manifest_season(manifest, season_num).get('name', season_num)}: "
-                    f"{len(indexes['matches'])} matches, {len(season_players)} player rows",
+                    f"{len(indexes['matches'])} matches ({mapped_matches} matched across sources), "
+                    f"{len(season_players)} player rows "
+                    f"({skipped_existing} existing rows skipped, {missing_players} unmapped players skipped)",
                     flush=True,
                 )
 

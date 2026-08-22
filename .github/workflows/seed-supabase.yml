@@ -156,6 +156,35 @@ jobs:
             --sleep 0.25 \
             --workers 6
 
+      - name: Fetch missing MLS legionnaire history from FotMob
+        if: env.RUN_MAINTENANCE == 'true' && env.SEED_MODE != 'hebrew_names'
+        run: |
+          current_year=$(date -u +%Y)
+          previous_year=$((current_year - 1))
+          next_year=$((current_year + 1))
+          season_labels="${previous_year}=${previous_year}/${current_year},${current_year}=${current_year}/${next_year}"
+          python scripts/ingest_fotmob.py \
+            --league-id 130 \
+            --league-slug mls \
+            --competition-name "Major League Soccer" \
+            --source-competition-name "MLS" \
+            --seasons "${previous_year},${current_year}" \
+            --season-labels "$season_labels" \
+            --israeli-legionnaires-only \
+            --processed-dir data/processed/fotmob-legionnaires \
+            --allow-fetch-failures \
+            --retries 4 \
+            --sleep 0.2 \
+            --workers 8
+
+      - name: Load missing MLS legionnaire history
+        if: env.RUN_MAINTENANCE == 'true' && env.SEED_MODE != 'hebrew_names'
+        run: |
+          python scripts/load_fotmob_to_supabase.py \
+            --processed-dir data/processed/fotmob-legionnaires \
+            --existing-players-only \
+            --skip-existing-player-stats
+
       - name: Synchronize historical Transfermarkt loans
         if: env.RUN_MAINTENANCE == 'true' && env.SEED_MODE != 'hebrew_names'
         run: |
