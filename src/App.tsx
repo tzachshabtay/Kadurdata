@@ -1175,7 +1175,12 @@ export function App() {
 
     async function loadComparisonPlayerDetail() {
       const playerIds = comparisonPlayerIds.filter((id) => id !== playerId).slice(0, 4);
-      if (view !== "players" || !competitionId || !playerIds.length) {
+      const contextsReady = playerTournamentScope !== "all" || playerIds.every((id) => (
+        comparisonCohortPlayers.some((player) => player.player_id === id)
+        || players.some((player) => player.player_id === id)
+        || teamRoster.some((player) => player.player_id === id)
+      ));
+      if (view !== "players" || !competitionId || !playerIds.length || !contextsReady) {
         setComparisonPlayerHistories({});
         setComparisonLoading(false);
         setComparisonError(null);
@@ -1202,7 +1207,7 @@ export function App() {
 
     void loadComparisonPlayerDetail();
     return () => { cancelled = true; };
-  }, [comparisonCohortPlayers, comparisonPlayerIds, competitionId, playerId, playerTournamentScope, view]);
+  }, [comparisonCohortPlayers, comparisonPlayerIds, competitionId, playerId, playerTournamentScope, players, teamRoster, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1230,7 +1235,12 @@ export function App() {
 
     async function loadComparisonPlayerValuations() {
       const playerIds = comparisonPlayerIds.filter((id) => id !== playerId).slice(0, 4);
-      if (view !== "players" || !playerIds.length || !hasSupabaseConfig || !supabase) {
+      const contextsReady = playerTournamentScope !== "all" || playerIds.every((id) => (
+        comparisonCohortPlayers.some((player) => player.player_id === id)
+        || players.some((player) => player.player_id === id)
+        || teamRoster.some((player) => player.player_id === id)
+      ));
+      if (view !== "players" || !playerIds.length || !contextsReady || !hasSupabaseConfig || !supabase) {
         setComparisonPlayerValuations({});
         setComparisonValuationLoading(false);
         return;
@@ -1246,7 +1256,7 @@ export function App() {
 
     void loadComparisonPlayerValuations();
     return () => { cancelled = true; };
-  }, [comparisonPlayerIds, playerId, refreshToken, view]);
+  }, [comparisonCohortPlayers, comparisonPlayerIds, playerId, playerTournamentScope, players, refreshToken, teamRoster, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1286,7 +1296,12 @@ export function App() {
 
     async function loadComparisonPlayerSeasonHeatmaps() {
       const playerIds = comparisonPlayerIds.filter((id) => id !== playerId).slice(0, 4);
-      if (view !== "players" || !playerIds.length || !seasonId) {
+      const contextsReady = playerTournamentScope !== "all" || playerIds.every((id) => (
+        comparisonCohortPlayers.some((player) => player.player_id === id)
+        || players.some((player) => player.player_id === id)
+        || teamRoster.some((player) => player.player_id === id)
+      ));
+      if (view !== "players" || !playerIds.length || !seasonId || !contextsReady) {
         setComparisonPlayerSeasonHeatmaps({});
         setComparisonPlayerHeatmapLoading(false);
         return;
@@ -1319,7 +1334,7 @@ export function App() {
 
     void loadComparisonPlayerSeasonHeatmaps();
     return () => { cancelled = true; };
-  }, [comparisonCohortPlayers, comparisonPlayerIds, currentPlayerAllTournamentSeasonIds, currentSeason.season_name, matches, playerId, playerTournamentScope, refreshToken, seasonId, view]);
+  }, [comparisonCohortPlayers, comparisonPlayerIds, currentPlayerAllTournamentSeasonIds, currentSeason.season_name, matches, playerId, playerTournamentScope, players, refreshToken, seasonId, teamRoster, view]);
 
   useEffect(() => {
     let cancelled = false;
