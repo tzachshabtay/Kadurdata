@@ -123,7 +123,6 @@ jobs:
             args+=(
               --start-date "$(date -u -d '900 days ago' +%F)"
               --end-date "$(date -u -d '370 days' +%F)"
-              --athlete-games-only
               --missing-details-only
             )
           elif [ "$SEED_MODE" = "fixtures" ]; then

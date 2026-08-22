@@ -715,7 +715,7 @@ def main() -> int:
         "player_stat_keys": stat_names,
         "fixture_pages": fixture_pages,
         "failures": failures,
-        "note": "Current Israeli players abroad are discovered from profiles; historical affiliations are recovered from the complete player game feed, and nightly backfills fetch only missing match details.",
+        "note": "Current Israeli players abroad are discovered from profiles; the recent player feed discovers affiliations, club fixture feeds fill the requested history window, and nightly backfills fetch only missing match details.",
     }
     write_json(args.processed_dir / "365scores_manifest.json", manifest)
     print(
