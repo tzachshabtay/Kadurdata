@@ -2314,6 +2314,11 @@ export function App() {
     setComparisonCohortPlayers([]);
   }
 
+  function preparePlayerContextChange() {
+    pendingPlayerSelection.current = null;
+    if (!comparisonPlayerIds.length) setComparisonCohortPlayers([]);
+  }
+
   function openMatch(match: Match) {
     if (match.competition_id !== competitionId || match.season_id !== seasonId) {
       pendingMatchSelection.current = {
@@ -2441,7 +2446,7 @@ export function App() {
               value={showingLegionnaires ? "foreign-leagues" : showingAllTournaments ? allTournamentsValue : competitionId}
               disabled={showingLegionnaires}
               onChange={(event) => {
-                if (view === "players") clearPinnedPlayerProfile();
+                if (view === "players") preparePlayerContextChange();
                 if (event.target.value === allTournamentsValue) {
                   if (view === "overview") selectAllTournamentOverview();
                   else setClubTournamentScope("all");
@@ -2476,7 +2481,7 @@ export function App() {
             <select
               value={showingLegionnaires ? legionnaireSeasonName : showingAllTournaments ? currentSeason.season_name : seasonId}
               onChange={(event) => {
-                if (view === "players") clearPinnedPlayerProfile();
+                if (view === "players") preparePlayerContextChange();
                 if (showingLegionnaires) {
                   setLegionnaireSeasonName(event.target.value);
                   return;
