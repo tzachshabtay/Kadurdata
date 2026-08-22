@@ -1837,6 +1837,43 @@ export function App() {
     });
     return [...byPlayerId.values()];
   }, [comparisonCohortPlayers, loanProfilePlayers, players, teamRoster]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateLinkedPlayerContexts() {
+      if (view !== "players" || loading || seasonLoading || !hasSupabaseConfig || !supabase) return;
+      const knownIds = new Set(profilePlayers.map((player) => player.player_id));
+      const missingIds = [playerId, ...comparisonPlayerIds]
+        .filter((id, index, ids) => id && !knownIds.has(id) && ids.indexOf(id) === index)
+        .slice(0, 5);
+      if (!missingIds.length) return;
+
+      const contexts = await Promise.all(missingIds.map(async (missingPlayerId) => {
+        let result = await supabase!.rpc("api_player_context_for_season", {
+          p_player_id: missingPlayerId,
+          p_season_name: currentSeason.season_name,
+        });
+        for (const delayMs of [500, 1500, 3000]) {
+          if (!isRetryableSupabaseError(result.error)) break;
+          await delay(delayMs);
+          result = await supabase!.rpc("api_player_context_for_season", {
+            p_player_id: missingPlayerId,
+            p_season_name: currentSeason.season_name,
+          });
+        }
+        return result.error ? null : ((result.data ?? [])[0] as SeasonPlayer | undefined) ?? null;
+      }));
+      if (cancelled) return;
+      const resolved = contexts.filter((player): player is SeasonPlayer => Boolean(player));
+      if (!resolved.length) return;
+      setComparisonCohortPlayers((current) => [...new Map(
+        [...current, ...resolved].map((player) => [player.player_id, player]),
+      ).values()].slice(0, 5));
+    }
+
+    void hydrateLinkedPlayerContexts();
+    return () => { cancelled = true; };
+  }, [comparisonPlayerIds, currentSeason.season_name, loading, playerId, profilePlayers, seasonLoading, view]);
   const selectedPlayer = profilePlayers.find((player) => player.player_id === playerId);
   useEffect(() => {
     let cancelled = false;
@@ -1887,12 +1924,12 @@ export function App() {
   useEffect(() => {
     if (!comparisonPlayerIds.length || loading || seasonLoading) return;
     const validIds = comparisonPlayerIds.filter((id, index) => id !== playerId
-      && (!seasonPlayerLoadSucceeded || profilePlayers.some((player) => player.player_id === id))
+      && (playerTournamentScope === "all" || !seasonPlayerLoadSucceeded || profilePlayers.some((player) => player.player_id === id))
       && comparisonPlayerIds.indexOf(id) === index).slice(0, 4);
     if (validIds.length !== comparisonPlayerIds.length || validIds.some((id, index) => id !== comparisonPlayerIds[index])) {
       setComparisonPlayerIds(validIds);
     }
-  }, [comparisonPlayerIds, loading, playerId, profilePlayers, seasonLoading, seasonPlayerLoadSucceeded]);
+  }, [comparisonPlayerIds, loading, playerId, playerTournamentScope, profilePlayers, seasonLoading, seasonPlayerLoadSucceeded]);
   const playerMetrics = useMemo(
     () => metrics.filter((metric) => metric.subject_type === "player_match"),
     [metrics],
