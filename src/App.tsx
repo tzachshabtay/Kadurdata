@@ -72,7 +72,7 @@ import type {
 type View = "overview" | "matches" | "clubs" | "players" | "legionnaires";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerHistoryRange = "latest" | "all";
-type ClubTournamentScope = "selected" | "all";
+type TournamentScope = "selected" | "all";
 type ShotSideFilter = "all" | "home" | "away";
 type DeepLinkState = {
   language: Language | null;
@@ -102,7 +102,8 @@ type DeepLinkState = {
   roleFilter: RoleFilter;
   positionFilter: string;
   clubFilter: string;
-  clubTournamentScope: ClubTournamentScope;
+  clubTournamentScope: TournamentScope;
+  playerTournamentScope: TournamentScope;
   clubQuery: string;
   playerQuery: string;
   attributeQuery: string;
@@ -454,7 +455,7 @@ function delay(milliseconds: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
+async function fetchPlayerHistoryRows(competitionId: string, playerId: string, allTournaments = false) {
   if (!supabase) return { rows: [] as PlayerHistory[], error: "Supabase is not configured." };
 
   const rows: PlayerHistory[] = [];
@@ -464,7 +465,9 @@ async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
   while (true) {
     let result = useFastRpc
       ? await supabase
-          .rpc("api_player_history_for_player", {
+          .rpc(allTournaments ? "api_player_history_for_player_all_tournaments" : "api_player_history_for_player", allTournaments ? {
+            p_player_id: playerId,
+          } : {
             p_competition_id: competitionId,
             p_player_id: playerId,
           })
@@ -476,8 +479,8 @@ async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
       : await supabase
           .from("api_player_history")
           .select("*")
-          .eq("competition_id", competitionId)
           .eq("player_id", playerId)
+          .match(allTournaments ? {} : { competition_id: competitionId })
           .order("scheduled_at")
           .order("match_id")
           .order("metric_code")
@@ -488,8 +491,8 @@ async function fetchPlayerHistoryRows(competitionId: string, playerId: string) {
       result = await supabase
         .from("api_player_history")
         .select("*")
-        .eq("competition_id", competitionId)
         .eq("player_id", playerId)
+        .match(allTournaments ? {} : { competition_id: competitionId })
         .order("scheduled_at")
         .order("match_id")
         .order("metric_code")
@@ -517,31 +520,53 @@ async function fetchPlayerValuationRows(playerId: string) {
   };
 }
 
-async function fetchPlayerSeasonHeatmapRows(playerId: string, seasonId: string, matches: Match[]) {
+async function fetchPlayerSeasonHeatmapRows(
+  playerId: string,
+  seasonId: string,
+  matches: Match[],
+  allTournamentSeason?: { name: string; ids: string[] },
+) {
   if (!supabase) return { rows: [] as PlayerSeasonHeatmap[], error: "Supabase is not configured." };
 
-  let result = await supabase
-    .from("api_player_season_heatmaps")
-    .select("*")
-    .eq("season_id", seasonId)
-    .eq("player_id", playerId)
-    .order("scheduled_at")
-    .limit(100);
+  let result = allTournamentSeason
+    ? await supabase
+        .rpc("api_player_heatmaps_for_player_season", {
+          p_player_id: playerId,
+          p_season_name: allTournamentSeason.name,
+        })
+        .order("scheduled_at")
+        .limit(500)
+    : await supabase
+        .from("api_player_season_heatmaps")
+        .select("*")
+        .eq("season_id", seasonId)
+        .eq("player_id", playerId)
+        .order("scheduled_at")
+        .limit(100);
 
   if (isSchemaCacheMiss(result.error)) {
-    const matchById = new Map(matches.map((match) => [match.match_id, match]));
-    const fallback = await supabase
-      .from("api_match_player_heatmaps")
+    result = await supabase
+      .from("api_player_season_heatmaps")
       .select("*")
       .eq("player_id", playerId)
+      .in("season_id", allTournamentSeason?.ids.length ? allTournamentSeason.ids : [seasonId])
+      .order("scheduled_at")
       .limit(500);
-    result = {
-      ...fallback,
-      data: (fallback.data ?? []).flatMap((row) => {
-        const match = matchById.get(row.match_id);
-        return match ? [{ ...row, season_id: seasonId, scheduled_at: match.scheduled_at, minutes_played: null }] : [];
-      }),
-    } as typeof result;
+    if (isSchemaCacheMiss(result.error)) {
+      const matchById = new Map(matches.map((match) => [match.match_id, match]));
+      const fallback = await supabase
+        .from("api_match_player_heatmaps")
+        .select("*")
+        .eq("player_id", playerId)
+        .limit(500);
+      result = {
+        ...fallback,
+        data: (fallback.data ?? []).flatMap((row) => {
+          const match = matchById.get(row.match_id);
+          return match ? [{ ...row, season_id: match.season_id, scheduled_at: match.scheduled_at, minutes_played: null }] : [];
+        }),
+      } as typeof result;
+    }
   }
 
   return {
@@ -558,6 +583,10 @@ function readDeepLinkState(): DeepLinkState {
   const shotSide = params.get("shotSide");
   const history = params.get("history");
   const role = params.get("role") as RoleFilter | null;
+  const comparisonPlayerIds = [...new Set((params.get("comparePlayers") ?? params.get("comparePlayer") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean))].slice(0, 4);
   const readNumber = (key: string, fallback: number | null) => {
     const raw = params.get(key);
     if (raw === null || raw.trim() === "") return fallback;
@@ -578,10 +607,7 @@ function readDeepLinkState(): DeepLinkState {
     shotPlayerId: params.get("shotPlayer") ?? "all",
     clubId: params.get("club") ?? "",
     playerId: params.get("player") ?? "",
-    comparisonPlayerIds: [...new Set((params.get("comparePlayers") ?? params.get("comparePlayer") ?? "")
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean))].slice(0, 4),
+    comparisonPlayerIds,
     metricCode: params.get("metric") ?? "",
     playerHistoryRange: history === "all" ? "all" : "latest",
     leaderMetricCode: params.get("leaderMetric") ?? "goals",
@@ -597,6 +623,10 @@ function readDeepLinkState(): DeepLinkState {
     positionFilter: params.get("position") ?? "All",
     clubFilter: params.get("clubFilter") ?? "all",
     clubTournamentScope: params.get("clubTournaments") === "all" || (view === "overview" && !params.has("clubTournaments")) ? "all" : "selected",
+    playerTournamentScope: params.get("playerTournaments") === "all"
+      || (view === "players" && comparisonPlayerIds.length > 0 && !params.has("playerTournaments"))
+      ? "all"
+      : "selected",
     clubQuery: params.get("clubSearch") ?? "",
     playerQuery: params.get("playerSearch") ?? "",
     attributeQuery: params.get("attributeSearch") ?? "",
@@ -648,6 +678,7 @@ function writeDeepLinkState(state: DeepLinkState) {
   setString("position", state.positionFilter);
   setString("clubFilter", state.clubFilter);
   setString("clubTournaments", state.clubTournamentScope);
+  setString("playerTournaments", state.playerTournamentScope);
   setString("clubSearch", state.clubQuery);
   setString("playerSearch", state.playerQuery);
   setString("attributeSearch", state.attributeQuery);
@@ -672,13 +703,13 @@ function applyMinimumToMap(current: Record<string, number>, metricCode: string, 
   return next;
 }
 
-function latestHistorySeasonId(rows: PlayerHistory[]) {
-  const latestMatchBySeason = new Map<string, number>();
-  rows.forEach((row) => latestMatchBySeason.set(
-    row.season_id,
-    Math.max(latestMatchBySeason.get(row.season_id) ?? 0, dateValue(row.scheduled_at)),
-  ));
-  return [...latestMatchBySeason].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+function isClubLeagueCompetition(competition?: Competition) {
+  return Boolean(
+    competition
+    && competition.participant_type === "club"
+    && competition.competition_type === "league"
+    && (competition.scope === "domestic" || competition.scope === "foreign_club"),
+  );
 }
 
 export function App() {
@@ -736,7 +767,8 @@ export function App() {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>(initialDeepLink.roleFilter);
   const [positionFilter, setPositionFilter] = useState(initialDeepLink.positionFilter);
   const [clubFilter, setClubFilter] = useState(initialDeepLink.clubFilter);
-  const [clubTournamentScope, setClubTournamentScope] = useState<ClubTournamentScope>(initialDeepLink.clubTournamentScope);
+  const [clubTournamentScope, setClubTournamentScope] = useState<TournamentScope>(initialDeepLink.clubTournamentScope);
+  const [playerTournamentScope, setPlayerTournamentScope] = useState<TournamentScope>(initialDeepLink.playerTournamentScope);
   const [clubQuery, setClubQuery] = useState(initialDeepLink.clubQuery);
   const [playerQuery, setPlayerQuery] = useState(initialDeepLink.playerQuery);
   const [attributeQuery, setAttributeQuery] = useState(initialDeepLink.attributeQuery);
@@ -887,6 +919,7 @@ export function App() {
       setPositionFilter(next.positionFilter);
       setClubFilter(next.clubFilter);
       setClubTournamentScope(next.clubTournamentScope);
+      setPlayerTournamentScope(next.playerTournamentScope);
       setClubQuery(next.clubQuery);
       setPlayerQuery(next.playerQuery);
       setAttributeQuery(next.attributeQuery);
@@ -909,10 +942,29 @@ export function App() {
     () => seasons.filter((season) => season.competition_id === competitionId),
     [competitionId, seasons],
   );
+  const currentCompetition = competitions.find((competition) => competition.competition_id === competitionId);
+  const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
+  const currentRound = rounds.find((round) => round.round_id === roundId);
   const latestDataSeason = useMemo(
     () => latestSeasonWithData(availableSeasons),
     [availableSeasons],
   );
+  const playerAllTournamentSeasonOptions = useMemo(() => {
+    const byName = new Map<string, Season>();
+    seasons
+      .filter((season) => /^\d{4}\/\d{4}$/.test(season.season_name) && Number(season.match_count) > 0)
+      .sort((a, b) => Number(b.season_name.slice(0, 4)) - Number(a.season_name.slice(0, 4))
+        || Number(b.competition_id === competitionId) - Number(a.competition_id === competitionId)
+        || Number(b.competition_name === "Israeli Premier League") - Number(a.competition_name === "Israeli Premier League")
+        || dateValue(b.start_date) - dateValue(a.start_date))
+      .forEach((season) => {
+        if (!byName.has(season.season_name)) byName.set(season.season_name, season);
+      });
+    return [...byName.values()];
+  }, [competitionId, seasons]);
+  const currentPlayerAllTournamentSeasonIds = useMemo(() => seasons
+    .filter((season) => season.season_name === currentSeason.season_name)
+    .map((season) => season.season_id), [currentSeason.season_name, seasons]);
   const legionnaireSeasonOptions = useMemo(() => {
     const foreignCompetitionIds = new Set(competitions
       .filter((competition) => competition.scope === "foreign_club")
@@ -1107,7 +1159,7 @@ export function App() {
         return;
       }
       setDetailLoading(true);
-      const result = await fetchPlayerHistoryRows(competitionId, playerId);
+      const result = await fetchPlayerHistoryRows(competitionId, playerId, playerTournamentScope === "all");
       if (cancelled) return;
       if (result.error) setError(result.error);
       setPlayerHistory(result.rows);
@@ -1116,7 +1168,7 @@ export function App() {
 
     void loadPlayerDetail();
     return () => { cancelled = true; };
-  }, [competitionId, playerId, view]);
+  }, [competitionId, playerId, playerTournamentScope, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1140,7 +1192,7 @@ export function App() {
       setComparisonError(null);
       const results = await Promise.all(playerIds.map(async (id) => {
         const playerCompetitionId = comparisonCohortPlayers.find((player) => player.player_id === id)?.competition_id ?? competitionId;
-        return [id, await fetchPlayerHistoryRows(playerCompetitionId, id)] as const;
+        return [id, await fetchPlayerHistoryRows(playerCompetitionId, id, playerTournamentScope === "all")] as const;
       }));
       if (cancelled) return;
       setComparisonPlayerHistories(Object.fromEntries(results.map(([id, result]) => [id, result.rows])));
@@ -1150,7 +1202,7 @@ export function App() {
 
     void loadComparisonPlayerDetail();
     return () => { cancelled = true; };
-  }, [comparisonCohortPlayers, comparisonPlayerIds, competitionId, playerId, view]);
+  }, [comparisonCohortPlayers, comparisonPlayerIds, competitionId, playerId, playerTournamentScope, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1212,7 +1264,14 @@ export function App() {
       }
 
       setPlayerHeatmapLoading(true);
-      const result = await fetchPlayerSeasonHeatmapRows(playerId, seasonId, matches);
+      const result = await fetchPlayerSeasonHeatmapRows(
+        playerId,
+        seasonId,
+        matches,
+        playerTournamentScope === "all"
+          ? { name: currentSeason.season_name, ids: currentPlayerAllTournamentSeasonIds }
+          : undefined,
+      );
       if (cancelled) return;
       setPlayerSeasonHeatmaps(result.rows);
       setPlayerHeatmapLoading(false);
@@ -1220,7 +1279,7 @@ export function App() {
 
     void loadPlayerSeasonHeatmaps();
     return () => { cancelled = true; };
-  }, [matches, playerId, refreshToken, seasonId, view]);
+  }, [currentPlayerAllTournamentSeasonIds, currentSeason.season_name, matches, playerId, playerTournamentScope, refreshToken, seasonId, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1243,7 +1302,14 @@ export function App() {
         const playerSeasonId = comparisonCohortPlayers.find((player) => player.player_id === id)?.season_id ?? seasonId;
         return [
           id,
-          await fetchPlayerSeasonHeatmapRows(id, playerSeasonId, playerSeasonId === seasonId ? matches : []),
+          await fetchPlayerSeasonHeatmapRows(
+            id,
+            playerSeasonId,
+            playerSeasonId === seasonId ? matches : [],
+            playerTournamentScope === "all"
+              ? { name: currentSeason.season_name, ids: currentPlayerAllTournamentSeasonIds }
+              : undefined,
+          ),
         ] as const;
       }));
       if (cancelled) return;
@@ -1253,7 +1319,7 @@ export function App() {
 
     void loadComparisonPlayerSeasonHeatmaps();
     return () => { cancelled = true; };
-  }, [comparisonCohortPlayers, comparisonPlayerIds, matches, playerId, refreshToken, seasonId, view]);
+  }, [comparisonCohortPlayers, comparisonPlayerIds, currentPlayerAllTournamentSeasonIds, currentSeason.season_name, matches, playerId, playerTournamentScope, refreshToken, seasonId, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1424,9 +1490,6 @@ export function App() {
     return () => { cancelled = true; };
   }, [legionnaireSeasonName, refreshToken, view]);
 
-  const currentCompetition = competitions.find((competition) => competition.competition_id === competitionId);
-  const currentSeason = seasons.find((season) => season.season_id === seasonId) ?? demoSeason;
-  const currentRound = rounds.find((round) => round.round_id === roundId);
   const overviewMatches = useMemo(
     () => currentRound
       ? roundMatches
@@ -2152,30 +2215,33 @@ export function App() {
     return squadLeaderboardRows.filter((row) => loanPlayerIds.has(row.player_id));
   }, [clubLoans, squadLeaderboardRows]);
   const selectedPlayerMetric = playerViewMetrics.find((metric) => metric.chartKey === metricCode);
-  const latestPlayerHistorySeasonId = useMemo(() => latestHistorySeasonId(playerHistory), [playerHistory]);
-  const latestComparisonHistorySeasonIds = useMemo(() => Object.fromEntries(
-    Object.entries(comparisonPlayerHistories).map(([id, rows]) => [id, latestHistorySeasonId(rows)]),
-  ), [comparisonPlayerHistories]);
-  const latestPlayerHistorySeason = seasons.find((season) => season.season_id === latestPlayerHistorySeasonId);
+  const seasonNameById = useMemo(() => new Map(seasons.map((season) => [season.season_id, season.season_name])), [seasons]);
+  const comparisonSeasonIdsByPlayer = useMemo(() => Object.fromEntries(
+    comparisonCohortPlayers.map((player) => [player.player_id, player.season_id]),
+  ), [comparisonCohortPlayers]);
   const visiblePlayerHistory = useMemo(
     () => playerHistoryRange === "all"
       ? playerHistory
-      : playerHistory.filter((row) => row.season_id === latestPlayerHistorySeasonId),
-    [latestPlayerHistorySeasonId, playerHistory, playerHistoryRange],
+      : playerHistory.filter((row) => playerTournamentScope === "all"
+        ? seasonNameById.get(row.season_id) === currentSeason.season_name
+        : row.season_id === seasonId),
+    [currentSeason.season_name, playerHistory, playerHistoryRange, playerTournamentScope, seasonId, seasonNameById],
   );
   const visibleComparisonPlayerHistories = useMemo(() => Object.fromEntries(
     Object.entries(comparisonPlayerHistories).map(([id, rows]) => [
       id,
-      playerHistoryRange === "all" ? rows : rows.filter((row) => row.season_id === latestComparisonHistorySeasonIds[id]),
+      playerHistoryRange === "all" ? rows : rows.filter((row) => playerTournamentScope === "all"
+        ? seasonNameById.get(row.season_id) === currentSeason.season_name
+        : row.season_id === (comparisonSeasonIdsByPlayer[id] ?? seasonId)),
     ]),
-  ), [comparisonPlayerHistories, latestComparisonHistorySeasonIds, playerHistoryRange]);
+  ), [comparisonPlayerHistories, comparisonSeasonIdsByPlayer, currentSeason.season_name, playerHistoryRange, playerTournamentScope, seasonId, seasonNameById]);
   const visibleComparisonPlayerHistory = comparisonPlayer ? visibleComparisonPlayerHistories[comparisonPlayer.player_id] ?? [] : [];
   const playerHistorySeasonCount = useMemo(
     () => new Set([
-      ...playerHistory.map((row) => row.season_id),
-      ...Object.values(comparisonPlayerHistories).flat().map((row) => row.season_id),
+      ...playerHistory.map((row) => seasonNameById.get(row.season_id) ?? row.season_id),
+      ...Object.values(comparisonPlayerHistories).flat().map((row) => seasonNameById.get(row.season_id) ?? row.season_id),
     ]).size,
-    [comparisonPlayerHistories, playerHistory],
+    [comparisonPlayerHistories, playerHistory, seasonNameById],
   );
   useEffect(() => {
     if (playerHistory.length && playerHistoryRange === "all" && playerHistorySeasonCount <= 1) setPlayerHistoryRange("latest");
@@ -2250,6 +2316,7 @@ export function App() {
       positionFilter,
       clubFilter,
       clubTournamentScope,
+      playerTournamentScope,
       clubQuery,
       playerQuery,
       attributeQuery,
@@ -2289,6 +2356,7 @@ export function App() {
     playerHistoryRange,
     playerId,
     playerQuery,
+    playerTournamentScope,
     positionFilter,
     roleFilter,
     roundId,
@@ -2329,10 +2397,11 @@ export function App() {
     }
   }
 
-  async function changePlayerSeason(targetSeason: Season) {
+  async function changePlayerSeason(targetSeason: Season, requestedScope = playerTournamentScope) {
     preparePlayerContextChange();
     if (!playerId || !hasSupabaseConfig || !supabase) {
       pendingPlayerSelection.current = playerId ? { seasonId: targetSeason.season_id, playerId } : null;
+      setPlayerTournamentScope(comparisonPlayerIds.length ? "all" : requestedScope);
       setSeasonId(targetSeason.season_id);
       return;
     }
@@ -2369,12 +2438,18 @@ export function App() {
     setComparisonCohortPlayers([...new Map(resolvedPlayers.map((player) => [player.player_id, player])).values()]);
 
     if (primaryContext) {
+      const primaryCompetition = competitions.find((competition) => competition.competition_id === primaryContext.competition_id);
+      const nextTournamentScope = requestedIds.length > 1
+        || requestedScope === "all"
+        || !isClubLeagueCompetition(primaryCompetition)
+        ? "all"
+        : "selected";
       const nextComparisonIds = resolved.slice(1).map((player, index) => (
         player?.player_id ?? comparisonPlayerIds[index]
       )).filter((id, index, ids) => Boolean(id) && id !== primaryContext.player_id && ids.indexOf(id) === index).slice(0, 4);
       pendingPlayerSelection.current = { seasonId: primaryContext.season_id, playerId: primaryContext.player_id };
       setSeasonPlayerLoadSucceeded(false);
-      setClubTournamentScope("selected");
+      setPlayerTournamentScope(nextTournamentScope);
       setCompetitionId(primaryContext.competition_id);
       setSeasonId(primaryContext.season_id);
       setPlayerId(primaryContext.player_id);
@@ -2382,6 +2457,7 @@ export function App() {
     } else {
       pendingPlayerSelection.current = { seasonId: targetSeason.season_id, playerId };
       setSeasonPlayerLoadSucceeded(false);
+      setPlayerTournamentScope("all");
       setSeasonId(targetSeason.season_id);
     }
     setPlayerContextLoading(false);
@@ -2411,6 +2487,7 @@ export function App() {
     pendingPlayerSelection.current = targetSeasonId ? { seasonId: targetSeasonId, playerId: nextPlayerId } : null;
     setComparisonCohortPlayers(profileFallback ? [profileFallback] : []);
     setComparisonPlayerIds([]);
+    setPlayerTournamentScope("selected");
     setRoleFilter("All");
     setPositionFilter("All");
     setClubFilter("all");
@@ -2443,6 +2520,7 @@ export function App() {
       ?? playerChartMetrics.find((metric) => metric.chartKey === sourceMetricCode);
 
     setComparisonCohortPlayers(uniquePlayers);
+    setPlayerTournamentScope("all");
     if (primaryPlayer.season_id !== seasonId) {
       pendingPlayerSelection.current = { seasonId: primaryPlayer.season_id, playerId: primaryPlayer.player_id };
       setSeasonPlayerLoadSucceeded(false);
@@ -2467,7 +2545,8 @@ export function App() {
     navigate("clubs");
   }
 
-  const showingAllTournaments = (view === "clubs" || view === "overview") && clubTournamentScope === "all";
+  const showingAllTournaments = ((view === "clubs" || view === "overview") && clubTournamentScope === "all")
+    || (view === "players" && playerTournamentScope === "all");
   const showingLegionnaires = view === "legionnaires";
 
   return (
@@ -2517,15 +2596,23 @@ export function App() {
                 if (view === "players") preparePlayerContextChange();
                 if (event.target.value === allTournamentsValue) {
                   if (view === "overview") selectAllTournamentOverview();
+                  else if (view === "players") setPlayerTournamentScope("all");
                   else setClubTournamentScope("all");
                   return;
                 }
-                setClubTournamentScope("selected");
+                if (view === "players") setPlayerTournamentScope("selected");
+                else setClubTournamentScope("selected");
                 setCompetitionId(event.target.value);
+                const matchingSeason = seasons.find((season) => season.competition_id === event.target.value && season.season_name === currentSeason.season_name)
+                  ?? latestSeasonWithData(seasons.filter((season) => season.competition_id === event.target.value));
+                if (matchingSeason) {
+                  if (view === "players" && playerId) pendingPlayerSelection.current = { seasonId: matchingSeason.season_id, playerId };
+                  setSeasonId(matchingSeason.season_id);
+                }
               }}
             >
               {showingLegionnaires && <option value="foreign-leagues">{text.allForeignLeagues}</option>}
-              {!showingLegionnaires && (view === "clubs" || view === "overview") && <option value={allTournamentsValue}>{text.allTournaments}</option>}
+              {!showingLegionnaires && (view === "clubs" || view === "overview" || view === "players") && <option value={allTournamentsValue}>{text.allTournaments}</option>}
               {!showingLegionnaires && ([
                 ["domestic", text.domesticCompetitions],
                 ["european_club", text.europeanClubCompetitions],
@@ -2557,10 +2644,13 @@ export function App() {
                 if (showingAllTournaments) {
                   const selectedName = event.target.value;
                   const representative = seasons.find((season) => season.competition_id === competitionId && season.season_name === selectedName)
-                    ?? allTournamentSeasonOptions.find((season) => season.season_name === selectedName);
+                    ?? (view === "players" ? playerAllTournamentSeasonOptions : allTournamentSeasonOptions).find((season) => season.season_name === selectedName);
                   if (representative) {
-                    setCompetitionId(representative.competition_id);
-                    setSeasonId(representative.season_id);
+                    if (view === "players") void changePlayerSeason(representative, "all");
+                    else {
+                      setCompetitionId(representative.competition_id);
+                      setSeasonId(representative.season_id);
+                    }
                   }
                   return;
                 }
@@ -2574,7 +2664,7 @@ export function App() {
             >
               {showingLegionnaires ? legionnaireSeasonOptions.map((season, index) => (
                 <option key={season.name} value={season.name}>{season.name}{index === 0 ? ` · ${text.latest}` : ""}</option>
-              )) : showingAllTournaments ? allTournamentSeasonOptions.map((season, index) => (
+              )) : showingAllTournaments ? (view === "players" ? playerAllTournamentSeasonOptions : allTournamentSeasonOptions).map((season, index) => (
                 <option key={season.season_name} value={season.season_name}>{season.season_name}{index === 0 ? ` · ${text.latest}` : ""}</option>
               )) : availableSeasons.map((season) => (
                 <option key={season.season_id} value={season.season_id}>{season.season_name}{season.season_id === latestDataSeason?.season_id ? ` · ${text.latest}` : ""}</option>
@@ -2735,7 +2825,10 @@ export function App() {
             selectedPlayer={selectedPlayer}
             selectedPlayerLoan={selectedPlayerLoan}
             comparisonPlayers={comparisonPlayers}
-            setComparisonPlayerIds={setComparisonPlayerIds}
+            setComparisonPlayerIds={(ids) => {
+              setComparisonPlayerIds(ids);
+              if (ids.length) setPlayerTournamentScope("all");
+            }}
             season={currentSeason}
             seasonHeatmaps={playerSeasonHeatmaps}
             seasonHeatmapLoading={playerHeatmapLoading}
@@ -2744,6 +2837,7 @@ export function App() {
             selectPlayer={(nextPlayerId) => {
               clearPinnedPlayerProfile();
               setComparisonPlayerIds([]);
+              setPlayerTournamentScope("selected");
               setPlayerId(nextPlayerId);
             }}
             replacePrimaryPlayer={(nextPlayerId) => {
@@ -2768,7 +2862,7 @@ export function App() {
             setMetricCode={setMetricCode}
             historyRange={playerHistoryRange}
             setHistoryRange={setPlayerHistoryRange}
-            latestHistorySeasonLabel={latestPlayerHistorySeason?.season_name ?? text.latestSeasonWithData}
+            latestHistorySeasonLabel={currentSeason.season_name || text.latestSeasonWithData}
             historySeasonCount={playerHistorySeasonCount}
             historyRows={visiblePlayerHistory}
             comparisonHistoryRows={visibleComparisonPlayerHistories}
