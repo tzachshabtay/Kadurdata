@@ -363,6 +363,7 @@ def collect_competition_history(
 
 
 def inferred_season_name(games: Iterable[Dict[str, Any]]) -> str:
+    dated_games: List[Tuple[int, int]] = []
     labels: Counter[str] = Counter()
     for game in games:
         date = game_date(game)
@@ -370,8 +371,19 @@ def inferred_season_name(games: Iterable[Dict[str, Any]]) -> str:
             continue
         year = int(date[:4])
         month = int(date[5:7])
+        dated_games.append((year, month))
         start_year = year if month >= 7 else year - 1
         labels[f"{start_year}/{start_year + 1}"] += 1
+
+    years = {year for year, _ in dated_games}
+    months = {month for _, month in dated_games}
+    spans_calendar_halves = any(month < 7 for month in months) and any(
+        month >= 7 for month in months
+    )
+    if len(years) == 1 and spans_calendar_halves:
+        calendar_year = next(iter(years))
+        return f"{calendar_year}/{calendar_year + 1}"
+
     return labels.most_common(1)[0][0] if labels else "unknown"
 
 

@@ -139,6 +139,15 @@ class CompetitionCatalogTests(unittest.TestCase):
 
         self.assertEqual(inferred_season_name(games), "2025/2026")
 
+    def test_infers_calendar_year_season_from_both_halves(self) -> None:
+        games = [
+            {"startTime": "2026-02-22T20:00:00+02:00"},
+            {"startTime": "2026-05-23T20:00:00+03:00"},
+            {"startTime": "2026-08-20T20:00:00+03:00"},
+        ]
+
+        self.assertEqual(inferred_season_name(games), "2026/2027")
+
     def test_source_history_name_wins(self) -> None:
         competition = {"current_season_num": 42}
         games = [
