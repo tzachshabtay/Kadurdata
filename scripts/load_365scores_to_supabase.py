@@ -819,12 +819,25 @@ def flush_wide_stat_batch(
             ],
         ]
     )
+    merged_metric_count = sql.SQL(" + ").join(
+        [
+            sql.SQL("(coalesce(excluded.{}, current_stats.{}) is not null)::integer").format(
+                identifier,
+                identifier,
+            )
+            for identifier in metric_identifiers
+        ]
+    )
     updates = sql.SQL(", ").join(
         [
-            sql.SQL("metric_count = excluded.metric_count"),
+            sql.SQL("metric_count = {}").format(merged_metric_count),
             sql.SQL("observed_at = excluded.observed_at"),
             *[
-                sql.SQL("{} = excluded.{}").format(identifier, identifier)
+                sql.SQL("{} = coalesce(excluded.{}, current_stats.{})").format(
+                    identifier,
+                    identifier,
+                    identifier,
+                )
                 for identifier in metric_identifiers
             ],
         ]
@@ -832,7 +845,7 @@ def flush_wide_stat_batch(
     cur.execute(
         sql.SQL(
             """
-            insert into {} ({})
+            insert into {} as current_stats ({})
             select {} from wide_stat_stage
             on conflict (source_id, {}) do update set {}
             """

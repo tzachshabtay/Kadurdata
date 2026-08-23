@@ -1,3 +1,4 @@
+import inspect
 import sys
 import types
 import unittest
@@ -65,6 +66,13 @@ class SeasonLoadingTests(unittest.TestCase):
         )
         self.assertEqual(cursor.execute.call_args.args[1][-1], "canonical-season")
         self.assertEqual(upsert_mapping.call_args.args[5], "canonical-season")
+
+    def test_wide_stat_refresh_preserves_metrics_omitted_by_partial_payloads(self) -> None:
+        source = inspect.getsource(loader.flush_wide_stat_batch)
+
+        self.assertIn("coalesce(excluded.{}, current_stats.{})", source)
+        self.assertIn("insert into {} as current_stats", source)
+        self.assertNotIn('sql.SQL("{} = excluded.{}")', source)
 
 
 if __name__ == "__main__":
