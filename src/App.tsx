@@ -6080,7 +6080,7 @@ function leaderboardSampleLabel(
   if (row.value_type === "currency") {
     return row.valuation_date
       ? `${textByLanguage[language].valuationAsOf} ${formatValuationDate(row.valuation_date, language)}`
-      : textByLanguage[language].estimatedTransferValue;
+      : "";
   }
   const aggregation = language === "he"
     ? ({ total: "סך הכול", average: "ממוצע", weighted: "משוקלל", latest: "עדכני" } as Record<string, string>)[row.aggregation]
@@ -6099,7 +6099,7 @@ function explorerRankingSampleLabel(
   if (row.value_type === "currency") {
     return row.valuation_date
       ? `${textByLanguage[language].valuationAsOf} ${formatValuationDate(row.valuation_date, language)}`
-      : textByLanguage[language].estimatedTransferValue;
+      : "";
   }
   if (qualification?.source === "minutes") return `${numberFormatter.format(Math.round(Number(player.minutes)))} ${language === "he" ? "דק׳" : "min"}`;
   if (qualification?.source === "denominator") {
@@ -6137,10 +6137,13 @@ function hasConfigurableRatingMinimum(metricCode: string) {
 }
 
 function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPlayer[], metricCode: string) {
+  const completeRows = isValuationMetricCode(metricCode)
+    ? completeValuationLeaderboard(rows, players)
+    : rows;
   const roleByPlayer = new Map(players.map((player) => [player.player_id, player.role_group]));
   const eligibleRows = isGoalkeepingMetricCode(metricCode)
-    ? rows.filter((row) => roleByPlayer.get(row.player_id) === "Goalkeepers")
-    : rows;
+    ? completeRows.filter((row) => roleByPlayer.get(row.player_id) === "Goalkeepers")
+    : completeRows;
   if (!metricCode.endsWith("::per90")) return [...eligibleRows].sort((a, b) => compareLeaderboardRows(a, b, metricCode));
 
   const minutesByPlayer = new Map(players.map((player) => [player.player_id, Number(player.minutes)]));
@@ -6158,6 +6161,33 @@ function prepareLeaderboardRows(rows: PlayerLeaderboardRow[], players: SeasonPla
       average_value: value,
     };
   }).sort((a, b) => compareLeaderboardRows(a, b, metricCode));
+}
+
+function completeValuationLeaderboard(rows: PlayerLeaderboardRow[], players: SeasonPlayer[]) {
+  const representedPlayerIds = new Set(rows.map((row) => row.player_id));
+  return [
+    ...rows,
+    ...players.filter((player) => !representedPlayerIds.has(player.player_id)).map((player): PlayerLeaderboardRow => ({
+      season_id: player.season_id,
+      player_id: player.player_id,
+      display_name: player.display_name,
+      team_id: player.team_id,
+      team_name: player.team_name,
+      metric_id: "current_valuation",
+      metric_code: "current_valuation",
+      metric_name: "Estimated transfer value",
+      value_type: "currency",
+      aggregation: "latest",
+      sample_size: 0,
+      leaderboard_value: null,
+      total_value: null,
+      average_value: null,
+      numerator_value: null,
+      denominator_value: null,
+      currency: null,
+      valuation_date: null,
+    })),
+  ];
 }
 
 function makeSeasonSummaryLeaderboard(players: SeasonPlayer[], seasonId: string, metricCode: string) {
