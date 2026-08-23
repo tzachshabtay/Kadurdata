@@ -3,12 +3,20 @@ import unittest
 from scripts.ingest_fotmob import (
     fixture_row,
     flatten_player_stats,
+    metric_code,
     parse_season_labels,
     selected_seasons,
 )
 
 
 class FotMobHistoryTests(unittest.TestCase):
+    def test_source_specific_metric_names_are_canonicalized(self) -> None:
+        self.assertEqual(metric_code("Big chance created team title", None), "big_chances_created")
+        self.assertEqual(metric_code("ShotsOnTarget", None), "shots_on_target")
+
+    def test_unknown_source_metric_is_not_exposed(self) -> None:
+        self.assertIsNone(metric_code("XG and XA", "xg_and_xa"))
+
     def test_default_seasons_exclude_365scores_coverage(self) -> None:
         seasons = selected_seasons(
             ["2026/2027", "2025/2026", "2024/2025", "2023/2024"],
@@ -110,6 +118,24 @@ class FotMobHistoryTests(unittest.TestCase):
         self.assertEqual(row["stat_passes_completed_attempted"], 30)
         self.assertEqual(row["stat_passes_completed_percentage"], 90)
         self.assertEqual(row["lineup_status_text"], "Started")
+
+    def test_flatten_skips_unknown_source_metrics(self) -> None:
+        fixture = {"game_id": "1", "home_team_id": "10", "away_team_id": "20"}
+        props = {
+            "content": {
+                "playerStats": {
+                    "7": {
+                        "name": "Test Player",
+                        "teamId": 10,
+                        "stats": [{"stats": {"Internal section": {"key": "xg_and_xa", "stat": {"value": 2}}}}],
+                    }
+                }
+            }
+        }
+
+        row = flatten_player_stats(props, fixture)[0]
+
+        self.assertNotIn("stat_xg_and_xa_value", row)
 
 
 if __name__ == "__main__":

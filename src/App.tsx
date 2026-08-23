@@ -4406,12 +4406,12 @@ function PlayersView({
     nextComparisonPlayerIds[index - 1] = nextPlayerId;
     setComparisonPlayerIds(nextComparisonPlayerIds);
   };
-  const attributeGroups = useMemo(() => {
+  const { attributeGroups, chartableAttributeCount } = useMemo(() => {
     const normalizedQuery = attributeQuery.trim().toLowerCase();
     const categoryOrder = selectedPlayer?.role_group === "Goalkeepers"
       ? (["Goalkeeping", ...playerAttributeCategories.filter((category) => category !== "Goalkeeping")] as PlayerAttributeCategory[])
       : playerAttributeCategories.filter((category) => category !== "Goalkeeping");
-    const attributes = metrics
+    const observedAttributes = metrics
       .map((item) => ({
         metric: item,
         primary: summarizePlayerAttribute(historyRows, item),
@@ -4424,13 +4424,18 @@ function PlayersView({
           })),
         ],
       }))
+      .filter((attribute) => attribute.players.some((item) => item.summary.comparisonValue !== null));
+    const attributes = observedAttributes
       .filter((attribute) => !normalizedQuery
         || attribute.primary.name.toLowerCase().includes(normalizedQuery)
         || attribute.primary.category.toLowerCase().includes(normalizedQuery)
         || categoryName(attribute.primary.category, language).includes(normalizedQuery));
-    return categoryOrder
-      .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.primary.category === category) }))
-      .filter((group) => group.attributes.length > 0);
+    return {
+      attributeGroups: categoryOrder
+        .map((category) => ({ category, attributes: attributes.filter((attribute) => attribute.primary.category === category) }))
+        .filter((group) => group.attributes.length > 0),
+      chartableAttributeCount: observedAttributes.length,
+    };
   }, [attributeQuery, comparisonHistory, comparisonHistoryRows, comparisonPlayer, comparisonPlayers, historyRows, language, metrics, selectedPlayer, selectedPlayer?.role_group]);
   const isPairedMetric = metric?.chartMode === "paired"
     && Boolean(metric.numerator_metric_code)
@@ -4629,7 +4634,7 @@ function PlayersView({
               </section>
               <section className="player-attributes">
                 <div className="attribute-heading">
-                  <div><span>{comparisonPlayers.length ? text.playerComparison : text.playerAttributes}</span><h3>{metrics.length} {text.chartableMetrics}</h3></div>
+                  <div><span>{comparisonPlayers.length ? text.playerComparison : text.playerAttributes}</span><h3>{chartableAttributeCount} {text.chartableMetrics}</h3></div>
                   <label className="attribute-search"><Search size={15} /><input aria-label={text.searchPlayerAttributes} type="search" value={attributeQuery} onChange={(event) => setAttributeQuery(event.target.value)} placeholder={text.findAttribute} /></label>
                 </div>
                 {comparisonPlayer && !isMultiComparison && (

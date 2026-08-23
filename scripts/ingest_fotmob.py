@@ -30,16 +30,100 @@ NEXT_DATA_RE = re.compile(
 )
 
 STAT_CODES = {
-    "accurate passes": "passes_completed",
-    "accurate long balls": "long_passes_completed",
-    "accurate crosses": "crosses_completed",
-    "successful dribbles": "successful_dribbles",
-    "tackles won": "tackles_won",
-    "ground duels won": "ground_duels_won",
-    "aerial duels won": "aerial_duels_won",
-    "duels won": "duels_won",
-    "fotmob rating": "rating_365",
-    "minutes played": "minutes",
+    "accurate_passes": "passes_completed",
+    "accurate_long_balls": "long_passes_completed",
+    "accurate_crosses": "crosses_completed",
+    "successful_dribbles": "successful_dribbles",
+    "tackles_won": "tackles_won",
+    "ground_duels_won": "ground_duels_won",
+    "aerial_duels_won": "aerial_duels_won",
+    "duels_won": "duels_won",
+    "fotmob_rating": "rating_365",
+    "minutes_played": "minutes",
+    "big_chance_created_team_title": "big_chances_created",
+    "big_chance_missed_title": "big_chances_missed",
+    "blocked_shots": "shots_blocked",
+    "chances_created": "key_passes",
+    "conceded_penalties": "penalty_committed",
+    "dribbled_past": "was_dribbled_past",
+    "duel_lost": "duels_lost",
+    "expected_goals_on_target_variant": "expected_goals_on_target",
+    "fouls": "fouls_made",
+    "headed_clearance": "headed_clearances",
+    "keeper_diving_save": "goalkeeper_saves",
+    "keeper_high_claim": "high_claims",
+    "keeper_sweeper": "played_sweeper",
+    "matchstats_headers_tackles": "tackles_won",
+    "missed_penalty": "penalty_missed",
+    "penalties_won": "penalty_won",
+    "recoveries": "ball_recovery",
+    "saved_penalties": "penalties_saved",
+    "shot_blocks": "blocks",
+    "shots_woodwork": "hit_woodwork",
+    "shotsofftarget": "shots_off_target",
+    "shotsontarget": "shots_on_target",
+    "touches_opp_box": "touches_in_opposition_box",
+}
+
+CANONICAL_STAT_CODES = {
+    "aerial_duels_won",
+    "assists",
+    "backward_passes",
+    "ball_recovery",
+    "big_chances_created",
+    "big_chances_missed",
+    "big_chances_scored",
+    "blocks",
+    "clearances",
+    "crosses_completed",
+    "defensive_actions",
+    "dispossessed",
+    "duels_lost",
+    "duels_won",
+    "error_led_to_goal",
+    "error_led_to_shot",
+    "expected_assists",
+    "expected_goals",
+    "expected_goals_non_penalty",
+    "expected_goals_on_target",
+    "expected_goals_on_target_conceded",
+    "expected_goals_prevented",
+    "final_third_possession_won",
+    "fouls_made",
+    "goalkeeper_saves",
+    "goals",
+    "goals_conceded",
+    "ground_duels_won",
+    "headed_clearances",
+    "high_claims",
+    "hit_woodwork",
+    "interceptions",
+    "key_passes",
+    "long_passes_completed",
+    "minutes",
+    "offsides",
+    "passes_completed",
+    "passes_into_final_third",
+    "penalties_faced",
+    "penalties_saved",
+    "penalty_committed",
+    "penalty_missed",
+    "penalty_won",
+    "played_sweeper",
+    "possession_lost",
+    "punches",
+    "rating_365",
+    "saves_inside_box",
+    "shots_blocked",
+    "shots_off_target",
+    "shots_on_target",
+    "successful_dribbles",
+    "tackles_won",
+    "total_shots",
+    "touches",
+    "touches_in_opposition_box",
+    "was_dribbled_past",
+    "was_fouled",
 }
 
 
@@ -274,8 +358,13 @@ def slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
 
-def metric_code(title: str, key: Optional[str]) -> str:
-    return STAT_CODES.get(title.lower(), slugify(str(key or title)))
+def metric_code(title: str, key: Optional[str]) -> Optional[str]:
+    candidates = (slugify(title), slugify(str(key or "")))
+    for candidate in candidates:
+        mapped = STAT_CODES.get(candidate, candidate)
+        if mapped in CANONICAL_STAT_CODES:
+            return mapped
+    return None
 
 
 def position_name(position_id: Any) -> Optional[str]:
@@ -341,6 +430,8 @@ def flatten_player_stats(
                 if value is None or stat.get("type") == "boolean":
                     continue
                 code = metric_code(title, item.get("key"))
+                if not code:
+                    continue
                 if code == "rating_365":
                     row["rating"] = value
                     continue
