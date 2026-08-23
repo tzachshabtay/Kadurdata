@@ -190,10 +190,13 @@ type MatchPlayerAttribute = { code: string; name: string; value: string; categor
 type ValuationChartPoint = {
   date: string;
   timestamp: number;
-  primaryValue: number | null;
-  comparisonValue: number | null;
-  primary: PlayerValuation | null;
-  comparison: PlayerValuation | null;
+  [key: string]: string | number | PlayerValuation | null;
+};
+type PlayerValuationSeries = {
+  key: string;
+  name: string;
+  color: string;
+  valuations: PlayerValuation[];
 };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
@@ -4367,7 +4370,6 @@ function PlayersView({
   const matchRankingMetrics = rankingMetrics.filter((item) => item.kind === "match");
   const comparisonPlayer = comparisonPlayers[0];
   const comparisonHistory = comparisonPlayer ? comparisonHistoryRows[comparisonPlayer.player_id] ?? [] : [];
-  const firstComparisonValuations = comparisonPlayer ? comparisonValuations[comparisonPlayer.player_id] ?? [] : [];
   const isMultiComparison = comparisonPlayers.length > 1;
   const selectedPosition = selectedPlayer ? localizedPlayerPosition(selectedPlayer, language) : null;
   const comparisonPosition = comparisonPlayer ? localizedPlayerPosition(comparisonPlayer, language) : null;
@@ -4927,11 +4929,13 @@ function PlayersView({
                 )) : plottedChartData.slice(-6).reverse().map((item) => <div key={`${item.match}-${item.date}`}><span>{item.date} · {item.opponent}</span><strong>{formatChartPointValue(item)}</strong><small>{item.score}</small></div>)}
               </div>
               <PlayerValuationPanel
-                comparisonName={comparisonPlayerName}
-                comparisonValuations={firstComparisonValuations}
                 loading={valuationLoading}
-                playerName={selectedPlayerName}
-                valuations={valuations}
+                series={comparedPlayers.map((player, index) => ({
+                  key: `valuation${index}`,
+                  name: comparedPlayerNames[index],
+                  color: comparisonChartColors[index],
+                  valuations: index === 0 ? valuations : comparisonValuations[player.player_id] ?? [],
+                }))}
               />
               <div className={`season-heatmap-layout${comparisonPlayer ? " comparison" : ""}${isMultiComparison ? " multi" : ""}`}>
                 <SeasonHeatmapPanel
@@ -4961,50 +4965,33 @@ function PlayersView({
 }
 
 function PlayerValuationPanel({
-  playerName,
-  valuations,
-  comparisonName,
-  comparisonValuations,
+  series,
   loading,
 }: {
-  playerName: string;
-  valuations: PlayerValuation[];
-  comparisonName: string;
-  comparisonValuations: PlayerValuation[];
+  series: PlayerValuationSeries[];
   loading: boolean;
 }) {
   const { language, text } = useLocale();
-  const primaryLatest = valuations[valuations.length - 1] ?? null;
-  const comparisonLatest = comparisonValuations[comparisonValuations.length - 1] ?? null;
+  const latestValuations = series.map((item) => item.valuations[item.valuations.length - 1] ?? null);
   const pointsByDate = new Map<string, ValuationChartPoint>();
-  const addValue = (valuation: PlayerValuation, side: "primary" | "comparison") => {
+  const addValue = (valuation: PlayerValuation, item: PlayerValuationSeries) => {
     const current = pointsByDate.get(valuation.valuation_date) ?? {
       date: valuation.valuation_date,
       timestamp: Date.parse(`${valuation.valuation_date}T00:00:00Z`),
-      primaryValue: null,
-      comparisonValue: null,
-      primary: null,
-      comparison: null,
     };
-    if (side === "primary") {
-      current.primaryValue = Number(valuation.value_amount);
-      current.primary = valuation;
-    } else {
-      current.comparisonValue = Number(valuation.value_amount);
-      current.comparison = valuation;
-    }
+    current[`${item.key}Value`] = Number(valuation.value_amount);
+    current[`${item.key}Valuation`] = valuation;
     pointsByDate.set(valuation.valuation_date, current);
   };
-  valuations.forEach((valuation) => addValue(valuation, "primary"));
-  comparisonValuations.forEach((valuation) => addValue(valuation, "comparison"));
+  series.forEach((item) => item.valuations.forEach((valuation) => addValue(valuation, item)));
   const chartPoints = [...pointsByDate.values()].sort((a, b) => a.timestamp - b.timestamp);
-  const currency = primaryLatest?.currency ?? comparisonLatest?.currency ?? "EUR";
-  const primaryClass = comparisonLatest
-    ? playerComparisonClass(primaryLatest?.value_amount ?? null, comparisonLatest.value_amount, "estimated_transfer_value")
-    : "";
-  const comparisonClass = primaryLatest
-    ? playerComparisonClass(comparisonLatest?.value_amount ?? null, primaryLatest.value_amount, "estimated_transfer_value")
-    : "";
+  const currency = latestValuations.find((valuation) => valuation)?.currency ?? "EUR";
+  const latestValues = latestValuations.map((valuation) => valuation?.value_amount ?? null);
+  const currentValueClasses = series.length > 2
+    ? multiPlayerRankClasses(latestValues, "estimated_transfer_value")
+    : latestValues.map((value, index) => series.length === 2
+      ? playerComparisonClass(value, latestValues[index === 0 ? 1 : 0], "estimated_transfer_value")
+      : "");
   const rangeLabel = (valuation: PlayerValuation) => {
     if (valuation.lower_bound === null || valuation.upper_bound === null) return "";
     return `${text.valuationRange}: ${formatValuation(valuation.lower_bound, valuation.currency, language)}–${formatValuation(valuation.upper_bound, valuation.currency, language)}`;
@@ -5017,21 +5004,17 @@ function PlayerValuationPanel({
       </div>
       {loading ? <InlineLoading /> : chartPoints.length ? (
         <>
-          <div className={`valuation-current-band${comparisonLatest ? " comparison" : ""}`}>
-            {primaryLatest && (
-              <div className="valuation-current">
-                <span>{playerName}</span>
-                <strong className={primaryClass}>{formatValuation(primaryLatest.value_amount, primaryLatest.currency, language)}</strong>
-                <small>{text.valuationAsOf} {formatValuationDate(primaryLatest.valuation_date, language)}{rangeLabel(primaryLatest) ? ` · ${rangeLabel(primaryLatest)}` : ""}</small>
-              </div>
-            )}
-            {comparisonLatest && (
-              <div className="valuation-current">
-                <span>{comparisonName}</span>
-                <strong className={comparisonClass}>{formatValuation(comparisonLatest.value_amount, comparisonLatest.currency, language)}</strong>
-                <small>{text.valuationAsOf} {formatValuationDate(comparisonLatest.valuation_date, language)}{rangeLabel(comparisonLatest) ? ` · ${rangeLabel(comparisonLatest)}` : ""}</small>
-              </div>
-            )}
+          <div className={`valuation-current-band${series.length > 1 ? " comparison" : ""}${series.length > 2 ? " multi" : ""}`}>
+            {series.map((item, index) => {
+              const latest = latestValuations[index];
+              return (
+                <div className="valuation-current" key={item.key}>
+                  <span className="valuation-series-name"><i style={{ backgroundColor: item.color }} />{item.name}</span>
+                  <strong className={currentValueClasses[index]}>{latest ? formatValuation(latest.value_amount, latest.currency, language) : "-"}</strong>
+                  <small>{latest ? `${text.valuationAsOf} ${formatValuationDate(latest.valuation_date, language)}${rangeLabel(latest) ? ` · ${rangeLabel(latest)}` : ""}` : text.noValuationData}</small>
+                </div>
+              );
+            })}
           </div>
           <div className="valuation-chart-frame">
             <ResponsiveContainer width="100%" height="100%">
@@ -5060,20 +5043,31 @@ function PlayerValuationPanel({
                   labelStyle={{ color: "#F4F7FA", fontWeight: 700 }}
                   formatter={(value, _, item) => {
                     const point = item.payload as ValuationChartPoint;
-                    const isPrimary = String(item.dataKey) === "primaryValue";
-                    const valuation = isPrimary ? point.primary : point.comparison;
-                    const name = isPrimary ? playerName : comparisonName;
-                    if (!valuation) return ["-", name];
+                    const dataKey = String(item.dataKey);
+                    const valuationSeries = series.find((candidate) => `${candidate.key}Value` === dataKey);
+                    const valuation = valuationSeries ? point[`${valuationSeries.key}Valuation`] as PlayerValuation | null : null;
+                    if (!valuation || !valuationSeries) return ["-", text.estimatedTransferValue];
                     const range = rangeLabel(valuation);
                     return [
                       `${formatValuation(Number(value), valuation.currency, language)}${range ? ` · ${range}` : ""}`,
-                      name,
+                      valuationSeries.name,
                     ];
                   }}
                   labelFormatter={(value) => formatValuationDate(new Date(Number(value)).toISOString().slice(0, 10), language)}
                 />
-                <Area type="monotone" dataKey="primaryValue" connectNulls stroke="#35C9B6" strokeWidth={3} fill="rgba(53, 201, 182, 0.08)" dot={{ r: 3, fill: "#111923", stroke: "#35C9B6", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#35C9B6", stroke: "#080D14", strokeWidth: 3 }} />
-                {comparisonLatest && <Area type="monotone" dataKey="comparisonValue" connectNulls stroke="#F0B35A" strokeWidth={3} fill="rgba(240, 179, 90, 0.06)" dot={{ r: 3, fill: "#111923", stroke: "#F0B35A", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#F0B35A", stroke: "#080D14", strokeWidth: 3 }} />}
+                {series.filter((item) => item.valuations.length).map((item, index) => (
+                  <Area
+                    activeDot={{ r: 6, fill: item.color, stroke: "#080D14", strokeWidth: 3 }}
+                    connectNulls
+                    dataKey={`${item.key}Value`}
+                    dot={{ r: 3, fill: "#111923", stroke: item.color, strokeWidth: 2 }}
+                    fill={series.length > 2 ? "transparent" : index === 0 ? "rgba(53, 201, 182, 0.08)" : "rgba(240, 179, 90, 0.06)"}
+                    key={item.key}
+                    stroke={item.color}
+                    strokeWidth={3}
+                    type="monotone"
+                  />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           </div>

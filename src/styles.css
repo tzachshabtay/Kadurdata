@@ -3918,6 +3918,15 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.valuation-current-band.multi {
+  display: flex;
+  overflow-x: auto;
+}
+
+.valuation-current-band.multi .valuation-current {
+  flex: 1 0 150px;
+}
+
 .valuation-current {
   min-width: 0;
   padding: 15px 18px;
@@ -3945,6 +3954,34 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
 
 .valuation-current > strong.tie {
   color: var(--amber);
+}
+
+.valuation-current > strong.rank-first {
+  color: var(--teal);
+}
+
+.valuation-current > strong.rank-second {
+  color: var(--amber);
+}
+
+.valuation-current > strong.rank-rest {
+  color: var(--coral);
+}
+
+.valuation-series-name {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valuation-series-name i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
 }
 
 .valuation-current > small {
@@ -4519,6 +4556,10 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
 
   .valuation-current-band.comparison {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .valuation-current-band.multi {
+    display: flex;
   }
 
   .valuation-current + .valuation-current {
