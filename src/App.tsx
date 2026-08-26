@@ -30,7 +30,7 @@ import {
   YAxis,
 } from "recharts";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
-import { renderSeasonHeatmap } from "./lib/seasonHeatmap";
+import { calculateMatchAveragePositions, renderSeasonHeatmap } from "./lib/seasonHeatmap";
 import {
   LocaleContext,
   categoryName,
@@ -3531,7 +3531,12 @@ function MatchesView({
                       <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => { setSelectedMatchPlayerId(""); setMatchSide("away"); }}>{text.away}</button>
                     </div>
                   </div>
-                  {detailLoading ? <InlineLoading /> : <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} inspectPlayer={setSelectedMatchPlayerId} />}
+                  {detailLoading ? <InlineLoading /> : (
+                    <>
+                      <MatchAveragePositionPitch players={players} seasonPlayers={seasonPlayers} heatmaps={heatmaps} inspectPlayer={setSelectedMatchPlayerId} />
+                      <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} inspectPlayer={setSelectedMatchPlayerId} />
+                    </>
+                  )}
                 </div>
               </div>
               <MatchShotMap
@@ -5234,6 +5239,89 @@ function MatchShotMap({
   );
 }
 
+function matchTableRankClasses(players: PlayerPivot[]) {
+  function extremes(valueForPlayer: (player: PlayerPivot) => number | null | undefined, metricCode: string) {
+    const ranked = players.map((player) => {
+      const rawValue = valueForPlayer(player);
+      const value = rawValue === null || rawValue === undefined ? null : Number(rawValue);
+      return {
+        playerId: player.player_id,
+        value: value === null || !Number.isFinite(value) || (metricCode === "rating_365" && value < 0) ? null : value,
+      };
+    });
+    const observed = ranked.flatMap((item) => item.value === null ? [] : [item.value]);
+    const classes = new Map<string, string>();
+    if (observed.length < 2) return classes;
+    const best = Math.max(...observed);
+    const worst = Math.min(...observed);
+    if (Math.abs(best - worst) < 0.000001) return classes;
+    ranked.forEach((item) => {
+      if (item.value === null) return;
+      if (Math.abs(item.value - best) < 0.000001) classes.set(item.playerId, "match-stat-best");
+      else if (Math.abs(item.value - worst) < 0.000001) classes.set(item.playerId, "match-stat-worst");
+    });
+    return classes;
+  }
+
+  return {
+    minutes: extremes((player) => player.minutes_played, "minutes"),
+    rating: extremes((player) => player.values.rating_365, "rating_365"),
+    goals: extremes((player) => player.values.goals, "goals"),
+    assists: extremes((player) => player.values.assists, "assists"),
+    passCompletion: extremes((player) => player.values.pass_completion_pct, "pass_completion_pct"),
+    shots: extremes((player) => player.values.total_shots, "total_shots"),
+  };
+}
+
+function shortPlayerName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return name;
+  const finalPair = parts.slice(-2).join(" ");
+  return finalPair.length <= 15 ? finalPair : parts[parts.length - 1];
+}
+
+function spreadAveragePositions(items: Array<{ playerId: string; x: number; y: number }>) {
+  const arranged = [...items]
+    .sort((left, right) => left.playerId.localeCompare(right.playerId))
+    .map((item) => ({ ...item, originalX: item.x, originalY: item.y }));
+  const horizontalRadius = 10;
+  const verticalRadius = 13.5;
+
+  for (let iteration = 0; iteration < 90; iteration += 1) {
+    for (let leftIndex = 0; leftIndex < arranged.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < arranged.length; rightIndex += 1) {
+        const left = arranged[leftIndex];
+        const right = arranged[rightIndex];
+        let scaledX = (right.x - left.x) / horizontalRadius;
+        let scaledY = (right.y - left.y) / verticalRadius;
+        let distance = Math.sqrt(scaledX * scaledX + scaledY * scaledY);
+        if (distance >= 1) continue;
+        if (distance < 0.001) {
+          const angle = ((leftIndex + 1) * 137.5 + rightIndex * 47) * Math.PI / 180;
+          scaledX = Math.cos(angle) * 0.001;
+          scaledY = Math.sin(angle) * 0.001;
+          distance = 0.001;
+        }
+        const push = (1 - distance) * 0.29;
+        const directionX = scaledX / distance;
+        const directionY = scaledY / distance;
+        left.x -= directionX * horizontalRadius * push;
+        right.x += directionX * horizontalRadius * push;
+        left.y -= directionY * verticalRadius * push;
+        right.y += directionY * verticalRadius * push;
+      }
+    }
+    arranged.forEach((item) => {
+      item.x += (item.originalX - item.x) * 0.012;
+      item.y += (item.originalY - item.y) * 0.012;
+      item.x = Math.max(6, Math.min(94, item.x));
+      item.y = Math.max(8, Math.min(90, item.y));
+    });
+  }
+
+  return Object.fromEntries(arranged.map((item) => [item.playerId, { x: item.x, y: item.y }]));
+}
+
 function PlayerMatchTable({
   players,
   seasonPlayers,
@@ -5245,6 +5333,7 @@ function PlayerMatchTable({
 }) {
   const { language, text } = useLocale();
   const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
+  const rankClasses = matchTableRankClasses(players);
   if (!players.length) return <EmptyState text={text.noSidePlayerStats} />;
   return (
     <div className="data-table-wrap">
@@ -5268,12 +5357,112 @@ function PlayerMatchTable({
               }}
             >
               <td><span className="match-player-cell"><span>{player.shirt_number ?? "-"}</span><span><strong>{displayName}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></span></td>
-              <td>{formatMetric(player.minutes_played)}</td><td><strong>{formatMetric(player.values.rating_365)}</strong></td><td>{formatMetric(player.values.goals)}</td><td>{formatMetric(player.values.assists)}</td><td>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td><td>{formatMetric(player.values.total_shots)}</td>
+              <td className={rankClasses.minutes.get(player.player_id)}>{formatMetric(player.minutes_played)}</td>
+              <td className={rankClasses.rating.get(player.player_id)}><strong>{formatMetric(player.values.rating_365)}</strong></td>
+              <td className={rankClasses.goals.get(player.player_id)}>{formatMetric(player.values.goals)}</td>
+              <td className={rankClasses.assists.get(player.player_id)}>{formatMetric(player.values.assists)}</td>
+              <td className={rankClasses.passCompletion.get(player.player_id)}>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td>
+              <td className={rankClasses.shots.get(player.player_id)}>{formatMetric(player.values.total_shots)}</td>
             </tr>
           );
         })}</tbody>
       </table>
     </div>
+  );
+}
+
+function MatchAveragePositionPitch({
+  players,
+  seasonPlayers,
+  heatmaps,
+  inspectPlayer,
+}: {
+  players: PlayerPivot[];
+  seasonPlayers: SeasonPlayer[];
+  heatmaps: MatchPlayerHeatmap[];
+  inspectPlayer: (id: string) => void;
+}) {
+  const { language, text } = useLocale();
+  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [loading, setLoading] = useState(false);
+  const lineupPlayers = useMemo(() => {
+    const starters = players.filter((player) => /start/i.test(player.lineup_status ?? ""));
+    return starters.length >= 7
+      ? starters
+      : [...players].sort((left, right) => Number(right.minutes_played ?? 0) - Number(left.minutes_played ?? 0)).slice(0, 11);
+  }, [players]);
+  const lineupPlayerIds = useMemo(() => new Set(lineupPlayers.map((player) => player.player_id)), [lineupPlayers]);
+  const lineupHeatmaps = useMemo(
+    () => heatmaps.filter((heatmap) => lineupPlayerIds.has(heatmap.player_id)),
+    [heatmaps, lineupPlayerIds],
+  );
+  const seasonPlayerById = useMemo(
+    () => new Map(seasonPlayers.map((player) => [player.player_id, player])),
+    [seasonPlayers],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setPositions({});
+    if (!lineupHeatmaps.length) {
+      setLoading(false);
+      return () => controller.abort();
+    }
+    setLoading(true);
+    void calculateMatchAveragePositions(lineupHeatmaps, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setPositions(Object.fromEntries(result.map((position) => [position.playerId, position])));
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) setPositions({});
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [lineupHeatmaps]);
+
+  const positionedPlayers = lineupPlayers.filter((player) => positions[player.player_id]);
+  const displayPositions = spreadAveragePositions(positionedPlayers.map((player) => ({
+    playerId: player.player_id,
+    ...positions[player.player_id],
+  })));
+  return (
+    <section className="average-position-panel">
+      <div className="average-position-heading"><strong>{text.averagePositions}</strong><span>{positionedPlayers.length || lineupPlayers.length}</span></div>
+      <div className="shot-pitch average-position-pitch" dir="ltr">
+        <span className="pitch-center-line" />
+        <span className="pitch-center-circle" />
+        <span className="pitch-box pitch-box-left" />
+        <span className="pitch-box pitch-box-right" />
+        <span className="pitch-six pitch-six-left" />
+        <span className="pitch-six pitch-six-right" />
+        <span className="pitch-goal pitch-goal-left" />
+        <span className="pitch-goal pitch-goal-right" />
+        {positionedPlayers.map((player) => {
+          const position = displayPositions[player.player_id];
+          const displayName = localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language);
+          const rating = formatMetric(player.values.rating_365);
+          return (
+            <button
+              className="average-position-player"
+              key={player.appearance_id}
+              type="button"
+              style={{ left: `${position.x}%`, top: `${position.y}%` }}
+              title={`${displayName} · ${text.rating}: ${rating}`}
+              aria-label={`${text.viewMatchAttributes}: ${displayName}, ${text.rating} ${rating}`}
+              onClick={() => inspectPlayer(player.player_id)}
+            >
+              <span className="average-position-marker"><strong>{rating}</strong><small>{player.shirt_number ?? "-"}</small></span>
+              <span className="average-position-name" dir={language === "he" ? "rtl" : "ltr"}>{shortPlayerName(displayName)}</span>
+            </button>
+          );
+        })}
+        {loading ? <span className="average-position-loading"><Loader2 className="spin" size={19} aria-label={text.averagePositions} /></span> : null}
+        {!loading && !positionedPlayers.length ? <span className="average-position-empty">{text.noAveragePositions}</span> : null}
+      </div>
+    </section>
   );
 }
 

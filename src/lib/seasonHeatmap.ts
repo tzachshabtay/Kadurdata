@@ -1,4 +1,4 @@
-import type { PlayerSeasonHeatmap } from "./types";
+import type { MatchPlayerHeatmap, PlayerSeasonHeatmap } from "./types";
 
 const HEATMAP_WIDTH = 540;
 const HEATMAP_HEIGHT = 341;
@@ -13,6 +13,12 @@ type LoadedHeatmap = {
 export type SeasonHeatmapRenderResult = {
   matchCount: number;
   sourceImageCount: number;
+};
+
+export type MatchAveragePosition = {
+  playerId: string;
+  x: number;
+  y: number;
 };
 
 function blankPitchUrl(direction: "ltr" | "rtl") {
@@ -64,6 +70,82 @@ function drawNormalized(context: CanvasRenderingContext2D, image: CanvasImageSou
   context.drawImage(image, 0, 0, HEATMAP_WIDTH, HEATMAP_HEIGHT);
   context.restore();
   return context.getImageData(0, 0, HEATMAP_WIDTH, HEATMAP_HEIGHT);
+}
+
+function densityCentroid(imageData: ImageData, baseline: ImageData) {
+  let totalWeight = 0;
+  let weightedX = 0;
+  let weightedY = 0;
+
+  for (let pixel = 0, offset = 0; pixel < HEATMAP_WIDTH * HEATMAP_HEIGHT; pixel += 1, offset += 4) {
+    if (baseline.data[offset + 3] === 0) continue;
+    const isPitchMarking = baseline.data[offset] > 175
+      && baseline.data[offset + 1] > 175
+      && baseline.data[offset + 2] > 175;
+    if (isPitchMarking) continue;
+    const dr = imageData.data[offset] - baseline.data[offset];
+    const dg = imageData.data[offset + 1] - baseline.data[offset + 1];
+    const db = imageData.data[offset + 2] - baseline.data[offset + 2];
+    const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+    if (distance < 14) continue;
+    const weight = Math.min(1.5, (distance - 8) / 150);
+    const x = pixel % HEATMAP_WIDTH;
+    const y = Math.floor(pixel / HEATMAP_WIDTH);
+    totalWeight += weight;
+    weightedX += x * weight;
+    weightedY += y * weight;
+  }
+
+  if (totalWeight < 1) return null;
+  return {
+    x: weightedX / totalWeight,
+    y: weightedY / totalWeight,
+  };
+}
+
+export async function calculateMatchAveragePositions(
+  rows: MatchPlayerHeatmap[],
+  signal?: AbortSignal,
+): Promise<MatchAveragePosition[]> {
+  if (!rows.length) return [];
+  const [blankLtr, blankRtl, loadedResults] = await Promise.all([
+    loadImage(blankPitchUrl("ltr"), signal),
+    loadImage(blankPitchUrl("rtl"), signal),
+    Promise.allSettled(rows.map(async (row) => ({
+      row,
+      image: await loadImage(row.heatmap_url, signal),
+      isRtl: isRtlHeatmap(row.heatmap_url),
+    }))),
+  ]);
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+  const workingCanvas = document.createElement("canvas");
+  workingCanvas.width = HEATMAP_WIDTH;
+  workingCanvas.height = HEATMAP_HEIGHT;
+  const workingContext = workingCanvas.getContext("2d", { willReadFrequently: true });
+  if (!workingContext) throw new Error("Canvas is not available");
+
+  const baselineLtr = drawNormalized(workingContext, blankLtr, false);
+  const baselineRtl = drawNormalized(workingContext, blankRtl, true);
+  const byPlayer = new Map<string, Array<{ x: number; y: number }>>();
+  loadedResults.forEach((result) => {
+    if (result.status !== "fulfilled") return;
+    const { row, image, isRtl } = result.value;
+    const imageData = drawNormalized(workingContext, image, isRtl);
+    const centroid = densityCentroid(imageData, isRtl ? baselineRtl : baselineLtr);
+    if (!centroid) return;
+    byPlayer.set(row.player_id, [...(byPlayer.get(row.player_id) ?? []), centroid]);
+  });
+
+  return Array.from(byPlayer.entries()).map(([playerId, positions]) => {
+    const averageX = positions.reduce((total, position) => total + position.x, 0) / positions.length;
+    const averageY = positions.reduce((total, position) => total + position.y, 0) / positions.length;
+    return {
+      playerId,
+      x: Math.max(6, Math.min(94, averageX * 100 / (HEATMAP_WIDTH - 1))),
+      y: Math.max(8, Math.min(92, averageY * 100 / (HEATMAP_HEIGHT - 1))),
+    };
+  });
 }
 
 function heatColor(value: number): [number, number, number] {
