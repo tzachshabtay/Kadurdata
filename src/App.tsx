@@ -5324,6 +5324,40 @@ function spreadAveragePositions(items: Array<{ playerId: string; x: number; y: n
   return Object.fromEntries(arranged.map((item) => [item.playerId, { x: item.x, y: item.y }]));
 }
 
+function matchLineupStatusOrder(status: string | null) {
+  if (/start/i.test(status ?? "")) return 0;
+  if (/sub/i.test(status ?? "")) return 1;
+  return 2;
+}
+
+function matchPositionOrder(player: PlayerPivot, seasonPlayer?: SeasonPlayer) {
+  const roleOrder: Record<SeasonPlayer["role_group"], number> = {
+    Goalkeepers: 0,
+    Defenders: 1,
+    Midfielders: 2,
+    Attackers: 3,
+    Other: 4,
+  };
+  if (seasonPlayer) return roleOrder[seasonPlayer.role_group];
+  const position = `${player.formation_position ?? ""} ${player.position_name ?? ""}`.toLowerCase();
+  if (/goalkeeper|keeper/.test(position)) return 0;
+  if (/defender|centre back|center back|full back|wing back|left back|right back/.test(position)) return 1;
+  if (/midfield/.test(position)) return 2;
+  if (/attacker|forward|striker|winger/.test(position)) return 3;
+  return 4;
+}
+
+function sortMatchLineupPlayers(players: PlayerPivot[], seasonPlayerById: Map<string, SeasonPlayer>) {
+  return players
+    .map((player, sourceIndex) => ({ player, sourceIndex }))
+    .sort((left, right) => (
+      matchLineupStatusOrder(left.player.lineup_status) - matchLineupStatusOrder(right.player.lineup_status)
+      || matchPositionOrder(left.player, seasonPlayerById.get(left.player.player_id)) - matchPositionOrder(right.player, seasonPlayerById.get(right.player.player_id))
+      || left.sourceIndex - right.sourceIndex
+    ))
+    .map(({ player }) => player);
+}
+
 function PlayerMatchTable({
   players,
   seasonPlayers,
@@ -5336,16 +5370,21 @@ function PlayerMatchTable({
   const { language, text } = useLocale();
   const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
   const rankClasses = matchTableRankClasses(players);
+  const sortedPlayers = sortMatchLineupPlayers(players, seasonPlayerById);
   if (!players.length) return <EmptyState text={text.noSidePlayerStats} />;
   return (
     <div className="data-table-wrap">
       <table className="player-stat-table">
         <thead><tr><th>{text.player}</th><th>{text.minShort}</th><th>{text.rating}</th><th>{text.goalsShort}</th><th>{text.assistsShort}</th><th>{text.passPct}</th><th>{text.shots}</th></tr></thead>
-        <tbody>{players.map((player) => {
+        <tbody>{sortedPlayers.map((player, index) => {
           const displayName = localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language);
           const inspect = () => inspectPlayer(player.player_id);
+          const startsSubstitutes = matchLineupStatusOrder(player.lineup_status) === 1
+            && index > 0
+            && matchLineupStatusOrder(sortedPlayers[index - 1].lineup_status) !== 1;
           return (
             <tr
+              className={startsSubstitutes ? "substitute-start" : undefined}
               key={player.appearance_id}
               role="button"
               tabIndex={0}
