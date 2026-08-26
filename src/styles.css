@@ -432,11 +432,28 @@ input[type="search"]::-webkit-search-cancel-button {
   line-height: 1.88;
 }
 
-.story-copy-section p:first-of-type::first-letter {
-  color: #0a6f56;
-  font-size: 1.45em;
-  font-weight: 950;
+.story-copy-section p:first-of-type {
+  padding-inline-start: 18px;
+  border-inline-start: 3px solid #0a6f56;
 }
+
+.ai-disclaimer {
+  display: flex;
+  align-items: center;
+  width: min(1140px, calc(100% - 70px));
+  gap: 11px;
+  margin: 30px auto 0;
+  padding: 14px 17px;
+  color: #4d5651;
+  border: 1px solid #d4cec0;
+  border-radius: 6px;
+  background: #ebe7dc;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.ai-disclaimer svg { flex: 0 0 auto; color: #0a6f56; }
+.ai-disclaimer strong { color: #151b19; }
 
 .story-graphic {
   margin: 42px 0 0;
@@ -734,6 +751,140 @@ input[type="search"]::-webkit-search-cancel-button {
 .shot-map-legend strong { font-size: 16px; }
 .shot-map-legend small { margin-top: 10px; color: #8f9993; font-size: 9px; line-height: 1.6; }
 
+.matchup-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: #303a35;
+}
+
+.matchup-grid section {
+  padding: 25px;
+  background: #151b19;
+}
+
+.matchup-grid section > span {
+  display: block;
+  min-height: 35px;
+  color: #35c9b6;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.45;
+}
+
+.matchup-grid section > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) auto auto auto auto;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #303a35;
+}
+
+.matchup-grid div strong { font-size: 9px; line-height: 1.35; }
+.matchup-grid div b { color: #fff; font-size: 17px; direction: ltr; }
+.matchup-grid div small { color: #87928c; font-size: 7px; }
+
+.heatmap-shape-graphic {
+  background: #10251d;
+}
+
+.heatmap-explainer {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 20px;
+  padding: 22px 28px;
+  color: #cbd4cf;
+  border-bottom: 1px solid #30443a;
+  background: #173328;
+}
+
+.heatmap-explainer strong { color: #69ddcb; font-size: 11px; line-height: 1.6; }
+.heatmap-explainer p { font-size: 10px; line-height: 1.75; }
+
+.heatmap-shapes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  padding: 28px;
+}
+
+.heatmap-team-shape > strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #dce5e0;
+  font-size: 11px;
+  text-align: center;
+}
+
+.heatmap-pitch {
+  position: relative;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid #718077;
+  background-color: #1c553c;
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 12.5%, transparent 12.5% 25%);
+}
+
+.heatmap-halfway,
+.heatmap-centre-circle,
+.heatmap-box {
+  position: absolute;
+  pointer-events: none;
+}
+
+.heatmap-halfway { top: 50%; right: 0; left: 0; border-top: 1px solid #718077; }
+.heatmap-centre-circle { top: 50%; left: 50%; width: 70px; height: 70px; border: 1px solid #718077; border-radius: 50%; transform: translate(-50%, -50%); }
+.heatmap-box { left: 23%; width: 54%; height: 17%; border: 1px solid #718077; }
+.heatmap-box.top { top: -1px; }
+.heatmap-box.bottom { bottom: -1px; }
+
+.heatmap-player {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+}
+
+.heatmap-player i {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  color: #112019;
+  border: 2px solid #dff9f1;
+  border-radius: 50%;
+  background: #35c9b6;
+  box-shadow: 0 2px 7px rgba(0,0,0,0.5);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.heatmap-player.defender i { background: #a7e85a; }
+.heatmap-player.midfielder i { background: #f1ce42; }
+.heatmap-player.attacker i { background: #ff7b6f; }
+.heatmap-player.goalkeeper i { background: #c2b2ff; }
+
+.heatmap-player small {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  padding: 2px 4px;
+  color: #f5f8f6;
+  background: rgba(10, 24, 18, 0.8);
+  font-size: 7px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.heatmap-loading {
+  padding: 70px 28px;
+  color: #9eaaa4;
+  font-size: 11px;
+  text-align: center;
+}
+
 .story-conclusion {
   margin: 88px 0 0;
   padding: 42px clamp(30px, 6vw, 70px);
@@ -885,6 +1036,8 @@ input[type="search"]::-webkit-search-cancel-button {
   .article-shot-layout { grid-template-columns: 1fr; }
   .shot-map-legend { display: grid; grid-template-columns: 1fr 1fr; }
   .shot-map-legend small { grid-column: 1 / -1; }
+  .matchup-grid { grid-template-columns: 1fr; }
+  .matchup-grid section > span { min-height: 0; }
 }
 
 @media (max-width: 640px) {
@@ -896,6 +1049,7 @@ input[type="search"]::-webkit-search-cancel-button {
   .story-trust-strip { align-items: flex-start; flex-direction: column; gap: 9px; padding-block: 18px; }
   .story-trust-strip button { margin-inline-start: 0; }
   .story-body { width: calc(100% - 32px); padding-block: 58px 64px; }
+  .ai-disclaimer { align-items: flex-start; width: calc(100% - 32px); }
   .story-rail ol { grid-template-columns: 1fr; }
   .story-rail li { padding-inline: 34px 0; border-bottom: 1px solid #d8d2c5; }
   .story-rail li + li { border-inline-start: 0; }
@@ -911,6 +1065,9 @@ input[type="search"]::-webkit-search-cancel-button {
   .comparison-bars { grid-template-columns: 1fr 80px 1fr; gap: 7px; }
   .article-shot-layout { padding: 18px; }
   .article-shot-pitch { min-height: 360px; }
+  .heatmap-explainer { grid-template-columns: 1fr; gap: 7px; padding: 20px 18px; }
+  .heatmap-shapes { grid-template-columns: 1fr; padding: 18px; }
+  .heatmap-pitch { min-height: 420px; }
   .story-conclusion { margin-inline: -16px; padding: 32px 27px; }
   .fact-check-panel { margin-inline: -16px; border-radius: 0; }
   .fact-check-heading { align-items: flex-start; padding: 23px 20px; }

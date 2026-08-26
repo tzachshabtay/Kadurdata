@@ -257,7 +257,7 @@ const hebrewText: UiText = {
   clubs: "מועדונים",
   players: "שחקנים",
   legionnaires: "לגיונרים",
-  blog: "כתבות",
+  blog: "בלוג",
   refreshData: "רענון נתונים",
   language: "שפה",
   hebrew: "עברית",

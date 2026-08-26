@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   ArrowLeft,
   Check,
@@ -8,7 +8,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { articles } from "../content/articles";
-import type { ArticleShot, ContentArticle } from "../content/types";
+import type { ArticlePlayer, ArticleShot, ContentArticle } from "../content/types";
+import { calculateMatchAveragePositions, type MatchAveragePosition } from "../lib/seasonHeatmap";
 
 type BlogViewProps = {
   onOpenMatch: (article: ContentArticle) => void;
@@ -199,6 +200,124 @@ function ShotMap({ article }: { article: ContentArticle }) {
   );
 }
 
+function MatchupGraphic({ article }: { article: ContentArticle }) {
+  const { home, away } = article.teams;
+  const homeUnits = article.unitMatchups.home;
+  const awayUnits = article.unitMatchups.away;
+  return (
+    <figure className="story-graphic matchup-graphic">
+      <figcaption>
+        <span>גרפיקה 04</span>
+        <div><strong>אותו מרכז מגרש, שני סוגים של שליטה</strong><small>סכום פעולות השחקנים בכל חוליה · ללא נרמול ל־90 דקות</small></div>
+      </figcaption>
+      <div className="matchup-grid">
+        <section>
+          <span>העבודה ההגנתית בקישור</span>
+          <div><strong>{home.nameHe}</strong><b>{homeUnits.midfielders.recoveries}</b><small>חילוצים</small><b>{homeUnits.midfielders.tacklesWon}/{homeUnits.midfielders.tacklesAttempted}</b><small>תיקולים</small></div>
+          <div><strong>{away.nameHe}</strong><b>{awayUnits.midfielders.recoveries}</b><small>חילוצים</small><b>{awayUnits.midfielders.tacklesWon}/{awayUnits.midfielders.tacklesAttempted}</b><small>תיקולים</small></div>
+        </section>
+        <section>
+          <span>ההשפעה ההתקפית בקישור</span>
+          <div><strong>{home.nameHe}</strong><b>{numeric(homeUnits.midfielders.expectedGoals, 2)}</b><small>xG</small><b>{homeUnits.midfielders.goals}</b><small>שערים</small></div>
+          <div><strong>{away.nameHe}</strong><b>{numeric(awayUnits.midfielders.expectedGoals, 2)}</b><small>xG</small><b>{awayUnits.midfielders.goals}</b><small>שערים</small></div>
+        </section>
+        <section>
+          <span>הגנת {away.nameHe} מול התקפת {home.nameHe}</span>
+          <div><strong>הגנת {away.nameHe}</strong><b>{awayUnits.defenders.tacklesWon}/{awayUnits.defenders.tacklesAttempted}</b><small>תיקולים</small><b>{awayUnits.defenders.clearances}</b><small>הרחקות</small></div>
+          <div><strong>התקפת {home.nameHe}</strong><b>{homeUnits.attackers.groundDuelsWon}/{homeUnits.attackers.groundDuelsAttempted}</b><small>מאבקי קרקע</small><b>{numeric(homeUnits.attackers.expectedGoals, 2)}</b><small>xG</small></div>
+        </section>
+      </div>
+    </figure>
+  );
+}
+
+function shortPlayerName(player: ArticlePlayer) {
+  const words = player.nameHe.trim().split(/\s+/);
+  return words.length > 1 ? words[words.length - 1] : player.nameHe;
+}
+
+function TeamHeatmapShape({
+  article,
+  teamId,
+  positions,
+}: {
+  article: ContentArticle;
+  teamId: string;
+  positions: Map<string, MatchAveragePosition>;
+}) {
+  const players = article.players.filter((player) => (
+    player.teamId === teamId
+    && /start/i.test(player.lineupStatus ?? "")
+    && positions.has(player.playerId)
+  ));
+  return (
+    <div className="heatmap-team-shape">
+      <strong>{teamId === article.teams.home.teamId ? article.teams.home.nameHe : article.teams.away.nameHe}</strong>
+      <div className="heatmap-pitch">
+        <span className="heatmap-halfway" />
+        <span className="heatmap-centre-circle" />
+        <span className="heatmap-box top" />
+        <span className="heatmap-box bottom" />
+        {players.map((player) => {
+          const position = positions.get(player.playerId);
+          if (!position) return null;
+          return (
+            <span
+              className={`heatmap-player ${player.roleGroup.toLowerCase()}`}
+              key={player.playerId}
+              style={{ left: `${position.x}%`, top: `${position.y}%` } as CSSProperties}
+              title={`${player.nameHe} · ${player.formationPosition ?? player.positionName ?? ""}`}
+            >
+              <i>{player.shirtNumber ?? "·"}</i>
+              <small>{shortPlayerName(player)}</small>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HeatmapShapeGraphic({ article }: { article: ContentArticle }) {
+  const [positions, setPositions] = useState<MatchAveragePosition[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    calculateMatchAveragePositions(article.heatmaps, controller.signal)
+      .then(setPositions)
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setPositions([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [article]);
+
+  const positionByPlayer = new Map(positions.map((position) => [position.playerId, position]));
+  return (
+    <figure className="story-graphic heatmap-shape-graphic">
+      <figcaption>
+        <span>גרפיקה 05</span>
+        <div><strong>המבנה הממוצע לפי מפות החום</strong><small>{article.heatmaps.length} מפות שחקן · כיוון ההתקפה נורמל כך ששתי הקבוצות ניתנות להשוואה</small></div>
+      </figcaption>
+      <div className="heatmap-explainer">
+        <strong>חשוב: מפות החום אינן מבוססות זמן.</strong>
+        <p>כל מפה מציגה צפיפות מיקום מצטברת לאורך זמן ההופעה של השחקן. אפשר ללמוד ממנה על רוחב, עומק ומיקום ממוצע — אבל לא לקבוע מתי התרחש שינוי או לייחס אותו לדקה מסוימת.</p>
+      </div>
+      {loading ? <p className="heatmap-loading">מחשב מיקומים ממוצעים…</p> : positions.length ? (
+        <div className="heatmap-shapes" dir="ltr">
+          <TeamHeatmapShape article={article} teamId={article.teams.home.teamId} positions={positionByPlayer} />
+          <TeamHeatmapShape article={article} teamId={article.teams.away.teamId} positions={positionByPlayer} />
+        </div>
+      ) : <p className="heatmap-loading">מפות החום לא נטענו; הניתוח המספרי של החוליות נשאר זמין.</p>}
+    </figure>
+  );
+}
+
 function FactCheckPanel({ article }: { article: ContentArticle }) {
   return (
     <section className="fact-check-panel">
@@ -248,6 +367,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
         <button type="button" onClick={() => onOpenMatch(article)}>לכל נתוני המשחק <ArrowLeft size={15} aria-hidden="true" /></button>
       </div>
 
+      <aside className="ai-disclaimer">
+        <Sparkles size={17} aria-hidden="true" />
+        <p><strong>גילוי נאות:</strong> {article.aiDisclosure.replace(/^גילוי נאות:\s*/, "")}</p>
+      </aside>
+
       <div className="story-body">
         <aside className="story-rail" aria-label="תקציר הכתבה">
           <span>ב־30 שניות</span>
@@ -266,6 +390,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
               {index === 1 && <ComparisonGraphic article={article} />}
               {index === 2 && <DorSpotlight article={article} />}
               {index === 3 && <ShotMap article={article} />}
+              {index === 4 && <><MatchupGraphic article={article} /><HeatmapShapeGraphic article={article} /></>}
             </div>
           ))}
 

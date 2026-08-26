@@ -45,8 +45,56 @@ export type ArticlePlayer = {
   nameHe: string;
   teamId: string;
   teamName: string;
+  side: "home" | "away" | null;
+  lineupStatus: string | null;
+  positionName: string | null;
+  formationPosition: string | null;
+  shirtNumber: number | null;
+  roleGroup: "Goalkeeper" | "Defender" | "Midfielder" | "Attacker" | "Other";
   minutes: number | null;
   metrics: Record<string, number | null>;
+};
+
+export type ArticleHeatmap = {
+  match_id: string;
+  appearance_id: string;
+  player_id: string;
+  display_name: string;
+  display_name_he: string | null;
+  team_id: string;
+  team_name: string;
+  team_name_he: string | null;
+  heatmap_url: string;
+  source_id: string;
+  source_code: string;
+  source_name: string;
+  observed_at: string;
+};
+
+export type ArticleUnitMetrics = {
+  playerCount: number;
+  recoveries: number;
+  interceptions: number;
+  tacklesWon: number;
+  tacklesAttempted: number;
+  expectedGoals: number;
+  goals: number;
+  shots: number;
+  shotsOnTarget: number;
+  expectedAssists: number;
+  keyPasses: number;
+  assists: number;
+  groundDuelsWon: number;
+  groundDuelsAttempted: number;
+  clearances: number;
+  blocks: number;
+  wasDribbledPast: number;
+};
+
+export type ArticleTeamUnits = {
+  defenders: ArticleUnitMetrics;
+  midfielders: ArticleUnitMetrics;
+  attackers: ArticleUnitMetrics;
 };
 
 export type ContentArticle = {
@@ -70,7 +118,11 @@ export type ContentArticle = {
     status: string;
   };
   teams: { home: ArticleTeam; away: ArticleTeam };
+  aiDisclosure: string;
+  players: ArticlePlayer[];
   playerSpotlight: ArticlePlayer[];
+  heatmaps: ArticleHeatmap[];
+  unitMatchups: { home: ArticleTeamUnits; away: ArticleTeamUnits };
   shots: ArticleShot[];
   editorial: {
     headline: string;

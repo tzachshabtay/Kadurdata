@@ -89,6 +89,7 @@ async function fetchMatchDataset(client, match) {
     client.from("api_match_player_stats").select("*").eq("match_id", match.match_id).limit(3000),
     client.from("api_match_shots").select("*").eq("match_id", match.match_id).order("minute").limit(500),
     client.from("api_team_assets").select("*").in("team_id", [match.home_team_id, match.away_team_id]),
+    client.from("api_match_player_heatmaps").select("*").eq("match_id", match.match_id).limit(100),
   ]);
   const firstError = queries.find((query) => query.error)?.error;
   if (firstError) throw firstError;
@@ -97,6 +98,7 @@ async function fetchMatchDataset(client, match) {
     playerRows: queries[1].data ?? [],
     shots: queries[2].data ?? [],
     assets: queries[3].data ?? [],
+    heatmaps: queries[4].data ?? [],
   };
 }
 
@@ -119,6 +121,12 @@ function pivotPlayerStats(rows) {
       nameHe: row.display_name_he ?? row.display_name,
       teamId: row.team_id,
       teamName: row.team_name,
+      side: row.side,
+      lineupStatus: row.lineup_status,
+      positionName: row.position_name,
+      formationPosition: row.formation_position,
+      shirtNumber: numberValue(row.shirt_number),
+      roleGroup: playerRoleGroup(row.position_name, row.formation_position),
       minutes: numberValue(row.minutes_played),
       metrics: {},
     };
@@ -126,6 +134,50 @@ function pivotPlayerStats(rows) {
     players.set(row.player_id, current);
   }
   return [...players.values()];
+}
+
+function playerRoleGroup(positionName, formationPosition) {
+  const position = `${positionName ?? ""} ${formationPosition ?? ""}`.toLowerCase();
+  if (/goalkeeper|keeper|\bgk\b/.test(position)) return "Goalkeeper";
+  if (/defender|centre back|center back|full back|wing back|left back|right back|\bcb\b|\blb\b|\brb\b/.test(position)) return "Defender";
+  if (/midfield|\bdm\b|\bcm\b|\bam\b/.test(position)) return "Midfielder";
+  if (/attacker|forward|striker|winger|\bcf\b|\blf\b|\brf\b/.test(position)) return "Attacker";
+  return "Other";
+}
+
+function sumMetric(players, metricCode) {
+  return players.reduce((sum, player) => sum + Number(player.metrics[metricCode] ?? 0), 0);
+}
+
+function unitMetrics(players) {
+  return {
+    playerCount: players.length,
+    recoveries: sumMetric(players, "ball_recovery"),
+    interceptions: sumMetric(players, "interceptions"),
+    tacklesWon: sumMetric(players, "tackles_won"),
+    tacklesAttempted: sumMetric(players, "tackles_attempted"),
+    expectedGoals: round(sumMetric(players, "expected_goals")),
+    goals: sumMetric(players, "goals"),
+    shots: sumMetric(players, "total_shots"),
+    shotsOnTarget: sumMetric(players, "shots_on_target"),
+    expectedAssists: round(sumMetric(players, "expected_assists")),
+    keyPasses: sumMetric(players, "key_passes"),
+    assists: sumMetric(players, "assists"),
+    groundDuelsWon: sumMetric(players, "ground_duels_won"),
+    groundDuelsAttempted: sumMetric(players, "ground_duels_attempted"),
+    clearances: sumMetric(players, "clearances"),
+    blocks: sumMetric(players, "blocks"),
+    wasDribbledPast: sumMetric(players, "was_dribbled_past"),
+  };
+}
+
+function teamUnits(players, teamId) {
+  const teamPlayers = players.filter((player) => player.teamId === teamId);
+  return {
+    defenders: unitMetrics(teamPlayers.filter((player) => player.roleGroup === "Defender")),
+    midfielders: unitMetrics(teamPlayers.filter((player) => player.roleGroup === "Midfielder")),
+    attackers: unitMetrics(teamPlayers.filter((player) => player.roleGroup === "Attacker")),
+  };
 }
 
 function shotSummary(shots, teamId) {
@@ -160,7 +212,7 @@ function evidenceItem(id, label, sourceView, sourceRows, values) {
   return { id, label, sourceView, sourceRows, values: values.filter((value) => value !== null && value !== undefined) };
 }
 
-function buildEvidence(match, home, away, players, shots) {
+function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps) {
   const dor = players.find((player) => player.name === "Dor Peretz");
   const creators = players.filter((player) => ["Hélio Varela", "Noam Ben Harush", "Osher Davida"].includes(player.name));
   const creatorTotals = {
@@ -171,6 +223,11 @@ function buildEvidence(match, home, away, players, shots) {
   };
   const goals = shots.filter((shot) => shot.outcome === "Goal");
   const dappaChance = shots.find((shot) => shot.display_name === "Israel Dappa" && shot.xg >= 0.2);
+  const homeMidfield = unitMatchups.home.midfielders;
+  const awayMidfield = unitMatchups.away.midfielders;
+  const homeAttack = unitMatchups.home.attackers;
+  const awayAttack = unitMatchups.away.attackers;
+  const awayDefense = unitMatchups.away.defenders;
   return [
     evidenceItem("match.result", "תוצאת המשחק", "api_matches", 1, [home.score, away.score]),
     evidenceItem("match.opening_goal", "שער היתרון המוקדם", "api_match_shots", 1, [1, 0.09]),
@@ -189,6 +246,32 @@ function buildEvidence(match, home, away, players, shots) {
       home.stats.team_possession_lost, away.stats.team_possession_lost,
       home.stats.team_interceptions, away.stats.team_interceptions,
     ]),
+    evidenceItem("style.team_profiles", "פרופיל סגנון המשחק", "api_match_team_stats", 14, [
+      home.stats.team_passes_into_final_third, away.stats.team_passes_into_final_third,
+      home.stats.team_key_passes, away.stats.team_key_passes,
+      home.stats.team_crosses_completed, away.stats.team_crosses_completed,
+      home.stats.team_expected_goals, away.stats.team_expected_goals,
+      home.stats.team_possession_lost, away.stats.team_possession_lost,
+      home.stats.team_interceptions, away.stats.team_interceptions,
+      home.stats.team_backward_passes, away.stats.team_backward_passes,
+    ]),
+    evidenceItem("matchup.midfield", "המאבק בין חוליות הקישור", "api_match_player_stats", 12, [
+      homeMidfield.recoveries, homeMidfield.tacklesWon, homeMidfield.tacklesAttempted,
+      awayMidfield.recoveries, awayMidfield.tacklesWon, awayMidfield.tacklesAttempted,
+      homeMidfield.goals, homeMidfield.expectedGoals, homeMidfield.shotsOnTarget,
+      awayMidfield.goals, awayMidfield.expectedGoals, awayMidfield.shotsOnTarget,
+    ]),
+    evidenceItem("matchup.home_attack_away_defense", "התקפת המארחת מול הגנת האורחת", "api_match_player_stats", 10, [
+      awayDefense.tacklesWon, awayDefense.tacklesAttempted, awayDefense.clearances, awayDefense.blocks,
+      awayDefense.wasDribbledPast, homeAttack.shots, homeAttack.expectedGoals, homeAttack.goals,
+      homeAttack.groundDuelsWon, homeAttack.groundDuelsAttempted,
+    ]),
+    evidenceItem("matchup.away_attack", "תרומת התקפת האורחת", "api_match_player_stats", 9, [
+      awayAttack.goals, awayAttack.expectedGoals, awayAttack.keyPasses, awayAttack.expectedAssists,
+      awayAttack.assists, awayMidfield.goals, awayMidfield.expectedGoals,
+      awayDefense.goals, awayDefense.expectedGoals,
+    ]),
+    evidenceItem("heatmap.method", "מפות חום מצטברות לפי הופעה", "api_match_player_heatmaps", heatmaps.length, [heatmaps.length]),
     evidenceItem("player.dor_peretz", "משחקו של דור פרץ", "api_match_player_stats", 12, dor ? [
       dor.metrics.goals, dor.metrics.total_shots, dor.metrics.expected_goals, dor.metrics.rating_365, dor.minutes,
       ...goals.filter((shot) => shot.display_name === "Dor Peretz").flatMap((shot) => [shot.minute, shot.event_time?.includes("+") ? 2 : null]),
@@ -255,8 +338,8 @@ function fallbackEditorial(match, home, away) {
         heading: "מה המספרים אומרים על הפועל",
         paragraphs: [
           {
-            text: "הפועל הכניסה 95 מסירות לשליש האחרון מול 70 של מכבי, אבל איבדה את הכדור 110 פעמים מול 94. היא הצליחה לקדם את המשחק, אך הרבה פחות להפוך את ההתקדמות להזדמנויות נקיות.",
-            evidenceIds: ["team.progression"],
+            text: "הפועל הכניסה 95 מסירות לשליש האחרון מול 70 של מכבי והשלימה 7 הגבהות מול 3. פרופיל המספרים מתאים לקבוצה שדחפה יותר כדורים קדימה ולרוחב, אבל היא גם איבדה את הכדור 110 פעמים מול 94 והגיעה ל־1.27 xG בלבד מול 3.56.",
+            evidenceIds: ["style.team_profiles"],
           },
           {
             text: "ההחמצה המשמעותית הגיעה בדקה ה־20: ישראל דאפה נעצר במצב של 0.28 xG. אחרי ההזדמנות הזאת, היתרון המוקדם כבר לא קיבל מספיק תמיכה מאיכות המצבים הבאים.",
@@ -264,14 +347,27 @@ function fallbackEditorial(match, home, away) {
           },
         ],
       },
+      {
+        heading: "מי באמת ניצח את מרכז המגרש?",
+        paragraphs: [
+          {
+            text: "קשרי הפועל רשמו 16 חילוצי כדור ו־6 תיקולים מוצלחים מ־7 ניסיונות; קשרי מכבי הסתפקו ב־8 חילוצים וב־3 מ־4. במאבק ההגנתי במרכז, המספרים נוטים להפועל.",
+            evidenceIds: ["matchup.midfield"],
+          },
+          {
+            text: "אבל ההשפעה ההתקפית התהפכה: קשרי מכבי ייצרו 2.67 xG, בעטו 4 פעמים למסגרת וכבשו 3; קשרי הפועל הגיעו ל־0.14 xG ול־0 שערים. מול ההתקפה הירושלמית, הגנת מכבי הוסיפה 7 מ־7 בתיקולים, 16 הרחקות ו־4 חסימות, ונעקפה בכדרור פעם אחת בלבד. חלוצי הפועל ייצרו 12 בעיטות ו־1.07 xG, אך ניצחו רק 6 מ־26 מאבקי קרקע.",
+            evidenceIds: ["matchup.midfield", "matchup.home_attack_away_defense"],
+          },
+        ],
+      },
     ],
     takeaways: [
       { text: "הפער האמיתי היה באיכות: 3.56 מול 1.27 xG.", evidenceIds: ["team.quality"] },
       { text: "דור פרץ כבש 3 שערים מ־4 בעיטות ב־75 דקות.", evidenceIds: ["player.dor_peretz"] },
-      { text: "להפועל היו 95 מסירות לשליש האחרון, אבל רק 2 מצבים גדולים.", evidenceIds: ["team.progression", "team.quality"] },
+      { text: "קשרי הפועל הובילו 16–8 בחילוצים; קשרי מכבי הובילו 3–0 בשערים.", evidenceIds: ["matchup.midfield"] },
     ],
-    conclusion: "זה היה 5:2 שאינו מסביר את עצמו דרך שליטה בכדור או מתקפת בעיטות בלתי פוסקת. הוא מסביר את עצמו דרך בחירת מצבים, נוכחות ברחבה ומסיים אחד שהיה כמעט מושלם.",
-    conclusionEvidenceIds: ["match.result", "team.volume", "team.quality", "player.dor_peretz"],
+    conclusion: "זה היה 5:2 שאינו מסביר את עצמו דרך שליטה בכדור או מתקפת בעיטות בלתי פוסקת. הפועל ניצחה ביותר פעולות הגנתיות בקישור; מכבי ניצחה באיכות המצבים, בהגעה מאחור ובסיומת.",
+    conclusionEvidenceIds: ["match.result", "team.volume", "team.quality", "matchup.midfield", "player.dor_peretz"],
   };
 }
 
@@ -346,6 +442,8 @@ async function generateEditorialWithAi(match, evidence) {
         "לכל טענה מספרית צרף רק מזהי evidenceIds שמכילים את המספרים הללו. שמור על טון עיתונאי ולא שיווקי.",
         "כתוב כל כמות ומספר בספרות (למשל 6, לא שישה), כדי שמנוע האימות יוכל לבדוק אותם.",
         "השתמש ב-xG כמונח המקצועי היחיד שמותר באותיות לטיניות.",
+        "כלול ניתוח מפורש של מאבקי קישור ושל מגנים מול חלוצים, והפרד בין פעולות הגנתיות להשפעה התקפית.",
+        "תאר סגנון משחק רק כפרופיל מספרי או כהסקה זהירה. מפות החום הן צפיפות מיקום מצטברת לכל זמן ההופעה, אינן מבוססות זמן ואינן מאפשרות לקבוע מתי התרחש שינוי.",
       ].join("\n"),
       input: JSON.stringify({
         match: {
@@ -477,13 +575,20 @@ async function main() {
 
   const teamStats = pivotTeamStats(dataset.teamRows);
   const players = pivotPlayerStats(dataset.playerRows);
-  const hebrewNames = new Map(dataset.shots.filter((shot) => shot.player_id && shot.display_name_he).map((shot) => [shot.player_id, shot.display_name_he]));
+  const hebrewNames = new Map([
+    ...dataset.heatmaps.filter((row) => row.player_id && row.display_name_he).map((row) => [row.player_id, row.display_name_he]),
+    ...dataset.shots.filter((shot) => shot.player_id && shot.display_name_he).map((shot) => [shot.player_id, shot.display_name_he]),
+  ]);
   players.forEach((player) => {
     player.nameHe = hebrewNames.get(player.playerId) ?? player.nameHe;
   });
   const home = teamSnapshot(match, "home", teamStats.get(match.home_team_id) ?? {}, dataset.assets, dataset.shots);
   const away = teamSnapshot(match, "away", teamStats.get(match.away_team_id) ?? {}, dataset.assets, dataset.shots);
-  const evidence = buildEvidence(match, home, away, players, dataset.shots);
+  const unitMatchups = {
+    home: teamUnits(players, home.teamId),
+    away: teamUnits(players, away.teamId),
+  };
+  const evidence = buildEvidence(match, home, away, players, dataset.shots, unitMatchups, dataset.heatmaps);
   const usedAi = Boolean(process.env.OPENAI_API_KEY) && !args.noAi;
   if (!usedAi && match.match_id !== "5b2957d1-6f48-4269-baf6-2f53753eb160") {
     throw new Error("OPENAI_API_KEY is required for matches without a reviewed editorial seed.");
@@ -523,10 +628,14 @@ async function main() {
       status: match.status,
     },
     teams: { home, away },
+    aiDisclosure: "גילוי נאות: הכתבה נוצרה בעזרת בינה מלאכותית על בסיס נתוני כדורדאטה. הנתונים והטענות המספריות עברו בדיקות אוטומטיות לפני הפרסום.",
+    players,
     playerSpotlight: players
       .filter((player) => Number(player.metrics.goals ?? 0) > 0 || Number(player.metrics.assists ?? 0) > 0)
       .sort((left, right) => Number(right.metrics.rating_365 ?? 0) - Number(left.metrics.rating_365 ?? 0))
       .slice(0, 8),
+    heatmaps: dataset.heatmaps,
+    unitMatchups,
     shots: dataset.shots.map(normalizeShot),
     editorial,
     evidence,
@@ -536,7 +645,7 @@ async function main() {
       checks,
       evidenceCount: evidence.length,
       claimCount: claimEntries(editorial).length,
-      sourceViews: ["api_matches", "api_match_team_stats", "api_match_player_stats", "api_match_shots"],
+      sourceViews: ["api_matches", "api_match_team_stats", "api_match_player_stats", "api_match_shots", "api_match_player_heatmaps"],
     },
   };
 
