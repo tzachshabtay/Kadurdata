@@ -1852,6 +1852,48 @@ table {
   place-items: center;
 }
 
+.average-position-star {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  color: #ffd166;
+  fill: currentColor;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+}
+
+.average-position-player.rating-high .average-position-marker {
+  border-color: rgba(86, 214, 155, 0.9);
+}
+
+.average-position-player.rating-high .average-position-marker small {
+  background: #56d69b;
+}
+
+.average-position-player.rating-medium .average-position-marker {
+  border-color: rgba(240, 179, 90, 0.9);
+}
+
+.average-position-player.rating-medium .average-position-marker small {
+  background: var(--amber);
+}
+
+.average-position-player.rating-low .average-position-marker {
+  border-color: rgba(255, 118, 95, 0.9);
+}
+
+.average-position-player.rating-low .average-position-marker small {
+  background: var(--coral);
+}
+
+.average-position-player.rating-unrated .average-position-marker {
+  border-color: rgba(255, 255, 255, 0.58);
+}
+
+.average-position-player.rating-unrated .average-position-marker small {
+  color: var(--muted-bright);
+  background: var(--raised-strong);
+}
+
 .average-position-name {
   display: block;
   width: 100%;

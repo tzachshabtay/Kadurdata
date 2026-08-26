@@ -17,6 +17,7 @@ import {
   RefreshCcw,
   Search,
   Shield,
+  Star,
   Users,
   X,
 } from "lucide-react";
@@ -5425,6 +5426,10 @@ function MatchAveragePositionPitch({
   }, [lineupHeatmaps]);
 
   const positionedPlayers = lineupPlayers.filter((player) => positions[player.player_id]);
+  const validRatings = positionedPlayers
+    .map((player) => Number(player.values.rating_365))
+    .filter((rating) => Number.isFinite(rating) && rating >= 0);
+  const highestRating = validRatings.length ? Math.max(...validRatings) : null;
   const displayPositions = spreadAveragePositions(positionedPlayers.map((player) => ({
     playerId: player.player_id,
     ...positions[player.player_id],
@@ -5444,10 +5449,14 @@ function MatchAveragePositionPitch({
         {positionedPlayers.map((player) => {
           const position = displayPositions[player.player_id];
           const displayName = localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language);
-          const rating = formatMetric(player.values.rating_365);
+          const numericRating = Number(player.values.rating_365);
+          const hasRating = Number.isFinite(numericRating) && numericRating >= 0;
+          const rating = hasRating ? formatMetric(numericRating) : "-";
+          const ratingTone = !hasRating ? "rating-unrated" : numericRating >= 7 ? "rating-high" : numericRating < 5 ? "rating-low" : "rating-medium";
+          const isTopRated = hasRating && highestRating !== null && Math.abs(numericRating - highestRating) < 0.000001;
           return (
             <button
-              className="average-position-player"
+              className={`average-position-player ${ratingTone}${isTopRated ? " top-rated" : ""}`}
               key={player.appearance_id}
               type="button"
               style={{ left: `${position.x}%`, top: `${position.y}%` }}
@@ -5455,7 +5464,10 @@ function MatchAveragePositionPitch({
               aria-label={`${text.viewMatchAttributes}: ${displayName}, ${text.rating} ${rating}`}
               onClick={() => inspectPlayer(player.player_id)}
             >
-              <span className="average-position-marker"><strong>{player.shirt_number ?? "-"}</strong><small>{rating}</small></span>
+              <span className="average-position-marker">
+                {isTopRated ? <Star className="average-position-star" size={13} aria-hidden="true" /> : null}
+                <strong>{player.shirt_number ?? "-"}</strong><small>{rating}</small>
+              </span>
               <span className="average-position-name" dir={language === "he" ? "rtl" : "ltr"}>{shortPlayerName(displayName)}</span>
             </button>
           );
