@@ -2,6 +2,7 @@ import unittest
 from argparse import Namespace
 
 from scripts.ingest_365scores import (
+    backfill_missing_goals_from_shots,
     competition_seasons,
     flatten_shot_events,
     game_has_country_participant,
@@ -14,6 +15,27 @@ from scripts.ingest_365scores import (
 
 
 class CompetitionCatalogTests(unittest.TestCase):
+    def test_backfills_missing_goals_from_goal_shots(self) -> None:
+        player_rows = [
+            {"game_id": 10, "athlete_id": 7, "player_name": "Scorer"},
+            {"game_id": 10, "athlete_id": 8, "player_name": "Existing", "stat_goals_value": 1},
+            {"game_id": 10, "athlete_id": 9, "player_name": "Non-scorer"},
+        ]
+        shot_rows = [
+            {"game_id": 10, "player_source_id": 7, "outcome": "Goal"},
+            {"game_id": 10, "player_source_id": 7, "outcome": "Goal"},
+            {"game_id": 10, "player_source_id": 7, "outcome": "Saved"},
+            {"game_id": 10, "player_source_id": 8, "outcome": "Goal"},
+        ]
+
+        count = backfill_missing_goals_from_shots(player_rows, shot_rows)
+
+        self.assertEqual(count, 1)
+        self.assertEqual(player_rows[0]["stat_goals_value"], 2)
+        self.assertEqual(player_rows[0]["stat_goals_raw"], "2")
+        self.assertEqual(player_rows[1]["stat_goals_value"], 1)
+        self.assertNotIn("stat_goals_value", player_rows[2])
+
     def test_flattens_shot_chart_coordinates_and_player_mapping(self) -> None:
         rows = flatten_shot_events(
             {

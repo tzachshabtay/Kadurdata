@@ -899,6 +899,30 @@ def flatten_shot_events(details: Dict[int, Dict[str, Any]]) -> List[Dict[str, An
     return rows
 
 
+def backfill_missing_goals_from_shots(
+    player_rows: List[Dict[str, Any]],
+    shot_rows: List[Dict[str, Any]],
+) -> int:
+    goals_by_player = Counter(
+        (str(event.get("game_id")), str(event.get("player_source_id")))
+        for event in shot_rows
+        if str(event.get("outcome") or "").strip().casefold() == "goal"
+        and event.get("game_id") is not None
+        and event.get("player_source_id") is not None
+    )
+    backfilled = 0
+    for row in player_rows:
+        if row.get("stat_goals_value") not in (None, ""):
+            continue
+        goals = goals_by_player.get((str(row.get("game_id")), str(row.get("athlete_id"))), 0)
+        if not goals:
+            continue
+        row["stat_goals_raw"] = str(goals)
+        row["stat_goals_value"] = goals
+        backfilled += 1
+    return backfilled
+
+
 def flatten_team_stats(stats_payloads: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for game_id, payload in stats_payloads.items():
@@ -1167,6 +1191,10 @@ def main() -> int:
     fixture_rows = flatten_fixtures(games)
     player_rows, stat_names = flatten_player_match_rows(details)
     shot_rows = flatten_shot_events(details)
+    backfilled_goal_rows = backfill_missing_goals_from_shots(player_rows, shot_rows)
+    if backfilled_goal_rows and "goals" not in stat_names:
+        stat_names.append("goals")
+        stat_names.sort()
     team_stat_rows = flatten_team_stats(stats)
 
     write_csv(args.processed_dir / "365scores_fixtures.csv", fixture_rows)
@@ -1189,6 +1217,7 @@ def main() -> int:
         "match_team_stats_count": len(stats),
         "player_match_row_count": len(player_rows),
         "shot_event_count": len(shot_rows),
+        "goal_rows_backfilled_from_shots": backfilled_goal_rows,
         "team_stat_row_count": len(team_stat_rows),
         "season_nums": summarize(fixture_rows, "season_num"),
         "stage_nums": summarize(fixture_rows, "stage_num"),
