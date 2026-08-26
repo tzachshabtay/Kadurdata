@@ -5255,16 +5255,17 @@ function matchTableRankClasses(players: PlayerPivot[]) {
     const best = Math.max(...observed);
     const worst = Math.min(...observed);
     if (Math.abs(best - worst) < 0.000001) return classes;
+    const bestCount = ranked.filter((item) => item.value !== null && Math.abs(item.value - best) < 0.000001).length;
+    const worstCount = ranked.filter((item) => item.value !== null && Math.abs(item.value - worst) < 0.000001).length;
     ranked.forEach((item) => {
       if (item.value === null) return;
-      if (Math.abs(item.value - best) < 0.000001) classes.set(item.playerId, "match-stat-best");
-      else if (Math.abs(item.value - worst) < 0.000001) classes.set(item.playerId, "match-stat-worst");
+      if (bestCount <= 3 && Math.abs(item.value - best) < 0.000001) classes.set(item.playerId, "match-stat-best");
+      else if (worstCount <= 3 && Math.abs(item.value - worst) < 0.000001) classes.set(item.playerId, "match-stat-worst");
     });
     return classes;
   }
 
   return {
-    minutes: extremes((player) => player.minutes_played, "minutes"),
     rating: extremes((player) => player.values.rating_365, "rating_365"),
     goals: extremes((player) => player.values.goals, "goals"),
     assists: extremes((player) => player.values.assists, "assists"),
@@ -5357,7 +5358,7 @@ function PlayerMatchTable({
               }}
             >
               <td><span className="match-player-cell"><span>{player.shirt_number ?? "-"}</span><span><strong>{displayName}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></span></td>
-              <td className={rankClasses.minutes.get(player.player_id)}>{formatMetric(player.minutes_played)}</td>
+              <td>{formatMetric(player.minutes_played)}</td>
               <td className={rankClasses.rating.get(player.player_id)}><strong>{formatMetric(player.values.rating_365)}</strong></td>
               <td className={rankClasses.goals.get(player.player_id)}>{formatMetric(player.values.goals)}</td>
               <td className={rankClasses.assists.get(player.player_id)}>{formatMetric(player.values.assists)}</td>
@@ -5454,7 +5455,7 @@ function MatchAveragePositionPitch({
               aria-label={`${text.viewMatchAttributes}: ${displayName}, ${text.rating} ${rating}`}
               onClick={() => inspectPlayer(player.player_id)}
             >
-              <span className="average-position-marker"><strong>{rating}</strong><small>{player.shirt_number ?? "-"}</small></span>
+              <span className="average-position-marker"><strong>{player.shirt_number ?? "-"}</strong><small>{rating}</small></span>
               <span className="average-position-name" dir={language === "he" ? "rtl" : "ltr"}>{shortPlayerName(displayName)}</span>
             </button>
           );

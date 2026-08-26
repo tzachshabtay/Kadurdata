@@ -143,7 +143,7 @@ export async function calculateMatchAveragePositions(
     return {
       playerId,
       x: Math.max(6, Math.min(94, averageX * 100 / (HEATMAP_WIDTH - 1))),
-      y: Math.max(8, Math.min(92, averageY * 100 / (HEATMAP_HEIGHT - 1))),
+      y: Math.max(8, Math.min(92, 100 - averageY * 100 / (HEATMAP_HEIGHT - 1))),
     };
   });
 }
