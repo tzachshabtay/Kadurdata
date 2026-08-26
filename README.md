@@ -98,3 +98,30 @@ npm run dev
 ```
 
 Without `VITE_SUPABASE_ANON_KEY`, the local frontend renders a demo data state so the UI remains testable.
+
+## Hebrew Content Pipeline
+
+The Hebrew-only `כתבות` tab reads fact-checked article packages from
+`src/content/generated/`. Each match review is built in five stages:
+
+1. Select a completed Ligat Ha'Al match with team, player, and shot data.
+2. Convert the source rows into a compact evidence bundle and derived graphics data.
+3. Ask the OpenAI Responses API for a structured Hebrew draft whose claims cite evidence IDs.
+4. reject the draft if a score, event total, xG cross-check, evidence link, or numeric claim fails.
+5. Publish the JSON package; Vite discovers it automatically and adds it to the blog archive.
+
+Generate the latest eligible match with AI:
+
+```bash
+npm run content:generate:latest
+npm run content:validate
+npm run build
+```
+
+Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in `.env`. The checked-in sample
+can be rebuilt without an API request with `npm run content:generate:sample`.
+
+`.github/workflows/generate-content.yml` runs on Monday and Thursday, skips a match
+that is already published, validates the evidence package, builds the site, and only
+commits the generated article after every gate passes. A match UUID can also be
+supplied in a manual workflow run for a specific review.

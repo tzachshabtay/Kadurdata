@@ -1,0 +1,73 @@
+#!/usr/bin/env node
+
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
+
+function extractNumbers(text) {
+  return [...text.matchAll(/\d+(?:[.,]\d+)?/g)].map((match) => Number(match[0].replace(",", ".")));
+}
+
+function numbersMatch(left, right) {
+  return Math.abs(Number(left) - Number(right)) < 0.005;
+}
+
+function claims(article) {
+  return [
+    { text: article.editorial.headline, evidenceIds: article.editorial.headlineEvidenceIds },
+    { text: article.editorial.dek, evidenceIds: article.editorial.dekEvidenceIds },
+    ...article.editorial.sections.flatMap((section) => section.paragraphs),
+    ...article.editorial.takeaways,
+    { text: article.editorial.conclusion, evidenceIds: article.editorial.conclusionEvidenceIds },
+  ];
+}
+
+function validateArticle(article, filename) {
+  const failures = [];
+  const fail = (message) => failures.push(`${filename}: ${message}`);
+  if (article.schemaVersion !== 1) fail("unsupported schemaVersion");
+  if (article.language !== "he") fail("content must be Hebrew-only");
+  if (article.status !== "published") fail("generated article is not published");
+  if (article.factCheck?.status !== "passed") fail("fact-check status is not passed");
+  if (article.factCheck?.checks?.some((check) => check.status !== "passed")) fail("one or more stored fact checks failed");
+
+  const { home, away } = article.teams;
+  const homeShots = article.shots.filter((shot) => shot.teamId === home.teamId);
+  const awayShots = article.shots.filter((shot) => shot.teamId === away.teamId);
+  if (homeShots.length !== home.stats.team_total_shots) fail("home shot total does not match the shot map");
+  if (awayShots.length !== away.stats.team_total_shots) fail("away shot total does not match the shot map");
+  if (homeShots.filter((shot) => shot.outcome === "Goal").length !== home.score) fail("home goals do not match shot events");
+  if (awayShots.filter((shot) => shot.outcome === "Goal").length !== away.score) fail("away goals do not match shot events");
+
+  const evidenceById = new Map(article.evidence.map((item) => [item.id, item]));
+  for (const claim of claims(article)) {
+    if (!claim.evidenceIds?.length) fail(`claim has no evidence: ${claim.text}`);
+    const allowed = claim.evidenceIds.flatMap((id) => evidenceById.get(id)?.values ?? []);
+    for (const id of claim.evidenceIds) if (!evidenceById.has(id)) fail(`unknown evidence ID ${id}`);
+    for (const value of extractNumbers(claim.text)) {
+      if (!allowed.some((candidate) => numbersMatch(candidate, value))) fail(`unsupported number ${value}: ${claim.text}`);
+    }
+  }
+  return failures;
+}
+
+async function main() {
+  const files = (await readdir(generatedDirectory)).filter((file) => file.endsWith(".json"));
+  if (!files.length) throw new Error("No generated content articles were found.");
+  const failures = [];
+  for (const file of files) {
+    const article = JSON.parse(await readFile(path.join(generatedDirectory, file), "utf8"));
+    failures.push(...validateArticle(article, file));
+  }
+  if (failures.length) throw new Error(`Content validation failed:\n${failures.map((failure) => `- ${failure}`).join("\n")}`);
+  console.log(`${files.length} article(s) passed structural, evidence, score, and numeric-claim validation.`);
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

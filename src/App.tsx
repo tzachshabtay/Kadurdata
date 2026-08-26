@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   BarChart3,
+  BookOpen,
   CalendarDays,
   Check,
   ChevronDown,
@@ -21,6 +22,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { BlogView } from "./blog/BlogView";
 import {
   Area,
   AreaChart,
@@ -70,7 +72,7 @@ import type {
   TeamRosterMember,
 } from "./lib/types";
 
-type View = "overview" | "matches" | "clubs" | "players" | "legionnaires";
+type View = "overview" | "matches" | "clubs" | "players" | "legionnaires" | "blog";
 type RoleFilter = "All" | SeasonPlayer["role_group"];
 type PlayerHistoryRange = "latest" | "all";
 type TournamentScope = "selected" | "all";
@@ -307,6 +309,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }>
   { id: "clubs", label: "Clubs", icon: Shield },
   { id: "players", label: "Players", icon: Users },
   { id: "legionnaires", label: "Legionnaires", icon: Globe2 },
+  { id: "blog", label: "Stories", icon: BookOpen },
 ];
 
 const demoCompetition: Competition = {
@@ -884,10 +887,13 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = language === "he" ? "rtl" : "ltr";
-    document.title = text.pageTitle;
-    document.querySelector('meta[name="description"]')?.setAttribute("content", text.metaDescription);
+    document.title = view === "blog" ? "לא הכמות, אלא האיכות | כדורדאטה" : text.pageTitle;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", view === "blog"
+      ? "ניתוח הנתונים המלא של הניצחון 5:2 של מכבי תל אביב על הפועל ירושלים."
+      : text.metaDescription);
     window.localStorage.setItem("kadurdata-language", language);
-  }, [language, text]);
+    if (language === "en" && view === "blog") setView("overview");
+  }, [language, text, view]);
 
   useEffect(() => {
     const restoreDeepLink = () => {
@@ -2616,7 +2622,7 @@ export function App() {
           </button>
 
           <nav className="primary-nav" aria-label={text.primaryNavigation}>
-            {navItems.map((item) => {
+            {navItems.filter((item) => item.id !== "blog" || language === "he").map((item) => {
               const Icon = item.icon;
               return (
                 <button className={view === item.id ? "active" : ""} key={item.id} type="button" onClick={() => navigate(item.id)}>
@@ -2638,7 +2644,7 @@ export function App() {
           </div>
         </div>
 
-        <div className="context-bar">
+        {view !== "blog" && <div className="context-bar">
           <div className="context-copy">
             <span>{text.viewing}</span>
             <strong>{showingLegionnaires ? text.allForeignLeagues : showingAllTournaments ? text.allTournaments : localizedCompetition(competitions.find((item) => item.competition_id === competitionId), language)}</strong>
@@ -2727,14 +2733,45 @@ export function App() {
               ))}
             </select>
           </label>
-        </div>
+        </div>}
       </header>
 
       <main className="page-shell">
-        {error && view !== "legionnaires" && <div className="error-banner"><strong>{text.dataLoadError}</strong><span>{error}</span></div>}
-        {!hasSupabaseConfig && <div className="demo-banner">{text.demoPreview}</div>}
+        {error && view !== "legionnaires" && view !== "blog" && <div className="error-banner"><strong>{text.dataLoadError}</strong><span>{error}</span></div>}
+        {!hasSupabaseConfig && view !== "blog" && <div className="demo-banner">{text.demoPreview}</div>}
 
-        {loading || (seasonLoading && view !== "legionnaires") ? (
+        {view === "blog" ? (
+          <BlogView onOpenMatch={(article) => openMatch({
+            match_id: article.match.matchId,
+            season_id: article.match.seasonId,
+            season_name: article.match.seasonName,
+            competition_id: article.match.competitionId,
+            competition_name: "Israeli Premier League",
+            competition_name_he: article.match.competitionNameHe,
+            stage_id: null,
+            stage_name: null,
+            stage_number: null,
+            round_id: article.match.roundId,
+            round_number: article.match.roundNumber,
+            round_name: "Round",
+            scheduled_at: article.match.scheduledAt,
+            status: article.match.status,
+            home_team_id: article.teams.home.teamId,
+            home_team_name: article.teams.home.name,
+            home_team_name_he: article.teams.home.nameHe,
+            home_team_short_name: null,
+            home_team_color: article.teams.home.color,
+            home_team_logo_url: article.teams.home.logoUrl,
+            away_team_id: article.teams.away.teamId,
+            away_team_name: article.teams.away.name,
+            away_team_name_he: article.teams.away.nameHe,
+            away_team_short_name: null,
+            away_team_color: article.teams.away.color,
+            away_team_logo_url: article.teams.away.logoUrl,
+            home_score: article.teams.home.score,
+            away_score: article.teams.away.score,
+          })} />
+        ) : loading || (seasonLoading && view !== "legionnaires") ? (
           <LoadingState />
         ) : view === "overview" ? (
           showingAllTournaments ? (
