@@ -4,14 +4,15 @@
   "language": "he",
   "kind": "match_review",
   "status": "published",
-  "publishedAt": "2026-08-27T05:19:54.991Z",
-  "generatedAt": "2026-08-27T05:19:54.991Z",
+  "publishedAt": "2026-08-27T23:20:46.420Z",
+  "generatedAt": "2026-08-27T23:20:46.420Z",
   "generation": {
-    "mode": "openai_writer_editor_and_qa",
+    "mode": "openai_analyst_writer_editor_and_qa",
+    "analystModel": "gpt-5.6",
     "model": "gpt-5.6",
     "editorModel": "gpt-5.6",
     "qualityModel": "gpt-5.6",
-    "pipelineVersion": "match-review-v10"
+    "pipelineVersion": "match-review-v11"
   },
   "match": {
     "matchId": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -167,16 +168,6 @@
       "kind": "player"
     },
     {
-      "id": "player:ec3d7fb9-7a4e-46fd-bca3-4b4c17025174",
-      "label": "ויטאלי דאמשקאן",
-      "kind": "player"
-    },
-    {
-      "id": "player:c17ac0f2-3e83-418e-a2c8-18e57cae7645",
-      "label": "אוהד אלמגור",
-      "kind": "player"
-    },
-    {
       "id": "player:9f103f85-cedd-48b6-88ae-44107efdc0db",
       "label": "סייד אבו פרחי",
       "kind": "player"
@@ -184,16 +175,6 @@
     {
       "id": "player:4140a683-2af3-47f0-b44f-45e9d00391e0",
       "label": "אופק מליקה",
-      "kind": "player"
-    },
-    {
-      "id": "player:098e3b9d-fbe2-49d7-9bed-692b201eb781",
-      "label": "אופק נדיר",
-      "kind": "player"
-    },
-    {
-      "id": "player:435633b7-a385-48e2-88b9-73c3c0cdb7d7",
-      "label": "רוי רביבו",
       "kind": "player"
     },
     {
@@ -299,107 +280,6 @@
       }
     },
     {
-      "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
-      "name": "Israel Dappa",
-      "nameHe": "ישראל דאפה",
-      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "teamName": "Hapoel Jerusalem FC",
-      "side": "home",
-      "lineupStatus": "Starting",
-      "positionName": "Attacker",
-      "formationPosition": "Centre Forward",
-      "shirtNumber": 33,
-      "roleGroup": "Attacker",
-      "minutes": 61,
-      "metrics": {
-        "aerial_duel_win_pct": 67,
-        "aerial_duels_attempted": 3,
-        "aerial_duels_won": 2,
-        "assists": 0,
-        "backward_passes": 4,
-        "ball_recovery": 2,
-        "big_chances_missed": 1,
-        "clearances": 0,
-        "expected_assists": 0.03,
-        "expected_goals": 0.28,
-        "expected_goals_on_target": 0.65,
-        "fouls_made": 3,
-        "goals": 0,
-        "ground_duel_win_pct": 25,
-        "ground_duels_attempted": 8,
-        "ground_duels_won": 2,
-        "interceptions": 0,
-        "key_passes": 1,
-        "long_pass_completion_pct": 100,
-        "long_passes_attempted": 1,
-        "long_passes_completed": 1,
-        "minutes": 61,
-        "offsides": 1,
-        "pass_completion_pct": 100,
-        "passes_attempted": 10,
-        "passes_completed": 10,
-        "passes_into_final_third": 0,
-        "possession_lost": 7,
-        "rating_365": 6,
-        "shots_on_target": 1,
-        "total_shots": 1,
-        "touches": 22,
-        "was_dribbled_past": 1,
-        "was_fouled": 2
-      }
-    },
-    {
-      "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
-      "name": "Elay Madmon",
-      "nameHe": "איליי מדמון",
-      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "teamName": "Hapoel Jerusalem FC",
-      "side": "home",
-      "lineupStatus": "Substitute",
-      "positionName": "Midfielder",
-      "formationPosition": "Central Midfield",
-      "shirtNumber": 8,
-      "roleGroup": "Midfielder",
-      "minutes": 45,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 3,
-        "ball_recovery": 1,
-        "clearances": 2,
-        "dribble_success_pct": 100,
-        "dribbles_attempted": 1,
-        "expected_assists": 0.05,
-        "expected_goals": 0.07,
-        "expected_goals_on_target": 0.02,
-        "fouls_made": 1,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 2,
-        "long_pass_completion_pct": 100,
-        "long_passes_attempted": 2,
-        "long_passes_completed": 2,
-        "minutes": 45,
-        "offsides": 0,
-        "pass_completion_pct": 95,
-        "passes_attempted": 20,
-        "passes_completed": 19,
-        "passes_into_final_third": 5,
-        "possession_lost": 2,
-        "rating_365": 5.9,
-        "shots_blocked": 1,
-        "shots_off_target": 1,
-        "shots_on_target": 1,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 50,
-        "tackles_attempted": 2,
-        "tackles_won": 1,
-        "total_shots": 1,
-        "touches": 29,
-        "was_dribbled_past": 0,
-        "was_fouled": 1
-      }
-    },
-    {
       "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
       "name": "Dor Peretz",
       "nameHe": "דור פרץ",
@@ -446,46 +326,6 @@
         "total_shots": 4,
         "touches": 30,
         "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "7f1e0990-2f7b-4047-a1b9-3d0ba31f7310",
-      "name": "Omer Abuhav",
-      "nameHe": "עומר אבוהב",
-      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "teamName": "Hapoel Jerusalem FC",
-      "side": "home",
-      "lineupStatus": "Starting",
-      "positionName": "Midfielder",
-      "formationPosition": "Central Midfield",
-      "shirtNumber": 14,
-      "roleGroup": "Midfielder",
-      "minutes": 45,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 4,
-        "ball_recovery": 3,
-        "clearances": 1,
-        "expected_assists": 0.01,
-        "fouls_made": 0,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 0,
-        "long_pass_completion_pct": 50,
-        "long_passes_attempted": 4,
-        "long_passes_completed": 2,
-        "minutes": 45,
-        "offsides": 0,
-        "pass_completion_pct": 83,
-        "passes_attempted": 18,
-        "passes_completed": 15,
-        "passes_into_final_third": 3,
-        "possession_lost": 3,
-        "rating_365": 5.7,
-        "total_shots": 0,
-        "touches": 19,
-        "was_dribbled_past": 1,
         "was_fouled": 0
       }
     },
@@ -592,47 +432,6 @@
       }
     },
     {
-      "playerId": "b3bba426-e082-448f-bdbe-c6361caf339b",
-      "name": "Mohamed Ali Kamara",
-      "nameHe": "מוחמד עלי קאמארה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Substitute",
-      "positionName": "Defender",
-      "formationPosition": "Centre Back",
-      "shirtNumber": 5,
-      "roleGroup": "Defender",
-      "minutes": 19,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 0,
-        "blocks": 2,
-        "clearances": 1,
-        "expected_assists": 0,
-        "expected_goals": 0.14,
-        "expected_goals_on_target": 0.09,
-        "fouls_made": 0,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 0,
-        "minutes": 19,
-        "offsides": 0,
-        "pass_completion_pct": 80,
-        "passes_attempted": 5,
-        "passes_completed": 4,
-        "passes_into_final_third": 1,
-        "possession_lost": 1,
-        "rating_365": 6.6,
-        "shots_on_target": 1,
-        "total_shots": 1,
-        "touches": 11,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
       "playerId": "ff574781-01f2-4586-86c8-e7c7620f2496",
       "name": "Noam Ben Harush",
       "nameHe": "נועם בן הרוש",
@@ -673,6 +472,147 @@
         "total_shots": 2,
         "touches": 67,
         "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
+      "name": "Israel Dappa",
+      "nameHe": "ישראל דאפה",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamName": "Hapoel Jerusalem FC",
+      "side": "home",
+      "lineupStatus": "Starting",
+      "positionName": "Attacker",
+      "formationPosition": "Centre Forward",
+      "shirtNumber": 33,
+      "roleGroup": "Attacker",
+      "minutes": 61,
+      "metrics": {
+        "aerial_duel_win_pct": 67,
+        "aerial_duels_attempted": 3,
+        "aerial_duels_won": 2,
+        "assists": 0,
+        "backward_passes": 4,
+        "ball_recovery": 2,
+        "big_chances_missed": 1,
+        "clearances": 0,
+        "expected_assists": 0.03,
+        "expected_goals": 0.28,
+        "expected_goals_on_target": 0.65,
+        "fouls_made": 3,
+        "goals": 0,
+        "ground_duel_win_pct": 25,
+        "ground_duels_attempted": 8,
+        "ground_duels_won": 2,
+        "interceptions": 0,
+        "key_passes": 1,
+        "long_pass_completion_pct": 100,
+        "long_passes_attempted": 1,
+        "long_passes_completed": 1,
+        "minutes": 61,
+        "offsides": 1,
+        "pass_completion_pct": 100,
+        "passes_attempted": 10,
+        "passes_completed": 10,
+        "passes_into_final_third": 0,
+        "possession_lost": 7,
+        "rating_365": 6,
+        "shots_on_target": 1,
+        "total_shots": 1,
+        "touches": 22,
+        "was_dribbled_past": 1,
+        "was_fouled": 2
+      }
+    },
+    {
+      "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
+      "name": "Elay Madmon",
+      "nameHe": "איליי מדמון",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamName": "Hapoel Jerusalem FC",
+      "side": "home",
+      "lineupStatus": "Substitute",
+      "positionName": "Midfielder",
+      "formationPosition": "Central Midfield",
+      "shirtNumber": 8,
+      "roleGroup": "Midfielder",
+      "minutes": 45,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 3,
+        "ball_recovery": 1,
+        "clearances": 2,
+        "dribble_success_pct": 100,
+        "dribbles_attempted": 1,
+        "expected_assists": 0.05,
+        "expected_goals": 0.07,
+        "expected_goals_on_target": 0.02,
+        "fouls_made": 1,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 2,
+        "long_pass_completion_pct": 100,
+        "long_passes_attempted": 2,
+        "long_passes_completed": 2,
+        "minutes": 45,
+        "offsides": 0,
+        "pass_completion_pct": 95,
+        "passes_attempted": 20,
+        "passes_completed": 19,
+        "passes_into_final_third": 5,
+        "possession_lost": 2,
+        "rating_365": 5.9,
+        "shots_blocked": 1,
+        "shots_off_target": 1,
+        "shots_on_target": 1,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 50,
+        "tackles_attempted": 2,
+        "tackles_won": 1,
+        "total_shots": 1,
+        "touches": 29,
+        "was_dribbled_past": 0,
+        "was_fouled": 1
+      }
+    },
+    {
+      "playerId": "7f1e0990-2f7b-4047-a1b9-3d0ba31f7310",
+      "name": "Omer Abuhav",
+      "nameHe": "עומר אבוהב",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamName": "Hapoel Jerusalem FC",
+      "side": "home",
+      "lineupStatus": "Starting",
+      "positionName": "Midfielder",
+      "formationPosition": "Central Midfield",
+      "shirtNumber": 14,
+      "roleGroup": "Midfielder",
+      "minutes": 45,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 4,
+        "ball_recovery": 3,
+        "clearances": 1,
+        "expected_assists": 0.01,
+        "fouls_made": 0,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 0,
+        "long_pass_completion_pct": 50,
+        "long_passes_attempted": 4,
+        "long_passes_completed": 2,
+        "minutes": 45,
+        "offsides": 0,
+        "pass_completion_pct": 83,
+        "passes_attempted": 18,
+        "passes_completed": 15,
+        "passes_into_final_third": 3,
+        "possession_lost": 3,
+        "rating_365": 5.7,
+        "total_shots": 0,
+        "touches": 19,
+        "was_dribbled_past": 1,
         "was_fouled": 0
       }
     },
@@ -727,6 +667,61 @@
       }
     },
     {
+      "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+      "name": "Osher Davida",
+      "nameHe": "אושר דוידה",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Attacker",
+      "formationPosition": "Right Forward",
+      "shirtNumber": 77,
+      "roleGroup": "Attacker",
+      "minutes": 90,
+      "metrics": {
+        "assists": 1,
+        "backward_passes": 6,
+        "ball_recovery": 3,
+        "clearances": 0,
+        "cross_completion_pct": 50,
+        "crosses_attempted": 4,
+        "crosses_completed": 2,
+        "dribble_success_pct": 33,
+        "dribbles_attempted": 3,
+        "expected_assists": 0.59,
+        "expected_goals": 0.09,
+        "expected_goals_on_target": 0.05,
+        "final_third_possession_won": 1,
+        "fouls_made": 2,
+        "goals": 0,
+        "interceptions": 2,
+        "key_passes": 2,
+        "long_pass_completion_pct": 100,
+        "long_passes_attempted": 2,
+        "long_passes_completed": 2,
+        "minutes": 90,
+        "offsides": 0,
+        "pass_completion_pct": 100,
+        "passes_attempted": 17,
+        "passes_completed": 17,
+        "passes_into_final_third": 3,
+        "possession_lost": 7,
+        "rating_365": 7.3,
+        "shots_blocked": 1,
+        "shots_off_target": 1,
+        "shots_on_target": 1,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 2,
+        "tackles_won": 2,
+        "total_shots": 3,
+        "touches": 39,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
       "playerId": "36f15387-3195-4941-9e2d-b0538d24c9f3",
       "name": "Itay Ben Hamo",
       "nameHe": "איתי בן חמו",
@@ -764,6 +759,95 @@
         "touches": 81,
         "was_dribbled_past": 0,
         "was_fouled": 1
+      }
+    },
+    {
+      "playerId": "713ec20b-f06b-4502-85cf-ba2ba0d9c770",
+      "name": "Hélio Varela",
+      "nameHe": "הליו וארלה",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Attacker",
+      "formationPosition": "Left Forward",
+      "shirtNumber": 29,
+      "roleGroup": "Attacker",
+      "minutes": 63,
+      "metrics": {
+        "assists": 1,
+        "backward_passes": 3,
+        "ball_recovery": 5,
+        "big_chances_created": 1,
+        "big_chances_missed": 1,
+        "clearances": 0,
+        "dribble_success_pct": 25,
+        "dribbles_attempted": 4,
+        "expected_assists": 0.49,
+        "expected_goals": 0.25,
+        "fouls_made": 1,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 3,
+        "minutes": 63,
+        "offsides": 1,
+        "pass_completion_pct": 82,
+        "passes_attempted": 22,
+        "passes_completed": 18,
+        "passes_into_final_third": 2,
+        "possession_lost": 10,
+        "rating_365": 7.1,
+        "shots_blocked": 1,
+        "shots_off_target": 1,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 50,
+        "tackles_attempted": 2,
+        "tackles_won": 1,
+        "total_shots": 2,
+        "touches": 37,
+        "was_dribbled_past": 1,
+        "was_fouled": 2
+      }
+    },
+    {
+      "playerId": "b3bba426-e082-448f-bdbe-c6361caf339b",
+      "name": "Mohamed Ali Kamara",
+      "nameHe": "מוחמד עלי קאמארה",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Substitute",
+      "positionName": "Defender",
+      "formationPosition": "Centre Back",
+      "shirtNumber": 5,
+      "roleGroup": "Defender",
+      "minutes": 19,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 0,
+        "ball_recovery": 0,
+        "blocks": 2,
+        "clearances": 1,
+        "expected_assists": 0,
+        "expected_goals": 0.14,
+        "expected_goals_on_target": 0.09,
+        "fouls_made": 0,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 0,
+        "minutes": 19,
+        "offsides": 0,
+        "pass_completion_pct": 80,
+        "passes_attempted": 5,
+        "passes_completed": 4,
+        "passes_into_final_third": 1,
+        "possession_lost": 1,
+        "rating_365": 6.6,
+        "shots_on_target": 1,
+        "total_shots": 1,
+        "touches": 11,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
       }
     },
     {
@@ -854,154 +938,6 @@
       }
     },
     {
-      "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
-      "name": "Osher Davida",
-      "nameHe": "אושר דוידה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Attacker",
-      "formationPosition": "Right Forward",
-      "shirtNumber": 77,
-      "roleGroup": "Attacker",
-      "minutes": 90,
-      "metrics": {
-        "assists": 1,
-        "backward_passes": 6,
-        "ball_recovery": 3,
-        "clearances": 0,
-        "cross_completion_pct": 50,
-        "crosses_attempted": 4,
-        "crosses_completed": 2,
-        "dribble_success_pct": 33,
-        "dribbles_attempted": 3,
-        "expected_assists": 0.59,
-        "expected_goals": 0.09,
-        "expected_goals_on_target": 0.05,
-        "final_third_possession_won": 1,
-        "fouls_made": 2,
-        "goals": 0,
-        "interceptions": 2,
-        "key_passes": 2,
-        "long_pass_completion_pct": 100,
-        "long_passes_attempted": 2,
-        "long_passes_completed": 2,
-        "minutes": 90,
-        "offsides": 0,
-        "pass_completion_pct": 100,
-        "passes_attempted": 17,
-        "passes_completed": 17,
-        "passes_into_final_third": 3,
-        "possession_lost": 7,
-        "rating_365": 7.3,
-        "shots_blocked": 1,
-        "shots_off_target": 1,
-        "shots_on_target": 1,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 2,
-        "tackles_won": 2,
-        "total_shots": 3,
-        "touches": 39,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
-      "name": "Noam Malmud",
-      "nameHe": "נועם מלמוד",
-      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "teamName": "Hapoel Jerusalem FC",
-      "side": "home",
-      "lineupStatus": "Starting",
-      "positionName": "Defender",
-      "formationPosition": "Centre Back",
-      "shirtNumber": 3,
-      "roleGroup": "Defender",
-      "minutes": 90,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 3,
-        "ball_recovery": 4,
-        "blocks": 1,
-        "clearances": 4,
-        "expected_assists": 0.01,
-        "fouls_made": 2,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 0,
-        "long_pass_completion_pct": 60,
-        "long_passes_attempted": 5,
-        "long_passes_completed": 3,
-        "minutes": 90,
-        "offsides": 0,
-        "pass_completion_pct": 90,
-        "passes_attempted": 48,
-        "passes_completed": 43,
-        "passes_into_final_third": 8,
-        "penalty_committed": 1,
-        "possession_lost": 5,
-        "rating_365": 4.8,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 1,
-        "tackles_won": 1,
-        "total_shots": 0,
-        "touches": 57,
-        "was_dribbled_past": 0,
-        "was_fouled": 1
-      }
-    },
-    {
-      "playerId": "713ec20b-f06b-4502-85cf-ba2ba0d9c770",
-      "name": "Hélio Varela",
-      "nameHe": "הליו וארלה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Attacker",
-      "formationPosition": "Left Forward",
-      "shirtNumber": 29,
-      "roleGroup": "Attacker",
-      "minutes": 63,
-      "metrics": {
-        "assists": 1,
-        "backward_passes": 3,
-        "ball_recovery": 5,
-        "big_chances_created": 1,
-        "big_chances_missed": 1,
-        "clearances": 0,
-        "dribble_success_pct": 25,
-        "dribbles_attempted": 4,
-        "expected_assists": 0.49,
-        "expected_goals": 0.25,
-        "fouls_made": 1,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 3,
-        "minutes": 63,
-        "offsides": 1,
-        "pass_completion_pct": 82,
-        "passes_attempted": 22,
-        "passes_completed": 18,
-        "passes_into_final_third": 2,
-        "possession_lost": 10,
-        "rating_365": 7.1,
-        "shots_blocked": 1,
-        "shots_off_target": 1,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 50,
-        "tackles_attempted": 2,
-        "tackles_won": 1,
-        "total_shots": 2,
-        "touches": 37,
-        "was_dribbled_past": 1,
-        "was_fouled": 2
-      }
-    },
-    {
       "playerId": "8720d94d-4343-45e4-bf47-806e349c26bf",
       "name": "Elay Ben Simon",
       "nameHe": "עילאי בן סימון",
@@ -1034,6 +970,148 @@
         "rating_365": 6.5,
         "total_shots": 0,
         "touches": 7,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "b6c85f6f-22f9-4a3d-be38-6bf9792af384",
+      "name": "Nadim Vrasana",
+      "nameHe": "נדים וראסנה",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamName": "Hapoel Jerusalem FC",
+      "side": "home",
+      "lineupStatus": "Substitute",
+      "positionName": "Midfielder",
+      "formationPosition": "Attacking Midfield",
+      "shirtNumber": 19,
+      "roleGroup": "Midfielder",
+      "minutes": 29,
+      "metrics": {
+        "aerial_duel_win_pct": 50,
+        "aerial_duels_attempted": 2,
+        "aerial_duels_won": 1,
+        "assists": 0,
+        "backward_passes": 0,
+        "ball_recovery": 0,
+        "clearances": 0,
+        "dribble_success_pct": 50,
+        "dribbles_attempted": 2,
+        "expected_assists": 0,
+        "expected_goals": 0.05,
+        "fouls_made": 0,
+        "goals": 0,
+        "ground_duel_win_pct": 80,
+        "ground_duels_attempted": 5,
+        "ground_duels_won": 4,
+        "interceptions": 0,
+        "key_passes": 0,
+        "minutes": 29,
+        "offsides": 0,
+        "pass_completion_pct": 50,
+        "passes_attempted": 2,
+        "passes_completed": 1,
+        "passes_into_final_third": 0,
+        "possession_lost": 2,
+        "rating_365": 5.5,
+        "shots_off_target": 1,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 2,
+        "tackles_won": 2,
+        "total_shots": 1,
+        "touches": 10,
+        "was_dribbled_past": 0,
+        "was_fouled": 1
+      }
+    },
+    {
+      "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
+      "name": "Sayed Abu Farchi",
+      "nameHe": "סייד אבו פרחי",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Substitute",
+      "positionName": "Attacker",
+      "formationPosition": "Centre Forward",
+      "shirtNumber": 34,
+      "roleGroup": "Attacker",
+      "minutes": 27,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 0,
+        "ball_recovery": 1,
+        "big_chances_scored": 1,
+        "clearances": 1,
+        "expected_assists": 0,
+        "expected_goals": 0.16,
+        "expected_goals_on_target": 0.74,
+        "fouls_made": 0,
+        "goals": 1,
+        "interceptions": 0,
+        "key_passes": 0,
+        "long_pass_completion_pct": 38,
+        "long_passes_attempted": 8,
+        "long_passes_completed": 3,
+        "minutes": 27,
+        "offsides": 0,
+        "pass_completion_pct": 38,
+        "passes_attempted": 8,
+        "passes_completed": 3,
+        "passes_into_final_third": 2,
+        "possession_lost": 5,
+        "rating_365": 7.2,
+        "shots_on_target": 1,
+        "total_shots": 1,
+        "touches": 11,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
+      "name": "Ofek Melika",
+      "nameHe": "אופק מליקה",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Goalkeeper",
+      "formationPosition": "Goalkeeper",
+      "shirtNumber": 1,
+      "roleGroup": "Goalkeeper",
+      "minutes": 77,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 0,
+        "ball_recovery": 12,
+        "clearances": 1,
+        "expected_assists": 0,
+        "expected_goals_on_target_conceded": 0.92,
+        "expected_goals_prevented": -0.08,
+        "fouls_made": 1,
+        "goalkeeper_saves": 2,
+        "goals": 0,
+        "goals_conceded": 2,
+        "high_claims": 1,
+        "interceptions": 0,
+        "key_passes": 0,
+        "long_pass_completion_pct": 71,
+        "long_passes_attempted": 7,
+        "long_passes_completed": 5,
+        "minutes": 77,
+        "offsides": 0,
+        "pass_completion_pct": 92,
+        "passes_attempted": 25,
+        "passes_completed": 23,
+        "passes_into_final_third": 0,
+        "played_sweeper": 1,
+        "possession_lost": 2,
+        "punches": 1,
+        "rating_365": 5.1,
+        "total_shots": 0,
+        "touches": 39,
         "was_dribbled_past": 0,
         "was_fouled": 0
       }
@@ -1097,142 +1175,46 @@
       }
     },
     {
-      "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
-      "name": "Sayed Abu Farchi",
-      "nameHe": "סייד אבו פרחי",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Substitute",
-      "positionName": "Attacker",
-      "formationPosition": "Centre Forward",
-      "shirtNumber": 34,
-      "roleGroup": "Attacker",
-      "minutes": 27,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 1,
-        "big_chances_scored": 1,
-        "clearances": 1,
-        "expected_assists": 0,
-        "expected_goals": 0.16,
-        "expected_goals_on_target": 0.74,
-        "fouls_made": 0,
-        "goals": 1,
-        "interceptions": 0,
-        "key_passes": 0,
-        "long_pass_completion_pct": 38,
-        "long_passes_attempted": 8,
-        "long_passes_completed": 3,
-        "minutes": 27,
-        "offsides": 0,
-        "pass_completion_pct": 38,
-        "passes_attempted": 8,
-        "passes_completed": 3,
-        "passes_into_final_third": 2,
-        "possession_lost": 5,
-        "rating_365": 7.2,
-        "shots_on_target": 1,
-        "total_shots": 1,
-        "touches": 11,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "f59f01d2-1af4-4c49-8322-b39c4a27bd85",
-      "name": "Idan Cohen",
-      "nameHe": "עידן כהן",
+      "playerId": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
+      "name": "Noam Malmud",
+      "nameHe": "נועם מלמוד",
       "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
       "teamName": "Hapoel Jerusalem FC",
       "side": "home",
       "lineupStatus": "Starting",
       "positionName": "Defender",
-      "formationPosition": "Right Back",
-      "shirtNumber": 26,
+      "formationPosition": "Centre Back",
+      "shirtNumber": 3,
       "roleGroup": "Defender",
-      "minutes": 71,
+      "minutes": 90,
       "metrics": {
         "assists": 0,
         "backward_passes": 3,
         "ball_recovery": 4,
-        "clearances": 1,
-        "dribble_success_pct": 50,
-        "dribbles_attempted": 2,
-        "expected_assists": 0.07,
-        "fouls_made": 1,
+        "blocks": 1,
+        "clearances": 4,
+        "expected_assists": 0.01,
+        "fouls_made": 2,
         "goals": 0,
-        "interceptions": 0,
-        "key_passes": 1,
-        "long_pass_completion_pct": 100,
-        "long_passes_attempted": 1,
-        "long_passes_completed": 1,
-        "minutes": 71,
-        "offsides": 0,
-        "pass_completion_pct": 95,
-        "passes_attempted": 21,
-        "passes_completed": 20,
-        "passes_into_final_third": 3,
-        "possession_lost": 7,
-        "rating_365": 5.5,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 75,
-        "tackles_attempted": 4,
-        "tackles_won": 3,
-        "total_shots": 0,
-        "touches": 39,
-        "was_dribbled_past": 1,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "b6c85f6f-22f9-4a3d-be38-6bf9792af384",
-      "name": "Nadim Vrasana",
-      "nameHe": "נדים וראסנה",
-      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "teamName": "Hapoel Jerusalem FC",
-      "side": "home",
-      "lineupStatus": "Substitute",
-      "positionName": "Midfielder",
-      "formationPosition": "Attacking Midfield",
-      "shirtNumber": 19,
-      "roleGroup": "Midfielder",
-      "minutes": 29,
-      "metrics": {
-        "aerial_duel_win_pct": 50,
-        "aerial_duels_attempted": 2,
-        "aerial_duels_won": 1,
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 0,
-        "clearances": 0,
-        "dribble_success_pct": 50,
-        "dribbles_attempted": 2,
-        "expected_assists": 0,
-        "expected_goals": 0.05,
-        "fouls_made": 0,
-        "goals": 0,
-        "ground_duel_win_pct": 80,
-        "ground_duels_attempted": 5,
-        "ground_duels_won": 4,
         "interceptions": 0,
         "key_passes": 0,
-        "minutes": 29,
+        "long_pass_completion_pct": 60,
+        "long_passes_attempted": 5,
+        "long_passes_completed": 3,
+        "minutes": 90,
         "offsides": 0,
-        "pass_completion_pct": 50,
-        "passes_attempted": 2,
-        "passes_completed": 1,
-        "passes_into_final_third": 0,
-        "possession_lost": 2,
-        "rating_365": 5.5,
-        "shots_off_target": 1,
-        "successful_dribbles": 1,
+        "pass_completion_pct": 90,
+        "passes_attempted": 48,
+        "passes_completed": 43,
+        "passes_into_final_third": 8,
+        "penalty_committed": 1,
+        "possession_lost": 5,
+        "rating_365": 4.8,
         "tackle_success_pct": 100,
-        "tackles_attempted": 2,
-        "tackles_won": 2,
-        "total_shots": 1,
-        "touches": 10,
+        "tackles_attempted": 1,
+        "tackles_won": 1,
+        "total_shots": 0,
+        "touches": 57,
         "was_dribbled_past": 0,
         "was_fouled": 1
       }
@@ -1321,149 +1303,49 @@
       }
     },
     {
-      "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
-      "name": "Ofek Melika",
-      "nameHe": "אופק מליקה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Goalkeeper",
-      "formationPosition": "Goalkeeper",
-      "shirtNumber": 1,
-      "roleGroup": "Goalkeeper",
-      "minutes": 77,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 12,
-        "clearances": 1,
-        "expected_assists": 0,
-        "expected_goals_on_target_conceded": 0.92,
-        "expected_goals_prevented": -0.08,
-        "fouls_made": 1,
-        "goalkeeper_saves": 2,
-        "goals": 0,
-        "goals_conceded": 2,
-        "high_claims": 1,
-        "interceptions": 0,
-        "key_passes": 0,
-        "long_pass_completion_pct": 71,
-        "long_passes_attempted": 7,
-        "long_passes_completed": 5,
-        "minutes": 77,
-        "offsides": 0,
-        "pass_completion_pct": 92,
-        "passes_attempted": 25,
-        "passes_completed": 23,
-        "passes_into_final_third": 0,
-        "played_sweeper": 1,
-        "possession_lost": 2,
-        "punches": 1,
-        "rating_365": 5.1,
-        "total_shots": 0,
-        "touches": 39,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "67be92db-2f80-43c2-8baf-5f2c2cdd871d",
-      "name": "Raz Shlomo",
-      "nameHe": "רז שלמה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Defender",
-      "formationPosition": "Centre Back",
-      "shirtNumber": 13,
-      "roleGroup": "Defender",
-      "minutes": 71,
-      "metrics": {
-        "aerial_duel_win_pct": 50,
-        "aerial_duels_attempted": 4,
-        "aerial_duels_won": 2,
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 2,
-        "clearances": 3,
-        "dribble_success_pct": 100,
-        "dribbles_attempted": 1,
-        "expected_assists": 0.03,
-        "fouls_made": 2,
-        "goals": 0,
-        "ground_duel_win_pct": 57,
-        "ground_duels_attempted": 7,
-        "ground_duels_won": 4,
-        "interceptions": 0,
-        "key_passes": 0,
-        "long_pass_completion_pct": 75,
-        "long_passes_attempted": 4,
-        "long_passes_completed": 3,
-        "minutes": 71,
-        "offsides": 0,
-        "pass_completion_pct": 96,
-        "passes_attempted": 67,
-        "passes_completed": 64,
-        "passes_into_final_third": 6,
-        "possession_lost": 4,
-        "rating_365": 6.1,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 2,
-        "tackles_won": 2,
-        "total_shots": 0,
-        "touches": 76,
-        "was_dribbled_past": 1,
-        "was_fouled": 1
-      }
-    },
-    {
-      "playerId": "098e3b9d-fbe2-49d7-9bed-692b201eb781",
-      "name": "Ofek Nadir",
-      "nameHe": "אופק נדיר",
+      "playerId": "f59f01d2-1af4-4c49-8322-b39c4a27bd85",
+      "name": "Idan Cohen",
+      "nameHe": "עידן כהן",
       "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
       "teamName": "Hapoel Jerusalem FC",
       "side": "home",
       "lineupStatus": "Starting",
       "positionName": "Defender",
-      "formationPosition": "Left Back",
-      "shirtNumber": 20,
+      "formationPosition": "Right Back",
+      "shirtNumber": 26,
       "roleGroup": "Defender",
-      "minutes": 90,
+      "minutes": 71,
       "metrics": {
         "assists": 0,
-        "backward_passes": 11,
-        "ball_recovery": 1,
-        "big_chances_created": 2,
-        "clearances": 2,
-        "cross_completion_pct": 38,
-        "crosses_attempted": 8,
-        "crosses_completed": 3,
-        "expected_assists": 0.55,
-        "fouls_made": 0,
+        "backward_passes": 3,
+        "ball_recovery": 4,
+        "clearances": 1,
+        "dribble_success_pct": 50,
+        "dribbles_attempted": 2,
+        "expected_assists": 0.07,
+        "fouls_made": 1,
         "goals": 0,
         "interceptions": 0,
-        "key_passes": 3,
-        "long_pass_completion_pct": 60,
-        "long_passes_attempted": 5,
-        "long_passes_completed": 3,
-        "minutes": 90,
+        "key_passes": 1,
+        "long_pass_completion_pct": 100,
+        "long_passes_attempted": 1,
+        "long_passes_completed": 1,
+        "minutes": 71,
         "offsides": 0,
-        "pass_completion_pct": 91,
-        "passes_attempted": 46,
-        "passes_completed": 42,
-        "passes_into_final_third": 5,
-        "possession_lost": 12,
-        "rating_365": 6.6,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 1,
-        "tackles_won": 1,
+        "pass_completion_pct": 95,
+        "passes_attempted": 21,
+        "passes_completed": 20,
+        "passes_into_final_third": 3,
+        "possession_lost": 7,
+        "rating_365": 5.5,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 75,
+        "tackles_attempted": 4,
+        "tackles_won": 3,
         "total_shots": 0,
-        "touches": 67,
-        "was_dribbled_past": 0,
-        "was_fouled": 1
+        "touches": 39,
+        "was_dribbled_past": 1,
+        "was_fouled": 0
       }
     },
     {
@@ -1519,41 +1401,54 @@
       }
     },
     {
-      "playerId": "a2155727-1afc-45a1-9d5e-592e9ef5195f",
-      "name": "Ester Sokler",
-      "nameHe": "אסטר סוקלר",
+      "playerId": "67be92db-2f80-43c2-8baf-5f2c2cdd871d",
+      "name": "Raz Shlomo",
+      "nameHe": "רז שלמה",
       "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
       "teamName": "Maccabi Tel Aviv FC",
       "side": "away",
       "lineupStatus": "Starting",
-      "positionName": "Attacker",
-      "formationPosition": "Centre Forward",
-      "shirtNumber": 9,
-      "roleGroup": "Attacker",
-      "minutes": 63,
+      "positionName": "Defender",
+      "formationPosition": "Centre Back",
+      "shirtNumber": 13,
+      "roleGroup": "Defender",
+      "minutes": 71,
       "metrics": {
+        "aerial_duel_win_pct": 50,
+        "aerial_duels_attempted": 4,
+        "aerial_duels_won": 2,
         "assists": 0,
-        "backward_passes": 4,
-        "ball_recovery": 1,
-        "clearances": 0,
-        "expected_assists": 0.01,
-        "final_third_possession_won": 1,
+        "backward_passes": 0,
+        "ball_recovery": 2,
+        "clearances": 3,
+        "dribble_success_pct": 100,
+        "dribbles_attempted": 1,
+        "expected_assists": 0.03,
         "fouls_made": 2,
         "goals": 0,
+        "ground_duel_win_pct": 57,
+        "ground_duels_attempted": 7,
+        "ground_duels_won": 4,
         "interceptions": 0,
         "key_passes": 0,
-        "minutes": 63,
+        "long_pass_completion_pct": 75,
+        "long_passes_attempted": 4,
+        "long_passes_completed": 3,
+        "minutes": 71,
         "offsides": 0,
-        "pass_completion_pct": 82,
-        "passes_attempted": 11,
-        "passes_completed": 9,
-        "passes_into_final_third": 0,
-        "penalty_won": 1,
+        "pass_completion_pct": 96,
+        "passes_attempted": 67,
+        "passes_completed": 64,
+        "passes_into_final_third": 6,
         "possession_lost": 4,
-        "rating_365": 6.6,
+        "rating_365": 6.1,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 2,
+        "tackles_won": 2,
         "total_shots": 0,
-        "touches": 15,
-        "was_dribbled_past": 2,
+        "touches": 76,
+        "was_dribbled_past": 1,
         "was_fouled": 1
       }
     },
@@ -1603,6 +1498,92 @@
         "touches": 50,
         "was_dribbled_past": 0,
         "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "a2155727-1afc-45a1-9d5e-592e9ef5195f",
+      "name": "Ester Sokler",
+      "nameHe": "אסטר סוקלר",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Attacker",
+      "formationPosition": "Centre Forward",
+      "shirtNumber": 9,
+      "roleGroup": "Attacker",
+      "minutes": 63,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 4,
+        "ball_recovery": 1,
+        "clearances": 0,
+        "expected_assists": 0.01,
+        "final_third_possession_won": 1,
+        "fouls_made": 2,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 0,
+        "minutes": 63,
+        "offsides": 0,
+        "pass_completion_pct": 82,
+        "passes_attempted": 11,
+        "passes_completed": 9,
+        "passes_into_final_third": 0,
+        "penalty_won": 1,
+        "possession_lost": 4,
+        "rating_365": 6.6,
+        "total_shots": 0,
+        "touches": 15,
+        "was_dribbled_past": 2,
+        "was_fouled": 1
+      }
+    },
+    {
+      "playerId": "098e3b9d-fbe2-49d7-9bed-692b201eb781",
+      "name": "Ofek Nadir",
+      "nameHe": "אופק נדיר",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamName": "Hapoel Jerusalem FC",
+      "side": "home",
+      "lineupStatus": "Starting",
+      "positionName": "Defender",
+      "formationPosition": "Left Back",
+      "shirtNumber": 20,
+      "roleGroup": "Defender",
+      "minutes": 90,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 11,
+        "ball_recovery": 1,
+        "big_chances_created": 2,
+        "clearances": 2,
+        "cross_completion_pct": 38,
+        "crosses_attempted": 8,
+        "crosses_completed": 3,
+        "expected_assists": 0.55,
+        "fouls_made": 0,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 3,
+        "long_pass_completion_pct": 60,
+        "long_passes_attempted": 5,
+        "long_passes_completed": 3,
+        "minutes": 90,
+        "offsides": 0,
+        "pass_completion_pct": 91,
+        "passes_attempted": 46,
+        "passes_completed": 42,
+        "passes_into_final_third": 5,
+        "possession_lost": 12,
+        "rating_365": 6.6,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 1,
+        "tackles_won": 1,
+        "total_shots": 0,
+        "touches": 67,
+        "was_dribbled_past": 0,
+        "was_fouled": 1
       }
     },
     {
@@ -2111,7 +2092,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2126,7 +2107,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2141,7 +2122,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2156,7 +2137,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2171,7 +2152,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2186,7 +2167,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2201,7 +2182,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2216,7 +2197,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2231,7 +2212,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2246,7 +2227,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2261,7 +2242,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2276,7 +2257,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2291,7 +2272,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2306,37 +2287,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
-    },
-    {
-      "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
-      "appearance_id": "ba0b3a5c-9a3f-4743-83ce-d0f68335ef55",
-      "player_id": "67cd4ed3-2b59-4e1d-9fd3-2c5d66fc7e95",
-      "display_name": "Tamir Haimovich",
-      "display_name_he": "תמיר חיימוביץ",
-      "team_id": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "team_name": "Hapoel Jerusalem FC",
-      "team_name_he": "הפועל ירושלים",
-      "heatmap_url": "https://imagecache.365scores.com/image/fetch/w_1080,q_auto:eco,f_webp/https%3a%2f%2fheatmap.365scores.com%2f%3fcompressed_data%3dG02D02L020072400722N0D200422H0200E40072D02K0420D200200200200202022R020042V02U02004H02L02D02D02F04R0D2R07D02D02P0202F0%26dir%3dltr",
-      "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
-      "source_code": "365scores",
-      "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
-    },
-    {
-      "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
-      "appearance_id": "b0e6ff38-3b76-450b-b556-b715812c71ad",
-      "player_id": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
-      "display_name": "Noam Malmud",
-      "display_name_he": "נועם מלמוד",
-      "team_id": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "team_name": "Hapoel Jerusalem FC",
-      "team_name_he": "הפועל ירושלים",
-      "heatmap_url": "https://imagecache.365scores.com/image/fetch/w_1080,q_auto:eco,f_webp/https%3a%2f%2fheatmap.365scores.com%2f%3fcompressed_data%3dX02%255b02J02H02D02P022442J02I02J02F0204004H02F042042N04D207P0F202K040040702Q022009R04R024M0%26dir%3dltr",
-      "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
-      "source_code": "365scores",
-      "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2351,7 +2302,37 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
+    },
+    {
+      "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
+      "appearance_id": "ba0b3a5c-9a3f-4743-83ce-d0f68335ef55",
+      "player_id": "67cd4ed3-2b59-4e1d-9fd3-2c5d66fc7e95",
+      "display_name": "Tamir Haimovich",
+      "display_name_he": "תמיר חיימוביץ",
+      "team_id": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "team_name": "Hapoel Jerusalem FC",
+      "team_name_he": "הפועל ירושלים",
+      "heatmap_url": "https://imagecache.365scores.com/image/fetch/w_1080,q_auto:eco,f_webp/https%3a%2f%2fheatmap.365scores.com%2f%3fcompressed_data%3dG02D02L020072400722N0D200422H0200E40072D02K0420D200200200200202022R020042V02U02004H02L02D02D02F04R0D2R07D02D02P0202F0%26dir%3dltr",
+      "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
+      "source_code": "365scores",
+      "source_name": "365Scores",
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
+    },
+    {
+      "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
+      "appearance_id": "b0e6ff38-3b76-450b-b556-b715812c71ad",
+      "player_id": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
+      "display_name": "Noam Malmud",
+      "display_name_he": "נועם מלמוד",
+      "team_id": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "team_name": "Hapoel Jerusalem FC",
+      "team_name_he": "הפועל ירושלים",
+      "heatmap_url": "https://imagecache.365scores.com/image/fetch/w_1080,q_auto:eco,f_webp/https%3a%2f%2fheatmap.365scores.com%2f%3fcompressed_data%3dX02%255b02J02H02D02P022442J02I02J02F0204004H02F042042N04D207P0F202K040040702Q022009R04R024M0%26dir%3dltr",
+      "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
+      "source_code": "365scores",
+      "source_name": "365Scores",
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2366,7 +2347,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2381,7 +2362,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2396,7 +2377,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2411,7 +2392,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2426,7 +2407,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2441,7 +2422,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2456,7 +2437,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2471,7 +2452,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2486,7 +2467,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2501,7 +2482,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2516,7 +2497,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2531,7 +2512,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2546,7 +2527,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2561,7 +2542,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     },
     {
       "match_id": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -2576,7 +2557,7 @@
       "source_id": "a417bf3b-1ea4-4b53-91df-cfc0ad7a02ad",
       "source_code": "365scores",
       "source_name": "365Scores",
-      "observed_at": "2026-08-27T00:52:57.540661+00:00"
+      "observed_at": "2026-08-27T21:08:21.76604+00:00"
     }
   ],
   "spatialProfile": {
@@ -2927,6 +2908,15 @@
         "y": 38.6
       },
       {
+        "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Central Midfield",
+        "x": 60.8,
+        "y": 47.6
+      },
+      {
         "playerId": "67cd4ed3-2b59-4e1d-9fd3-2c5d66fc7e95",
         "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
         "lineupStatus": "Starting",
@@ -2943,15 +2933,6 @@
         "formationPosition": "Centre Back",
         "x": 40.2,
         "y": 42.1
-      },
-      {
-        "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
-        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-        "lineupStatus": "Substitute",
-        "roleGroup": "Midfielder",
-        "formationPosition": "Central Midfield",
-        "x": 60.8,
-        "y": 47.6
       },
       {
         "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
@@ -4850,6 +4831,181 @@
         "notableChanges": []
       },
       {
+        "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
+        "nameHe": "סייד אבו פרחי",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "appearanceCount": 5,
+        "totalMinutes": 319,
+        "metrics": {
+          "touches": {
+            "current": 11,
+            "currentPer90": 36.67,
+            "previousTotal": 125,
+            "previousPer90": 35.27,
+            "previousStdDevPer90": 8.51,
+            "deltaPer90": 1.4,
+            "changePercent": 3.97,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "passes_attempted": {
+            "current": 8,
+            "currentPer90": 26.67,
+            "previousTotal": 68,
+            "previousPer90": 19.18,
+            "previousStdDevPer90": 4.41,
+            "deltaPer90": 7.49,
+            "changePercent": 39.05,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "passes_completed": {
+            "current": 3,
+            "currentPer90": 10,
+            "previousTotal": 50,
+            "previousPer90": 14.11,
+            "previousStdDevPer90": 4.22,
+            "deltaPer90": -4.11,
+            "changePercent": -29.13,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "passes_into_final_third": {
+            "current": 2,
+            "currentPer90": 6.67,
+            "previousTotal": 7,
+            "previousPer90": 1.97,
+            "previousStdDevPer90": 1.83,
+            "deltaPer90": 4.7,
+            "changePercent": 238.58,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "backward_passes": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 18,
+            "previousPer90": 5.08,
+            "previousStdDevPer90": 1.62,
+            "deltaPer90": -5.08,
+            "changePercent": -100,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "possession_lost": {
+            "current": 5,
+            "currentPer90": 16.67,
+            "previousTotal": 42,
+            "previousPer90": 11.85,
+            "previousStdDevPer90": 3.05,
+            "deltaPer90": 4.82,
+            "changePercent": 40.68,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "ball_recovery": {
+            "current": 1,
+            "currentPer90": 3.33,
+            "previousTotal": 7,
+            "previousPer90": 1.97,
+            "previousStdDevPer90": 1.29,
+            "deltaPer90": 1.36,
+            "changePercent": 69.04,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "ground_duels_attempted": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 22,
+            "previousPer90": 6.41,
+            "previousStdDevPer90": 2.42,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "ground_duels_won": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 7,
+            "previousPer90": 2.04,
+            "previousStdDevPer90": 1.96,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "aerial_duels_attempted": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 13,
+            "previousPer90": 3.79,
+            "previousStdDevPer90": 0.77,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "aerial_duels_won": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 5,
+            "previousPer90": 1.46,
+            "previousStdDevPer90": 0.51,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "interceptions": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 0,
+            "previousPer90": 0,
+            "previousStdDevPer90": 0,
+            "deltaPer90": 0,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "clearances": {
+            "current": 1,
+            "currentPer90": 3.33,
+            "previousTotal": 0,
+            "previousPer90": 0,
+            "previousStdDevPer90": 0,
+            "deltaPer90": 3.33,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "was_fouled": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 7,
+            "previousPer90": 1.97,
+            "previousStdDevPer90": 2.22,
+            "deltaPer90": -1.97,
+            "changePercent": -100,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "fouls_made": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 6,
+            "previousPer90": 1.69,
+            "previousStdDevPer90": 1.15,
+            "deltaPer90": -1.69,
+            "changePercent": -100,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          }
+        },
+        "notableChanges": []
+      },
+      {
         "playerId": "85837afe-e193-4566-958d-01b06534365a",
         "nameHe": "אנדרו אידוקו",
         "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
@@ -5038,176 +5194,176 @@
         ]
       },
       {
-        "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
-        "nameHe": "סייד אבו פרחי",
+        "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+        "nameHe": "רוי רביבו",
         "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
         "appearanceCount": 5,
-        "totalMinutes": 319,
+        "totalMinutes": 352,
         "metrics": {
           "touches": {
-            "current": 11,
-            "currentPer90": 36.67,
-            "previousTotal": 125,
-            "previousPer90": 35.27,
-            "previousStdDevPer90": 8.51,
-            "deltaPer90": 1.4,
-            "changePercent": 3.97,
+            "current": 82,
+            "currentPer90": 82,
+            "previousTotal": 274,
+            "previousPer90": 70.06,
+            "previousStdDevPer90": 23.85,
+            "deltaPer90": 11.94,
+            "changePercent": 17.04,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "passes_attempted": {
-            "current": 8,
-            "currentPer90": 26.67,
-            "previousTotal": 68,
-            "previousPer90": 19.18,
-            "previousStdDevPer90": 4.41,
-            "deltaPer90": 7.49,
-            "changePercent": 39.05,
+            "current": 52,
+            "currentPer90": 52,
+            "previousTotal": 162,
+            "previousPer90": 41.42,
+            "previousStdDevPer90": 18.84,
+            "deltaPer90": 10.58,
+            "changePercent": 25.54,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "passes_completed": {
-            "current": 3,
-            "currentPer90": 10,
-            "previousTotal": 50,
-            "previousPer90": 14.11,
-            "previousStdDevPer90": 4.22,
-            "deltaPer90": -4.11,
-            "changePercent": -29.13,
+            "current": 47,
+            "currentPer90": 47,
+            "previousTotal": 136,
+            "previousPer90": 34.77,
+            "previousStdDevPer90": 15.38,
+            "deltaPer90": 12.23,
+            "changePercent": 35.17,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "passes_into_final_third": {
-            "current": 2,
-            "currentPer90": 6.67,
-            "previousTotal": 7,
-            "previousPer90": 1.97,
-            "previousStdDevPer90": 1.83,
-            "deltaPer90": 4.7,
-            "changePercent": 238.58,
+            "current": 4,
+            "currentPer90": 4,
+            "previousTotal": 36,
+            "previousPer90": 9.2,
+            "previousStdDevPer90": 7.44,
+            "deltaPer90": -5.2,
+            "changePercent": -56.52,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "backward_passes": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 18,
-            "previousPer90": 5.08,
-            "previousStdDevPer90": 1.62,
-            "deltaPer90": -5.08,
-            "changePercent": -100,
+            "current": 3,
+            "currentPer90": 3,
+            "previousTotal": 26,
+            "previousPer90": 6.65,
+            "previousStdDevPer90": 2.74,
+            "deltaPer90": -3.65,
+            "changePercent": -54.89,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "possession_lost": {
-            "current": 5,
-            "currentPer90": 16.67,
-            "previousTotal": 42,
-            "previousPer90": 11.85,
-            "previousStdDevPer90": 3.05,
-            "deltaPer90": 4.82,
-            "changePercent": 40.68,
+            "current": 16,
+            "currentPer90": 16,
+            "previousTotal": 68,
+            "previousPer90": 17.39,
+            "previousStdDevPer90": 13.42,
+            "deltaPer90": -1.39,
+            "changePercent": -7.99,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "ball_recovery": {
-            "current": 1,
-            "currentPer90": 3.33,
-            "previousTotal": 7,
-            "previousPer90": 1.97,
-            "previousStdDevPer90": 1.29,
-            "deltaPer90": 1.36,
-            "changePercent": 69.04,
+            "current": 5,
+            "currentPer90": 5,
+            "previousTotal": 15,
+            "previousPer90": 3.84,
+            "previousStdDevPer90": 1.52,
+            "deltaPer90": 1.16,
+            "changePercent": 30.21,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "ground_duels_attempted": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 22,
-            "previousPer90": 6.41,
-            "previousStdDevPer90": 2.42,
+            "previousTotal": 32,
+            "previousPer90": 6.4,
+            "previousStdDevPer90": 3.5,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "ground_duels_won": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 7,
-            "previousPer90": 2.04,
-            "previousStdDevPer90": 1.96,
+            "previousTotal": 16,
+            "previousPer90": 3.2,
+            "previousStdDevPer90": 2.32,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "aerial_duels_attempted": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 13,
-            "previousPer90": 3.79,
-            "previousStdDevPer90": 0.77,
+            "previousTotal": 16,
+            "previousPer90": 3.2,
+            "previousStdDevPer90": 1.17,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "aerial_duels_won": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 5,
-            "previousPer90": 1.46,
-            "previousStdDevPer90": 0.51,
+            "previousTotal": 9,
+            "previousPer90": 1.8,
+            "previousStdDevPer90": 1.17,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "interceptions": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 0,
-            "previousPer90": 0,
-            "previousStdDevPer90": 0,
-            "deltaPer90": 0,
-            "changePercent": null,
+            "current": 1,
+            "currentPer90": 1,
+            "previousTotal": 1,
+            "previousPer90": 0.26,
+            "previousStdDevPer90": 0.54,
+            "deltaPer90": 0.74,
+            "changePercent": 284.62,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "clearances": {
-            "current": 1,
-            "currentPer90": 3.33,
-            "previousTotal": 0,
-            "previousPer90": 0,
-            "previousStdDevPer90": 0,
-            "deltaPer90": 3.33,
-            "changePercent": null,
+            "current": 2,
+            "currentPer90": 2,
+            "previousTotal": 9,
+            "previousPer90": 2.3,
+            "previousStdDevPer90": 1.42,
+            "deltaPer90": -0.3,
+            "changePercent": -13.04,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "was_fouled": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 7,
-            "previousPer90": 1.97,
-            "previousStdDevPer90": 2.22,
-            "deltaPer90": -1.97,
-            "changePercent": -100,
+            "current": 1,
+            "currentPer90": 1,
+            "previousTotal": 10,
+            "previousPer90": 2.56,
+            "previousStdDevPer90": 1.6,
+            "deltaPer90": -1.56,
+            "changePercent": -60.94,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "fouls_made": {
             "current": 0,
             "currentPer90": 0,
-            "previousTotal": 6,
-            "previousPer90": 1.69,
-            "previousStdDevPer90": 1.15,
-            "deltaPer90": -1.69,
+            "previousTotal": 5,
+            "previousPer90": 1.28,
+            "previousStdDevPer90": 1.48,
+            "deltaPer90": -1.28,
             "changePercent": -100,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           }
         },
         "notableChanges": []
@@ -5401,181 +5557,6 @@
         ]
       },
       {
-        "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
-        "nameHe": "רוי רביבו",
-        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-        "appearanceCount": 5,
-        "totalMinutes": 352,
-        "metrics": {
-          "touches": {
-            "current": 82,
-            "currentPer90": 82,
-            "previousTotal": 274,
-            "previousPer90": 70.06,
-            "previousStdDevPer90": 23.85,
-            "deltaPer90": 11.94,
-            "changePercent": 17.04,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "passes_attempted": {
-            "current": 52,
-            "currentPer90": 52,
-            "previousTotal": 162,
-            "previousPer90": 41.42,
-            "previousStdDevPer90": 18.84,
-            "deltaPer90": 10.58,
-            "changePercent": 25.54,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "passes_completed": {
-            "current": 47,
-            "currentPer90": 47,
-            "previousTotal": 136,
-            "previousPer90": 34.77,
-            "previousStdDevPer90": 15.38,
-            "deltaPer90": 12.23,
-            "changePercent": 35.17,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "passes_into_final_third": {
-            "current": 4,
-            "currentPer90": 4,
-            "previousTotal": 36,
-            "previousPer90": 9.2,
-            "previousStdDevPer90": 7.44,
-            "deltaPer90": -5.2,
-            "changePercent": -56.52,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "backward_passes": {
-            "current": 3,
-            "currentPer90": 3,
-            "previousTotal": 26,
-            "previousPer90": 6.65,
-            "previousStdDevPer90": 2.74,
-            "deltaPer90": -3.65,
-            "changePercent": -54.89,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "possession_lost": {
-            "current": 16,
-            "currentPer90": 16,
-            "previousTotal": 68,
-            "previousPer90": 17.39,
-            "previousStdDevPer90": 13.42,
-            "deltaPer90": -1.39,
-            "changePercent": -7.99,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "ball_recovery": {
-            "current": 5,
-            "currentPer90": 5,
-            "previousTotal": 15,
-            "previousPer90": 3.84,
-            "previousStdDevPer90": 1.52,
-            "deltaPer90": 1.16,
-            "changePercent": 30.21,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "ground_duels_attempted": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 32,
-            "previousPer90": 6.4,
-            "previousStdDevPer90": 3.5,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "ground_duels_won": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 16,
-            "previousPer90": 3.2,
-            "previousStdDevPer90": 2.32,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "aerial_duels_attempted": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 16,
-            "previousPer90": 3.2,
-            "previousStdDevPer90": 1.17,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "aerial_duels_won": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 9,
-            "previousPer90": 1.8,
-            "previousStdDevPer90": 1.17,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "interceptions": {
-            "current": 1,
-            "currentPer90": 1,
-            "previousTotal": 1,
-            "previousPer90": 0.26,
-            "previousStdDevPer90": 0.54,
-            "deltaPer90": 0.74,
-            "changePercent": 284.62,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "clearances": {
-            "current": 2,
-            "currentPer90": 2,
-            "previousTotal": 9,
-            "previousPer90": 2.3,
-            "previousStdDevPer90": 1.42,
-            "deltaPer90": -0.3,
-            "changePercent": -13.04,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "was_fouled": {
-            "current": 1,
-            "currentPer90": 1,
-            "previousTotal": 10,
-            "previousPer90": 2.56,
-            "previousStdDevPer90": 1.6,
-            "deltaPer90": -1.56,
-            "changePercent": -60.94,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "fouls_made": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 5,
-            "previousPer90": 1.28,
-            "previousStdDevPer90": 1.48,
-            "deltaPer90": -1.28,
-            "changePercent": -100,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          }
-        },
-        "notableChanges": []
-      },
-      {
         "playerId": "1ead46df-49b8-49ba-88dd-3ee49cbce441",
         "nameHe": "ינאי דיסטלפילד",
         "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
@@ -5729,6 +5710,808 @@
         "notableChanges": []
       }
     ]
+  },
+  "gameStateContext": {
+    "homeTeamNameHe": "הפועל ירושלים",
+    "awayTeamNameHe": "מכבי תל אביב",
+    "totals": {
+      "home": {
+        "shots": 16,
+        "expectedGoals": 1.27,
+        "goals": 2
+      },
+      "away": {
+        "shots": 17,
+        "expectedGoals": 3.56,
+        "goals": 5
+      },
+      "shotTotalGap": 1,
+      "similarShotTotals": true
+    },
+    "lateWindow": {
+      "afterMinute": 75,
+      "home": {
+        "shots": 9,
+        "expectedGoals": 0.68,
+        "goals": 1,
+        "shotShare": 56.25
+      },
+      "away": {
+        "shots": 1,
+        "expectedGoals": 0.14,
+        "goals": 0,
+        "shotShare": 5.88
+      }
+    },
+    "materialEvents": [
+      {
+        "eventId": "3-77'-68025904",
+        "type": "Red Card",
+        "minute": 77,
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "teamNameHe": "מכבי תל אביב",
+        "playerNameHe": "אופק מליקה",
+        "score": {
+          "home": 1,
+          "away": 5
+        },
+        "scoreGap": 4,
+        "home": {
+          "before": {
+            "shots": 7,
+            "expectedGoals": 0.62,
+            "goals": 1
+          },
+          "after": {
+            "shots": 9,
+            "expectedGoals": 0.68,
+            "goals": 1
+          },
+          "afterShotShare": 56.25
+        },
+        "away": {
+          "before": {
+            "shots": 17,
+            "expectedGoals": 3.57,
+            "goals": 5
+          },
+          "after": {
+            "shots": 0,
+            "expectedGoals": 0,
+            "goals": 0
+          },
+          "afterShotShare": 0
+        }
+      }
+    ],
+    "rawShotTotalsNeedGameStateContext": true,
+    "distortingEventId": "3-77'-68025904"
+  },
+  "insightCandidates": [
+    {
+      "id": "game_state_distortion",
+      "category": "game_state",
+      "score": 100,
+      "evidenceIds": [
+        "team.volume",
+        "flow.game_state_context",
+        "timeline.match_events"
+      ],
+      "context": {
+        "homeTeamNameHe": "הפועל ירושלים",
+        "awayTeamNameHe": "מכבי תל אביב",
+        "totals": {
+          "home": {
+            "shots": 16,
+            "expectedGoals": 1.27,
+            "goals": 2
+          },
+          "away": {
+            "shots": 17,
+            "expectedGoals": 3.56,
+            "goals": 5
+          },
+          "shotTotalGap": 1,
+          "similarShotTotals": true
+        },
+        "lateWindow": {
+          "afterMinute": 75,
+          "home": {
+            "shots": 9,
+            "expectedGoals": 0.68,
+            "goals": 1,
+            "shotShare": 56.25
+          },
+          "away": {
+            "shots": 1,
+            "expectedGoals": 0.14,
+            "goals": 0,
+            "shotShare": 5.88
+          }
+        },
+        "materialEvents": [
+          {
+            "eventId": "3-77'-68025904",
+            "type": "Red Card",
+            "minute": 77,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerNameHe": "אופק מליקה",
+            "score": {
+              "home": 1,
+              "away": 5
+            },
+            "scoreGap": 4,
+            "home": {
+              "before": {
+                "shots": 7,
+                "expectedGoals": 0.62,
+                "goals": 1
+              },
+              "after": {
+                "shots": 9,
+                "expectedGoals": 0.68,
+                "goals": 1
+              },
+              "afterShotShare": 56.25
+            },
+            "away": {
+              "before": {
+                "shots": 17,
+                "expectedGoals": 3.57,
+                "goals": 5
+              },
+              "after": {
+                "shots": 0,
+                "expectedGoals": 0,
+                "goals": 0
+              },
+              "afterShotShare": 0
+            }
+          }
+        ],
+        "rawShotTotalsNeedGameStateContext": true,
+        "distortingEventId": "3-77'-68025904"
+      }
+    },
+    {
+      "id": "decisive_match_window",
+      "category": "flow",
+      "score": 96,
+      "evidenceIds": [
+        "flow.shot_windows",
+        "timeline.match_events"
+      ],
+      "context": {
+        "start": 61,
+        "end": 75,
+        "home": {
+          "shots": 2,
+          "xg": 0.11,
+          "goals": 0
+        },
+        "away": {
+          "shots": 5,
+          "xg": 1.58,
+          "goals": 3
+        }
+      }
+    },
+    {
+      "id": "chance_quality_gap",
+      "category": "quality",
+      "score": 95.35,
+      "evidenceIds": [
+        "team.volume",
+        "team.quality",
+        "match.shot_map"
+      ],
+      "context": {
+        "qualityGap": 2.29,
+        "bigChanceGap": 4,
+        "home": "הפועל ירושלים",
+        "away": "מכבי תל אביב"
+      }
+    },
+    {
+      "id": "midfield_matchup",
+      "category": "matchup",
+      "score": 90,
+      "evidenceIds": [
+        "matchup.midfield",
+        "heatmap.spatial_profile"
+      ],
+      "context": {
+        "home": {
+          "playerCount": 5,
+          "recoveries": 16,
+          "interceptions": 1,
+          "tacklesWon": 6,
+          "tacklesAttempted": 7,
+          "expectedGoals": 0.14,
+          "goals": 0,
+          "shots": 3,
+          "shotsOnTarget": 2,
+          "expectedAssists": 0.14,
+          "keyPasses": 4,
+          "assists": 0,
+          "groundDuelsWon": 4,
+          "groundDuelsAttempted": 5,
+          "clearances": 7,
+          "blocks": 2,
+          "wasDribbledPast": 1
+        },
+        "away": {
+          "playerCount": 4,
+          "recoveries": 8,
+          "interceptions": 1,
+          "tacklesWon": 3,
+          "tacklesAttempted": 4,
+          "expectedGoals": 2.67,
+          "goals": 3,
+          "shots": 5,
+          "shotsOnTarget": 4,
+          "expectedAssists": 0.22,
+          "keyPasses": 4,
+          "assists": 0,
+          "groundDuelsWon": 1,
+          "groundDuelsAttempted": 2,
+          "clearances": 3,
+          "blocks": 1,
+          "wasDribbledPast": 2
+        }
+      }
+    },
+    {
+      "id": "team_history_change",
+      "category": "history",
+      "score": 88,
+      "evidenceIds": [
+        "history.team.home",
+        "history.team.away"
+      ],
+      "context": {
+        "home": {
+          "metricCode": "team_total_shots",
+          "current": 16,
+          "average": 13,
+          "sampleSize": 5,
+          "delta": 3,
+          "changePercent": 23.08
+        },
+        "away": {
+          "metricCode": "team_shots_on_target",
+          "current": 8,
+          "average": 3,
+          "sampleSize": 5,
+          "delta": 5,
+          "changePercent": 166.67
+        }
+      }
+    },
+    {
+      "id": "progression_without_quality",
+      "category": "style",
+      "score": 82,
+      "evidenceIds": [
+        "team.progression",
+        "team.quality",
+        "style.team_profiles"
+      ],
+      "context": {
+        "moreProgressionTeamNameHe": "הפועל ירושלים",
+        "betterQualityTeamNameHe": "מכבי תל אביב"
+      }
+    },
+    {
+      "id": "player_volume_outlier",
+      "category": "player",
+      "score": 75,
+      "evidenceIds": [
+        "history.player.85837afe-e193-4566-958d-01b06534365a",
+        "history.player.c17ac0f2-3e83-418e-a2c8-18e57cae7645",
+        "history.player.d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+        "history.player.098e3b9d-fbe2-49d7-9bed-692b201eb781"
+      ],
+      "context": {
+        "players": [
+          {
+            "playerId": "85837afe-e193-4566-958d-01b06534365a",
+            "playerNameHe": "אנדרו אידוקו",
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "metricCode": "ground_duels_won",
+            "labelHe": "מאבקי קרקע מוצלחים",
+            "current": 2,
+            "currentPer90": 2,
+            "previousPer90": 5.04,
+            "previousStdDevPer90": 1.54,
+            "deltaPer90": -3.04,
+            "changePercent": -60.32,
+            "zScore": -2,
+            "sampleSize": 5
+          },
+          {
+            "playerId": "c17ac0f2-3e83-418e-a2c8-18e57cae7645",
+            "playerNameHe": "אוהד אלמגור",
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "metricCode": "touches",
+            "labelHe": "נגיעות בכדור",
+            "current": 18,
+            "currentPer90": 36,
+            "previousPer90": 52.06,
+            "previousStdDevPer90": 9.84,
+            "deltaPer90": -16.06,
+            "changePercent": -30.85,
+            "zScore": -1.6,
+            "sampleSize": 5
+          },
+          {
+            "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+            "playerNameHe": "אושר דוידה",
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "metricCode": "touches",
+            "labelHe": "נגיעות בכדור",
+            "current": 39,
+            "currentPer90": 39,
+            "previousPer90": 66.4,
+            "previousStdDevPer90": 17.25,
+            "deltaPer90": -27.4,
+            "changePercent": -41.27,
+            "zScore": -1.6,
+            "sampleSize": 5
+          },
+          {
+            "playerId": "098e3b9d-fbe2-49d7-9bed-692b201eb781",
+            "playerNameHe": "אופק נדיר",
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "metricCode": "passes_completed",
+            "labelHe": "מסירות מדויקות",
+            "current": 42,
+            "currentPer90": 42,
+            "previousPer90": 30.57,
+            "previousStdDevPer90": 7.3,
+            "deltaPer90": 11.43,
+            "changePercent": 37.39,
+            "zScore": 1.6,
+            "sampleSize": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "spatial_structure",
+      "category": "spatial",
+      "score": 74,
+      "evidenceIds": [
+        "heatmap.spatial_profile"
+      ],
+      "context": {
+        "home": {
+          "sampleSize": 10,
+          "defenderCount": 5,
+          "midfielderCount": 2,
+          "attackerCount": 3,
+          "centralLanePlayers": 4,
+          "halfSpacePlayers": 3,
+          "wideLanePlayers": 3,
+          "leftLanePlayers": 2,
+          "rightLanePlayers": 2,
+          "averageDepth": 51.5,
+          "width": 62.4,
+          "playersInAttackingHalf": 5,
+          "playersInFinalThird": 0,
+          "defenderDepth": 48.1,
+          "midfielderDepth": 43.3,
+          "attackerDepth": 62.5,
+          "players": [
+            {
+              "playerId": "697e17b2-4ec4-46f6-9db4-a6123529e7da",
+              "nameHe": "כריסטי טייהי",
+              "roleGroup": "Midfielder",
+              "formationPosition": "Defensive Midfield",
+              "x": 44.9,
+              "y": 56.7
+            },
+            {
+              "playerId": "747a796a-7076-4e1b-93f8-97faf5da88b9",
+              "nameHe": "נדב זמיר",
+              "roleGroup": "Goalkeeper",
+              "formationPosition": "Goalkeeper",
+              "x": 15.4,
+              "y": 50.2
+            },
+            {
+              "playerId": "098e3b9d-fbe2-49d7-9bed-692b201eb781",
+              "nameHe": "אופק נדיר",
+              "roleGroup": "Defender",
+              "formationPosition": "Left Back",
+              "x": 52.2,
+              "y": 82.1
+            },
+            {
+              "playerId": "67cd4ed3-2b59-4e1d-9fd3-2c5d66fc7e95",
+              "nameHe": "תמיר חיימוביץ",
+              "roleGroup": "Defender",
+              "formationPosition": "Centre Back",
+              "x": 46.2,
+              "y": 60.2
+            },
+            {
+              "playerId": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
+              "nameHe": "נועם מלמוד",
+              "roleGroup": "Defender",
+              "formationPosition": "Centre Back",
+              "x": 40.2,
+              "y": 42.1
+            },
+            {
+              "playerId": "f59f01d2-1af4-4c49-8322-b39c4a27bd85",
+              "nameHe": "עידן כהן",
+              "roleGroup": "Defender",
+              "formationPosition": "Right Back",
+              "x": 47.7,
+              "y": 19.7
+            },
+            {
+              "playerId": "85837afe-e193-4566-958d-01b06534365a",
+              "nameHe": "אנדרו אידוקו",
+              "roleGroup": "Attacker",
+              "formationPosition": "Centre Forward",
+              "x": 61,
+              "y": 72.2
+            },
+            {
+              "playerId": "7f1e0990-2f7b-4047-a1b9-3d0ba31f7310",
+              "nameHe": "עומר אבוהב",
+              "roleGroup": "Midfielder",
+              "formationPosition": "Central Midfield",
+              "x": 41.8,
+              "y": 45.3
+            },
+            {
+              "playerId": "2152f1d5-8ad5-4720-a204-846407bed00c",
+              "nameHe": "זוברו שראני",
+              "roleGroup": "Defender",
+              "formationPosition": "Left Back",
+              "x": 54.4,
+              "y": 20.6
+            },
+            {
+              "playerId": "ec3d7fb9-7a4e-46fd-bca3-4b4c17025174",
+              "nameHe": "ויטאלי דאמשקאן",
+              "roleGroup": "Attacker",
+              "formationPosition": "Centre Forward",
+              "x": 63.8,
+              "y": 61.8
+            },
+            {
+              "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
+              "nameHe": "ישראל דאפה",
+              "roleGroup": "Attacker",
+              "formationPosition": "Centre Forward",
+              "x": 62.6,
+              "y": 47.9
+            }
+          ]
+        },
+        "away": {
+          "sampleSize": 10,
+          "defenderCount": 4,
+          "midfielderCount": 3,
+          "attackerCount": 3,
+          "centralLanePlayers": 3,
+          "halfSpacePlayers": 3,
+          "wideLanePlayers": 4,
+          "leftLanePlayers": 4,
+          "rightLanePlayers": 3,
+          "averageDepth": 51.9,
+          "width": 63.3,
+          "playersInAttackingHalf": 5,
+          "playersInFinalThird": 1,
+          "defenderDepth": 40.2,
+          "midfielderDepth": 57.6,
+          "attackerDepth": 61.8,
+          "players": [
+            {
+              "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+              "nameHe": "אושר דוידה",
+              "roleGroup": "Attacker",
+              "formationPosition": "Right Forward",
+              "x": 61.6,
+              "y": 78.4
+            },
+            {
+              "playerId": "a2155727-1afc-45a1-9d5e-592e9ef5195f",
+              "nameHe": "אסטר סוקלר",
+              "roleGroup": "Attacker",
+              "formationPosition": "Centre Forward",
+              "x": 64.8,
+              "y": 49.4
+            },
+            {
+              "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+              "nameHe": "דור פרץ",
+              "roleGroup": "Midfielder",
+              "formationPosition": "Attacking Midfield",
+              "x": 70.1,
+              "y": 67.1
+            },
+            {
+              "playerId": "67be92db-2f80-43c2-8baf-5f2c2cdd871d",
+              "nameHe": "רז שלמה",
+              "roleGroup": "Defender",
+              "formationPosition": "Centre Back",
+              "x": 36.7,
+              "y": 32.9
+            },
+            {
+              "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
+              "nameHe": "אופק מליקה",
+              "roleGroup": "Goalkeeper",
+              "formationPosition": "Goalkeeper",
+              "x": 12.8,
+              "y": 51.3
+            },
+            {
+              "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+              "nameHe": "רוי רביבו",
+              "roleGroup": "Defender",
+              "formationPosition": "Left Back",
+              "x": 44.5,
+              "y": 17.3
+            },
+            {
+              "playerId": "8a8630d8-5074-4607-91c0-f9f6a07acfa4",
+              "nameHe": "עידו שחר",
+              "roleGroup": "Midfielder",
+              "formationPosition": "Central Midfield",
+              "x": 58.4,
+              "y": 44.6
+            },
+            {
+              "playerId": "713ec20b-f06b-4502-85cf-ba2ba0d9c770",
+              "nameHe": "הליו וארלה",
+              "roleGroup": "Attacker",
+              "formationPosition": "Left Forward",
+              "x": 58.9,
+              "y": 20.5
+            },
+            {
+              "playerId": "ff574781-01f2-4586-86c8-e7c7620f2496",
+              "nameHe": "נועם בן הרוש",
+              "roleGroup": "Defender",
+              "formationPosition": "Right Back",
+              "x": 45.9,
+              "y": 80.6
+            },
+            {
+              "playerId": "cd12fd24-dbd1-4b3b-a2a8-5af93d619f3d",
+              "nameHe": "איתמר נוי",
+              "roleGroup": "Midfielder",
+              "formationPosition": "Attacking Midfield",
+              "x": 44.3,
+              "y": 49.7
+            },
+            {
+              "playerId": "36f15387-3195-4941-9e2d-b0538d24c9f3",
+              "nameHe": "איתי בן חמו",
+              "roleGroup": "Defender",
+              "formationPosition": "Centre Back",
+              "x": 33.8,
+              "y": 69.7
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "analysisPlan": {
+    "thesis": {
+      "claimHe": "השוויון הכמעט מלא במספר הבעיטות מטעה: מכבי תל אביב הכריעה את המשחק באמצעות מצבים איכותיים בהרבה והתפרצות בין הדקות 61–75, לפני שהכרטיס האדום במצב של 1:5 ניפח את הנתונים המאוחרים של הפועל ירושלים.",
+      "whyItMattersHe": "הקריאה הזו מפרידה בין פרק הזמן שבו נקבע מאזן הכוחות לבין הסיום לאחר שהמשחק כבר הוכרע, ומסבירה מדוע מספר הבעיטות הסופי אינו משקף משחק שקול.",
+      "evidenceIds": [
+        "flow.game_state_context",
+        "flow.shot_windows",
+        "team.quality",
+        "match.shot_map",
+        "timeline.match_events"
+      ]
+    },
+    "rankedInsights": [
+      {
+        "id": "game_state_distortion",
+        "titleHe": "מספר הבעיטות הסופי מסתיר את מצב המשחק",
+        "findingHe": "בסיום נרשם פער של בעיטה אחת בלבד, אך לפני הרחקת אופק מליקה בדקה ה־77 מכבי תל אביב כבר הובילה 1:5 ובעטה 17 פעמים לעומת 7. לאחר ההרחקה הפועל ירושלים בעטה עוד 9 פעמים, בעוד מכבי לא בעטה כלל.",
+        "whyItMattersHe": "אי אפשר לפרש את הסיכום המצטבר כעדות למשחק שקול: רוב הנפח של הפועל הגיע ביתרון מספרי, בפיגור של ארבעה שערים ואחרי שההכרעה כבר נפלה.",
+        "evidenceIds": [
+          "team.volume",
+          "flow.game_state_context",
+          "timeline.match_events"
+        ],
+        "importance": "primary",
+        "narrativeRole": "setup"
+      },
+      {
+        "id": "decisive_match_window",
+        "titleHe": "רבע שעה שבה המשחק הוכרע",
+        "findingHe": "בין הדקות 61–75 מכבי תל אביב בעטה 5 פעמים, הגיעה למצבים בשווי 1.58 שערים צפויים וכבשה שלושה שערים; הפועל ירושלים הסתפקה בשתי בעיטות וב־0.11 שערים צפויים.",
+        "whyItMattersHe": "זהו פרק הזמן שמסביר את המעבר ממשחק פתוח יחסית לתוצאה חד־צדדית, עוד לפני הכרטיס האדום והנפח המאוחר של המארחת.",
+        "evidenceIds": [
+          "flow.shot_windows",
+          "timeline.match_events"
+        ],
+        "importance": "supporting",
+        "narrativeRole": "turning_point"
+      },
+      {
+        "id": "chance_quality_gap",
+        "titleHe": "הפער האמיתי היה באיכות המצבים",
+        "findingHe": "למרות מספר בעיטות דומה, מכבי תל אביב סיימה עם 3.56 שערים צפויים ו־6 מצבים גדולים, לעומת 1.27 ו־2 של הפועל ירושלים. גם לפני ההרחקה הפער עמד על 3.57 לעומת 0.62 שערים צפויים.",
+        "whyItMattersHe": "הפער באיכות מסביר מדוע ספירת בעיטות לבדה מחמיצה את עליונותה של מכבי: היא הגיעה בתדירות גבוהה יותר למצבים שמהם סביר לכבוש.",
+        "evidenceIds": [
+          "team.volume",
+          "team.quality",
+          "match.shot_map"
+        ],
+        "importance": "supporting",
+        "narrativeRole": "explanation"
+      },
+      {
+        "id": "progression_without_quality",
+        "titleHe": "התקדמות בכדור שלא הפכה למספיק מצבים",
+        "findingHe": "הפועל ירושלים רשמה יותר מסירות לשליש האחרון ומספר דומה של מסירות מפתח, אך סיימה עם איכות מצבים נמוכה משמעותית ממכבי תל אביב.",
+        "whyItMattersHe": "הנתון מחדד שהגעה לאזור הקדמי אינה שקולה לחדירה מסוכנת. עם זאת, יש להציגו בזהירות משום שהפיגור, היתרון המספרי והלחץ המאוחר השפיעו על המספרים המצטברים.",
+        "evidenceIds": [
+          "team.progression",
+          "team.quality",
+          "style.team_profiles"
+        ],
+        "importance": "supporting",
+        "narrativeRole": "caveat"
+      }
+    ],
+    "narrativeArc": [
+      {
+        "headingIdeaHe": "קודם כול: למה מספר הבעיטות מטעה",
+        "purposeHe": "לפתוח בהפרדה בין המשחק עד ההכרעה לבין הדקות שלאחר הכרטיס האדום, כדי למנוע קריאה שגויה של הנתונים המצטברים.",
+        "insightIds": [
+          "game_state_distortion"
+        ]
+      },
+      {
+        "headingIdeaHe": "הרבע שעה ששינתה את התמונה",
+        "purposeHe": "להראות מתי מכבי תל אביב הפכה את יתרונה להכרעה ברורה, לפני השינוי המספרי על הדשא.",
+        "insightIds": [
+          "decisive_match_window"
+        ]
+      },
+      {
+        "headingIdeaHe": "לא כמה בעטו, אלא מאיפה ובאיזו איכות",
+        "purposeHe": "להסביר שהפער בתוצאה נשען על הבדל גדול באיכות המצבים ולא רק על ניצול חריג.",
+        "insightIds": [
+          "chance_quality_gap"
+        ]
+      },
+      {
+        "headingIdeaHe": "הכדור התקדם, הסכנה לא באותה מידה",
+        "purposeHe": "לסגור בהבחנה בין פעילות בשליש האחרון לבין הגעה למצבים איכותיים, תוך הסתייגות מהשפעת מצב המשחק.",
+        "insightIds": [
+          "progression_without_quality"
+        ]
+      }
+    ],
+    "graphics": [
+      {
+        "type": "match_flow",
+        "titleHe": "המשחק לפני ואחרי ההכרעה",
+        "subtitleHe": "חלונות הבעיטות והשערים מבליטים את ההתפרצות של מכבי ואת הנפח המאוחר של הפועל לאחר ההרחקה",
+        "placementInsightId": "game_state_distortion",
+        "evidenceIds": [
+          "flow.shot_windows",
+          "flow.game_state_context",
+          "timeline.match_events"
+        ],
+        "metricCodes": [],
+        "focusPlayerId": ""
+      },
+      {
+        "type": "shot_map",
+        "titleHe": "אותו סדר גודל של בעיטות, איכות שונה",
+        "subtitleHe": "מיקומי הבעיטות מדגישים שמכבי הגיעה למצבים מסוכנים יותר",
+        "placementInsightId": "chance_quality_gap",
+        "evidenceIds": [
+          "match.shot_map",
+          "team.quality",
+          "match.best_chances"
+        ],
+        "metricCodes": [],
+        "focusPlayerId": ""
+      }
+    ],
+    "coverageDecisions": [
+      {
+        "category": "game_state",
+        "decision": "use",
+        "reasonHe": "חיונית לתזה משום שהכרטיס האדום במצב של משחק מוכרע ניפח את מספר הבעיטות של הפועל ירושלים.",
+        "evidenceIds": [
+          "flow.game_state_context",
+          "timeline.match_events",
+          "team.volume"
+        ]
+      },
+      {
+        "category": "flow",
+        "decision": "use",
+        "reasonHe": "חלון הדקות 61–75 מזהה את שלב ההכרעה לפני ההרחקה.",
+        "evidenceIds": [
+          "flow.shot_windows",
+          "timeline.match_events"
+        ]
+      },
+      {
+        "category": "quality",
+        "decision": "use",
+        "reasonHe": "פער איכות המצבים מסביר את העליונות של מכבי טוב יותר ממספר הבעיטות הכולל.",
+        "evidenceIds": [
+          "team.quality",
+          "match.shot_map",
+          "team.volume"
+        ]
+      },
+      {
+        "category": "style",
+        "decision": "use",
+        "reasonHe": "הפער בין מסירות לשליש האחרון לבין איכות המצבים מסביר מדוע הפעילות של הפועל בכדור לא העידה על סכנה דומה.",
+        "evidenceIds": [
+          "team.progression",
+          "team.quality",
+          "style.team_profiles"
+        ]
+      },
+      {
+        "category": "matchup",
+        "decision": "omit",
+        "reasonHe": "השוואת חוליות הקישור מעניינת, אך אינה מוסיפה הסבר הכרחי מעבר לפער באיכות המצבים ובזרימת המשחק.",
+        "evidenceIds": [
+          "matchup.midfield"
+        ]
+      },
+      {
+        "category": "spatial",
+        "decision": "omit",
+        "reasonHe": "מפת החום מצטברת ואינה מחולקת לדקות, ולכן אינה יכולה להסביר בביטחון את השינוי סביב חלון ההכרעה או ההרחקה.",
+        "evidenceIds": [
+          "heatmap.spatial_profile"
+        ]
+      },
+      {
+        "category": "history",
+        "decision": "omit",
+        "reasonHe": "המדגם קצר, כולל מסגרות שונות, וחלק ממדדי האיכות ההיסטוריים נשענים על משחק קודם אחד בלבד.",
+        "evidenceIds": [
+          "history.team.home",
+          "history.team.away"
+        ]
+      },
+      {
+        "category": "player",
+        "decision": "omit",
+        "reasonHe": "החריגות האישיות מול חמש הופעות קודמות אינן מסבירות את התזה המרכזית טוב יותר מהראיות הקבוצתיות.",
+        "evidenceIds": [
+          "history.player.85837afe-e193-4566-958d-01b06534365a",
+          "history.player.c17ac0f2-3e83-418e-a2c8-18e57cae7645",
+          "history.player.d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+          "history.player.098e3b9d-fbe2-49d7-9bed-692b201eb781"
+        ]
+      }
+    ],
+    "quality": {
+      "singleThesis": true,
+      "explainsRatherThanLists": true,
+      "gameStateAdjusted": true,
+      "selectiveEvidence": true,
+      "graphicsServeStory": true
+    }
   },
   "shots": [
     {
@@ -6233,20 +7016,21 @@
     "status": "passed",
     "checks": {
       "naturalHebrew": true,
+      "footballHebrew": true,
       "numericClarity": true,
       "cohesiveNarrative": true,
+      "storyValue": true,
+      "numberDiscipline": true,
       "highVolumeComparisonsOnly": true,
       "evidenceFaithfulness": true,
-      "analyticalDepth": true,
-      "historicalContext": true
+      "gameStateContext": true,
+      "graphicRelevance": true
     },
     "notes": [
-      "הניסוח הלא טבעי \"בבעיטה שערכה 0.09 xG\" הוחלף ב\"בבעיטה בשווי 0.09 xG\".",
-      "המונח \"החזרות כדור\" הוחלף ב\"חילוצי כדור\".",
-      "הוסרו ערכי העומק 57.6 ו-43.3, שלא ניתן היה לפרשם בלי הסבר על סולם המדידה; נשמרה הפרשנות המבנית הנתמכת במפת החום.",
-      "במסקנה הובהר שנתוני ההחזקה הם 51% ו-49%.",
-      "הפסקה על הרחקת אופק מליקה שולבה תחת כותרת שמכסה גם את זרימת המשחק המאוחרת.",
-      "נשמרה השוואה היסטורית של כל קבוצה לחמשת משחקיה הקודמים, וכן השוואת השחקן המובהקת של אופק נדיר."
+      "הכותרת והפתיח נערכו כך שיבהירו מיד מה נמדד ומדוע מספר הבעיטות הסופי מטעה.",
+      "נוסחים סיבתיים כמו \"הכריעה באמצעות\" ו\"מסביר את התוצאה\" הוחלפו בתיאור הפערים שנצפו בזרימת המשחק ובאיכות המצבים.",
+      "דור פרץ וסייד אבו פרחי הוזכרו כאירועים במשחק הנוכחי, ללא הפיכתם למגמה היסטורית.",
+      "ההשוואות ההיסטוריות, מפת החום וניתוח חוליות הקישור הושמטו בהתאם לתוכנית הניתוח."
     ]
   },
   "qualityReview": {
@@ -6255,45 +7039,71 @@
     "status": "passed",
     "checks": {
       "naturalHebrew": true,
+      "footballHebrew": true,
       "numericClarity": true,
       "cohesiveNarrative": true,
+      "storyValue": true,
+      "numberDiscipline": true,
       "highVolumeComparisonsOnly": true,
       "evidenceFaithfulness": true,
-      "analyticalDepth": true,
-      "historicalContext": true
+      "gameStateContext": true,
+      "graphicRelevance": true
     },
     "issues": [],
-    "attempt": 2
+    "attempt": 1
   },
   "editorial": {
-    "headline": "16 בעיטות מול 17, אבל המצבים של מכבי היו טובים יותר: 5:2 בירושלים",
+    "headline": "17:16 בבעיטות, 5:2 בשערים: הפער שהסתתר בנתוני הסיום",
     "headlineEvidenceIds": [
-      "match.result",
       "team.volume",
-      "team.quality"
+      "match.result"
     ],
-    "dek": "הפועל ירושלים ומכבי תל אביב ייצרו מספר דומה של בעיטות, אבל האורחת רשמה 3.56 xG, בעטה 8 פעמים למסגרת ויצרה 6 מצבים גדולים. דור פרץ כבש שלושער אחרי שהמארחת עלתה ליתרון כבר בדקה 1.",
+    "dek": "מספר הבעיטות הסופי מציג תמונה מטעה. מכבי תל אביב הגיעה למצבים איכותיים בהרבה והשתלטה על המשחק בין הדקות 61–75; רוב הבעיטות המאוחרות של הפועל ירושלים הגיעו רק אחרי הרחקת אופק מליקה, כשהתוצאה כבר הייתה חד־צדדית.",
     "dekEvidenceIds": [
-      "match.result",
-      "team.volume",
       "team.quality",
-      "match.opening_goal",
-      "player.dor_peretz"
+      "flow.shot_windows",
+      "flow.game_state_context",
+      "timeline.match_events"
     ],
     "sections": [
       {
-        "heading": "הפועל פתחה בשער, מכבי הגיעה למצבים הטובים יותר",
+        "heading": "קודם כול: למה מספר הבעיטות מטעה",
+        "insightIds": [
+          "game_state_distortion"
+        ],
         "paragraphs": [
           {
-            "text": "ויטאלי דאמשקאן העלה את הפועל ירושלים ליתרון בדקה 1, בבעיטה בשווי 0.09 xG. עד הדקה 15 זו הייתה הבעיטה היחידה של המארחת, בעוד מכבי תל אביב בעטה פעמיים ורשמה 0.06 xG. הפועל כבשה מוקדם, אך לא ייצרה בעיטות נוספות ברבע השעה הראשונה.",
+            "text": "בסיום נרשמו 17 בעיטות למכבי תל אביב ו־16 להפועל ירושלים, אבל התוצאה הייתה 5:2 לאורחת. הפער הזעיר במספר הבעיטות אינו מעיד על משחק שקול, משום שחלק גדול מהבעיטות של הפועל הגיע בתנאים שונים לגמרי מאלה שבהם נבנה היתרון של מכבי.",
             "evidenceIds": [
-              "match.opening_goal",
+              "team.volume",
+              "match.result",
+              "flow.game_state_context"
+            ]
+          },
+          {
+            "text": "אופק מליקה הורחק בדקה ה־77, כשמכבי כבר הובילה 1:5. עד הכרטיס האדום מכבי בעטה 17 פעמים, לעומת 7 בעיטות של הפועל.",
+            "evidenceIds": [
+              "flow.game_state_context",
+              "timeline.match_events"
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "הרבע שעה שבה מכבי פתחה פער",
+        "insightIds": [
+          "decisive_match_window"
+        ],
+        "paragraphs": [
+          {
+            "text": "בין הדקות 61–75 מכבי בעטה 5 פעמים, בעוד הפועל הסתפקה ב־2 בעיטות. באותו פרק זמן האורחת כבשה שלושה שערים, עוד לפני שנותרה בעשרה שחקנים.",
+            "evidenceIds": [
               "flow.shot_windows",
               "timeline.match_events"
             ]
           },
           {
-            "text": "רוי רביבו השווה בדקה 24. בין הדקות 31–45 מכבי בעטה 4 פעמים ורשמה 1.38 xG, בעוד הפועל לא בעטה כלל. דור פרץ פגע בקורה בדקה 44 וכבש בדקה 45, על רקע היתרון של מכבי באיכות המצבים לפני ההפסקה.",
+            "text": "גם איכות המצבים באותו חלון הייתה שונה: מכבי הגיעה למצבים בשווי 1.58 שערים צפויים, לעומת 0.11 של הפועל. דור פרץ כבש בדקות 63 ו־71, וביניהן מצא גם סייד אבו פרחי את הרשת.",
             "evidenceIds": [
               "flow.shot_windows",
               "timeline.match_events"
@@ -6302,76 +7112,47 @@
         ]
       },
       {
-        "heading": "הפער נפתח בין הדקות 61–75",
+        "heading": "לא רק כמה בעטו, אלא מאילו מצבים",
+        "insightIds": [
+          "chance_quality_gap"
+        ],
         "paragraphs": [
           {
-            "text": "בין הדקות 46–60 שתי הקבוצות בעטו 3 פעמים כל אחת: הפועל רשמה 0.14 xG ומכבי 0.13. בחלון הבא פרץ כבש בדקה 63, סייד אבו פרחי בדקה 68 ופרץ השלים שלושער בדקה 71.",
+            "text": "הפער הבולט ביותר היה באיכות המצבים. מכבי סיימה עם 3.56 שערים צפויים (xG), לעומת 1.27 של הפועל, אף שמספר הבעיטות של הקבוצות היה כמעט זהה.",
             "evidenceIds": [
-              "flow.shot_windows",
-              "timeline.match_events"
+              "team.quality",
+              "match.shot_map",
+              "team.volume"
             ]
           },
           {
-            "text": "בין הדקות 61–75 מכבי תל אביב בעטה 5 פעמים, רשמה 1.58 xG וכבשה 3 שערים. הפועל ירושלים הסתפקה ב-2 בעיטות בשווי כולל של 0.11 xG ולא כבשה. פרץ סיים את הופעתו עם 3 שערים מ-4 בעיטות, שהסתכמו ב-2.5 xG.",
+            "text": "גם ספירת המצבים הגדולים מציגה את אותה תמונה: מכבי הגיעה ל־6 מצבים גדולים, והפועל ל־2. מפת הבעיטות משלימה את ההבחנה בין כמות דומה של ניסיונות לבין רמת הסכנה שלהם.",
             "evidenceIds": [
-              "flow.shot_windows",
-              "player.dor_peretz"
+              "team.quality",
+              "match.shot_map"
             ]
           }
         ]
       },
       {
-        "heading": "הקישור של מכבי סיפק את עיקר התרומה ההתקפית",
+        "heading": "הכדור הגיע לשליש האחרון, אבל לא למצבים באותה איכות",
+        "insightIds": [
+          "progression_without_quality"
+        ],
         "paragraphs": [
           {
-            "text": "חוליית הקישור של הפועל רשמה 16 חילוצי כדור ו-6 תיקולים מוצלחים, לעומת 8 חילוצים ו-3 תיקולים מוצלחים של קשרי מכבי. בהתקפה התמונה הייתה הפוכה: קשרי מכבי כבשו 3 שערים, רשמו 2.67 xG והגיעו ל-4 בעיטות למסגרת; קשרי הפועל סיימו ללא שער, עם 0.14 xG ו-2 בעיטות למסגרת.",
+            "text": "הפועל רשמה 95 מסירות לשליש האחרון, לעומת 70 של מכבי. הנתון מלמד שהיא הצליחה להביא את הכדור לאזור הקדמי, אך אינו אומר שהמהלכים הסתיימו במצבי הבקעה איכותיים.",
             "evidenceIds": [
-              "matchup.midfield"
-            ]
-          },
-          {
-            "text": "גם הפריסה של שחקני ההרכב הצביעה על מבנה שונה. אצל הפועל היו 4 שחקנים בנתיב המרכזי, 3 בחצי־המרחבים ו-3 בנתיבים הרחבים; אצל מכבי היו 3 במרכז, 3 בחצי־המרחבים ו-4 בנתיבים הרחבים. קשרי מכבי תפסו בממוצע אזורים קדמיים יותר מקשרי הפועל, מבנה שהתאים לתרומה ההתקפית הגבוהה יותר של חוליית הקישור האורחת.",
-            "evidenceIds": [
-              "heatmap.spatial_profile",
-              "matchup.midfield"
-            ]
-          }
-        ]
-      },
-      {
-        "heading": "יותר מסירות לשליש האחרון להפועל, מצבים טובים יותר למכבי",
-        "paragraphs": [
-          {
-            "text": "הפועל ירושלים רשמה 95 מסירות לשליש האחרון ו-13 מסירות מפתח, לעומת 70 ו-12 של מכבי תל אביב. למרות הכמות הגדולה יותר של מסירות לשליש האחרון, הפועל סיימה עם 1.27 xG ומכבי עם 3.56. האורחת איבדה את הכדור 94 פעמים ורשמה 7 חטיפות מסירה, לעומת 110 איבודים וחטיפת מסירה אחת של המארחת.",
-            "evidenceIds": [
-              "style.team_profiles"
-            ]
-          },
-          {
-            "text": "הפועל בעטה במשחק הזה 16 פעמים, לעומת ממוצע של 13 בחמשת משחקיה הקודמים בכל המסגרות. היא הגיעה ל-5 בעיטות למסגרת, לעומת ממוצע קודם של 5.4. מכבי עלתה מ-10.6 בעיטות ו-3 בעיטות למסגרת בממוצע בחמשת משחקיה הקודמים ל-17 בעיטות ו-8 למסגרת בירושלים.",
-            "evidenceIds": [
-              "history.team.home",
-              "history.team.away"
-            ]
-          }
-        ]
-      },
-      {
-        "heading": "אופק נדיר הניע את הכדור; הפועל הגבירה את קצב הבעיטות בסיום",
-        "paragraphs": [
-          {
-            "text": "אופק נדיר השלים 42 מסירות מדויקות ב-90 דקות. בחמש הופעותיו הקודמות הוא עמד על 30.57 מסירות מדויקות ל-90 דקות. לצד הנתון האישי הזה והכמות הגבוהה של מסירות הפועל לשליש האחרון, הפער הקבוצתי הבולט נרשם באיכות המצבים לטובת מכבי.",
-            "evidenceIds": [
-              "history.player.098e3b9d-fbe2-49d7-9bed-692b201eb781",
-              "style.team_profiles",
+              "team.progression",
               "team.quality"
             ]
           },
           {
-            "text": "אופק מליקה הורחק בדקה 77. עד הדקה 75 הפועל בעטה 7 פעמים, ואחרי הכרטיס האדום הוסיפה 9 בעיטות בשווי כולל של 0.68 xG. הנתונים מצביעים על קצב בעיטות גבוה יותר בשלב המאוחר של המשחק, ואוהד אלמגור כבש בדקה 90.",
+            "text": "גם במסירות המפתח נרשם מאזן קרוב: 13 להפועל ו־12 למכבי. עם זאת, את הנתונים המצטברים האלה צריך לקרוא לצד מצב המשחק, משום שהפועל שיחקה ביתרון מספרי ובפיגור עמוק בדקות הסיום.",
             "evidenceIds": [
-              "flow.after_red",
-              "timeline.match_events"
+              "team.progression",
+              "style.team_profiles",
+              "flow.game_state_context"
             ]
           }
         ]
@@ -6379,33 +7160,33 @@
     ],
     "takeaways": [
       {
-        "text": "מספר הבעיטות היה כמעט זהה — 16 להפועל ירושלים ו-17 למכבי תל אביב — אבל מכבי הגיעה ל-8 בעיטות למסגרת ויצרה 6 מצבים גדולים, לעומת 5 בעיטות למסגרת ו-2 מצבים גדולים של הפועל.",
+        "text": "מספר הבעיטות הסופי אינו מעיד על משחק שקול, משום שחלק גדול מהבעיטות של הפועל הגיע אחרי ההרחקה ובמצב חד־צדדי.",
         "evidenceIds": [
           "team.volume",
-          "team.quality"
+          "flow.game_state_context"
         ]
       },
       {
-        "text": "מכבי רשמה 3.56 xG ו-4.77 שערים צפויים מבעיטות למסגרת (xGOT), לעומת 1.27 xG ו-1.37 xGOT של הפועל.",
+        "text": "הפער נפתח בהתפרצות של מכבי לפני הכרטיס האדום, ולא בזמן היתרון המספרי המאוחר של הפועל.",
         "evidenceIds": [
-          "team.quality"
+          "flow.shot_windows",
+          "timeline.match_events"
         ]
       },
       {
-        "text": "הגנת מכבי השלימה 7 תיקולים מ-7 ניסיונות, לצד 16 הרחקות ו-4 חסימות. מולה, התקפת הפועל בעטה 12 פעמים ורשמה 1.07 xG.",
+        "text": "איכות המצבים מציגה את עליונותה של מכבי באופן ברור יותר ממספר הבעיטות או מהפעילות בשליש האחרון.",
         "evidenceIds": [
-          "matchup.home_attack_away_defense"
+          "team.quality",
+          "team.progression",
+          "match.shot_map"
         ]
       }
     ],
-    "conclusion": "מכבי תל אביב ניצחה 5:2 בלי פער גדול בהחזקה בכדור או במספר הבעיטות: היא החזיקה בכדור 51% מהזמן לעומת 49% של הפועל, ובעטה 17 פעמים לעומת 16. הפער הבולט היה באיכות המצבים ובתרומה ההתקפית של הקישור, בעיקר בין הדקות 61–75, שבהן מכבי כבשה 3 שערים. אחרי הרחקת מליקה נרשם קצב בעיטות גבוה יותר של הפועל, אך השער הנוסף שלה הגיע רק בדקה 90.",
+    "conclusion": "כדי לקרוא נכון את המשחק צריך להפריד בין הדקות שבהן מכבי פתחה את הפער לבין הסיום לאחר ההרחקה. הנתונים הבולטים הם איכות המצבים של האורחת וההתפרצות שלה לפני הכרטיס האדום; הבעיטות המאוחרות של הפועל צמצמו את הפער הסטטיסטי, אך הגיעו כשהתוצאה כבר הייתה חד־צדדית.",
     "conclusionEvidenceIds": [
-      "match.result",
-      "team.volume",
-      "team.quality",
-      "matchup.midfield",
       "flow.shot_windows",
-      "flow.after_red",
+      "flow.game_state_context",
+      "team.quality",
       "timeline.match_events"
     ]
   },
@@ -6432,7 +7213,7 @@
     },
     {
       "id": "match.opening_goal",
-      "label": "שער היתרון המוקדם",
+      "label": "שער הפתיחה",
       "sourceView": "api_match_shots",
       "sourceRows": 1,
       "values": [
@@ -6440,7 +7221,10 @@
         0.09
       ],
       "context": {
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
         "teamNameHe": "הפועל ירושלים",
+        "playerId": "ec3d7fb9-7a4e-46fd-bca3-4b4c17025174",
+        "playerNameHe": "ויטאלי דאמשקאן",
         "minute": 1,
         "expectedGoals": 0.09
       }
@@ -7121,36 +7905,113 @@
       }
     },
     {
-      "id": "flow.after_red",
-      "label": "בעיטות הפועל אחרי הכרטיס האדום",
+      "id": "flow.game_state_context",
+      "label": "המספרים המצטברים לפי מצב המשחק",
       "sourceView": "api_match_shots + 365scores_game_detail",
-      "sourceRows": 9,
+      "sourceRows": 55,
       "values": [
-        77,
+        16,
+        1.27,
+        17,
+        3.56,
+        1,
+        75,
         9,
         0.68,
-        75,
-        7
+        56.25,
+        1,
+        0.14,
+        5.88,
+        77,
+        1,
+        5,
+        4,
+        7,
+        0.62,
+        9,
+        0.68,
+        56.25,
+        17,
+        3.57,
+        0,
+        0,
+        0
       ],
       "context": {
-        "redCard": {
-          "id": "3-77'-68025904",
-          "minute": 77,
-          "eventTime": "77'",
-          "type": "Red Card",
-          "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-          "teamNameHe": "מכבי תל אביב",
-          "playerNameHe": "אופק מליקה",
-          "relatedPlayerNamesHe": []
+        "homeTeamNameHe": "הפועל ירושלים",
+        "awayTeamNameHe": "מכבי תל אביב",
+        "totals": {
+          "home": {
+            "shots": 16,
+            "expectedGoals": 1.27,
+            "goals": 2
+          },
+          "away": {
+            "shots": 17,
+            "expectedGoals": 3.56,
+            "goals": 5
+          },
+          "shotTotalGap": 1,
+          "similarShotTotals": true
         },
-        "teamNameHe": "הפועל ירושלים",
-        "comparison": {
-          "throughMinute": 75,
-          "shotsThroughMinute": 7,
-          "shotsAfterRed": 9,
-          "expectedGoalsAfterRed": 0.68,
-          "interpretationHe": "ההשוואה מתארת קצב בעיטות גבוה יותר אחרי הכרטיס האדום, אך אינה מוכיחה שהכרטיס הוא שגרם לעלייה"
-        }
+        "lateWindow": {
+          "afterMinute": 75,
+          "home": {
+            "shots": 9,
+            "expectedGoals": 0.68,
+            "goals": 1,
+            "shotShare": 56.25
+          },
+          "away": {
+            "shots": 1,
+            "expectedGoals": 0.14,
+            "goals": 0,
+            "shotShare": 5.88
+          }
+        },
+        "materialEvents": [
+          {
+            "eventId": "3-77'-68025904",
+            "type": "Red Card",
+            "minute": 77,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerNameHe": "אופק מליקה",
+            "score": {
+              "home": 1,
+              "away": 5
+            },
+            "scoreGap": 4,
+            "home": {
+              "before": {
+                "shots": 7,
+                "expectedGoals": 0.62,
+                "goals": 1
+              },
+              "after": {
+                "shots": 9,
+                "expectedGoals": 0.68,
+                "goals": 1
+              },
+              "afterShotShare": 56.25
+            },
+            "away": {
+              "before": {
+                "shots": 17,
+                "expectedGoals": 3.57,
+                "goals": 5
+              },
+              "after": {
+                "shots": 0,
+                "expectedGoals": 0,
+                "goals": 0
+              },
+              "afterShotShare": 0
+            }
+          }
+        ],
+        "rawShotTotalsNeedGameStateContext": true,
+        "distortingEventId": "3-77'-68025904"
       }
     },
     {
@@ -7589,6 +8450,15 @@
               "y": 38.6
             },
             {
+              "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
+              "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+              "lineupStatus": "Substitute",
+              "roleGroup": "Midfielder",
+              "formationPosition": "Central Midfield",
+              "x": 60.8,
+              "y": 47.6
+            },
+            {
               "playerId": "67cd4ed3-2b59-4e1d-9fd3-2c5d66fc7e95",
               "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
               "lineupStatus": "Starting",
@@ -7605,15 +8475,6 @@
               "formationPosition": "Centre Back",
               "x": 40.2,
               "y": 42.1
-            },
-            {
-              "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
-              "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-              "lineupStatus": "Substitute",
-              "roleGroup": "Midfielder",
-              "formationPosition": "Central Midfield",
-              "x": 60.8,
-              "y": 47.6
             },
             {
               "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
@@ -7755,126 +8616,589 @@
       }
     },
     {
-      "id": "player.dor_peretz",
-      "label": "משחקו של דור פרץ",
-      "sourceView": "api_match_player_stats",
-      "sourceRows": 12,
-      "values": [
-        3,
-        4,
-        2.5,
-        9.7,
-        75,
-        45,
-        2,
-        63,
-        71
-      ],
-      "context": {
-        "playerNameHe": "דור פרץ",
-        "goals": 3,
-        "shots": 4,
-        "expectedGoals": 2.5,
-        "rating": 9.7,
-        "minutes": 75
-      }
-    },
-    {
-      "id": "player.creators",
-      "label": "יוצרי המצבים של מכבי",
-      "sourceView": "api_match_player_stats",
-      "sourceRows": 12,
-      "values": [
-        3,
-        1.49,
-        7,
-        2,
-        1,
-        0.41,
-        2,
-        1,
-        1,
-        0.59,
-        2,
-        1,
-        0.49,
-        3,
-        1
-      ],
-      "context": {
-        "totals": {
-          "assists": 3,
-          "expectedAssists": 1.49,
-          "keyPasses": 7,
-          "bigChances": 2
-        },
-        "players": [
-          {
-            "playerNameHe": "נועם בן הרוש",
-            "assists": 1,
-            "expectedAssists": 0.41,
-            "keyPasses": 2,
-            "bigChancesCreated": 1
-          },
-          {
-            "playerNameHe": "אושר דוידה",
-            "assists": 1,
-            "expectedAssists": 0.59,
-            "keyPasses": 2
-          },
-          {
-            "playerNameHe": "הליו וארלה",
-            "assists": 1,
-            "expectedAssists": 0.49,
-            "keyPasses": 3,
-            "bigChancesCreated": 1
-          }
-        ]
-      }
-    },
-    {
-      "id": "player.right_triangle",
-      "label": "היוצרים בצד ימין של מכבי",
+      "id": "player.match_standouts",
+      "label": "שחקנים בולטים במשחק",
       "sourceView": "api_match_player_stats",
       "sourceRows": 8,
       "values": [
-        2,
-        1,
+        75,
+        9.7,
+        3,
+        0,
         4,
+        4,
+        2.5,
+        0.17,
         1,
+        30,
+        19,
+        3,
+        0,
+        90,
+        8.1,
+        1,
+        0,
+        3,
+        1,
+        0.21,
+        0.46,
+        1,
+        82,
+        52,
+        4,
+        5,
+        63,
+        7.1,
+        0,
+        1,
+        2,
+        0.25,
+        0.49,
+        3,
+        37,
+        22,
+        2,
+        5,
+        90,
+        7.3,
+        0,
+        1,
+        3,
+        1,
+        0.09,
+        0.59,
+        2,
+        39,
+        17,
+        3,
+        3,
+        90,
+        7.4,
+        0,
+        1,
+        2,
+        0.05,
         0.41,
         2,
+        67,
+        49,
+        6,
+        6,
+        90,
+        6.6,
+        0,
+        0,
+        0,
+        0.55,
+        3,
+        67,
+        46,
+        5,
         1,
-        0.59,
+        90,
+        6.5,
+        0,
+        0,
+        6,
+        1,
+        0.25,
+        0.06,
+        1,
+        59,
+        32,
+        6,
+        3,
+        90,
+        7,
+        1,
+        0,
+        3,
+        1,
+        0.32,
+        0.06,
+        1,
+        37,
+        25,
+        3,
         2
       ],
       "context": {
         "players": [
           {
-            "playerNameHe": "נועם בן הרוש",
-            "assists": 1,
-            "expectedAssists": 0.41,
-            "keyPasses": 2
+            "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+            "playerNameHe": "דור פרץ",
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "roleGroup": "Midfielder",
+            "minutes": 75,
+            "metrics": {
+              "aerial_duel_win_pct": 50,
+              "aerial_duels_attempted": 2,
+              "aerial_duels_won": 1,
+              "assists": 0,
+              "backward_passes": 3,
+              "ball_recovery": 0,
+              "big_chances_created": 1,
+              "big_chances_missed": 1,
+              "big_chances_scored": 3,
+              "clearances": 0,
+              "expected_assists": 0.17,
+              "expected_goals": 2.5,
+              "expected_goals_on_target": 3.34,
+              "fouls_made": 0,
+              "goals": 3,
+              "ground_duel_win_pct": 50,
+              "ground_duels_attempted": 2,
+              "ground_duels_won": 1,
+              "hit_woodwork": 1,
+              "interceptions": 0,
+              "key_passes": 1,
+              "minutes": 75,
+              "offsides": 0,
+              "pass_completion_pct": 84,
+              "passes_attempted": 19,
+              "passes_completed": 16,
+              "passes_into_final_third": 3,
+              "possession_lost": 6,
+              "rating_365": 9.7,
+              "shots_on_target": 4,
+              "total_shots": 4,
+              "touches": 30,
+              "was_dribbled_past": 0,
+              "was_fouled": 0
+            }
           },
           {
+            "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+            "playerNameHe": "רוי רביבו",
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "roleGroup": "Defender",
+            "minutes": 90,
+            "metrics": {
+              "assists": 0,
+              "backward_passes": 3,
+              "ball_recovery": 5,
+              "big_chances_created": 1,
+              "blocks": 1,
+              "clearances": 2,
+              "cross_completion_pct": 25,
+              "crosses_attempted": 4,
+              "crosses_completed": 1,
+              "dribble_success_pct": 50,
+              "dribbles_attempted": 2,
+              "expected_assists": 0.46,
+              "expected_goals": 0.21,
+              "expected_goals_on_target": 0.54,
+              "fouls_made": 0,
+              "goals": 1,
+              "interceptions": 1,
+              "key_passes": 1,
+              "minutes": 90,
+              "offsides": 0,
+              "pass_completion_pct": 90,
+              "passes_attempted": 52,
+              "passes_completed": 47,
+              "passes_into_final_third": 4,
+              "possession_lost": 16,
+              "rating_365": 8.1,
+              "shots_blocked": 2,
+              "shots_on_target": 1,
+              "successful_dribbles": 1,
+              "tackle_success_pct": 100,
+              "tackles_attempted": 2,
+              "tackles_won": 2,
+              "total_shots": 3,
+              "touches": 82,
+              "was_dribbled_past": 0,
+              "was_fouled": 1
+            }
+          },
+          {
+            "playerId": "713ec20b-f06b-4502-85cf-ba2ba0d9c770",
+            "playerNameHe": "הליו וארלה",
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "roleGroup": "Attacker",
+            "minutes": 63,
+            "metrics": {
+              "assists": 1,
+              "backward_passes": 3,
+              "ball_recovery": 5,
+              "big_chances_created": 1,
+              "big_chances_missed": 1,
+              "clearances": 0,
+              "dribble_success_pct": 25,
+              "dribbles_attempted": 4,
+              "expected_assists": 0.49,
+              "expected_goals": 0.25,
+              "fouls_made": 1,
+              "goals": 0,
+              "interceptions": 0,
+              "key_passes": 3,
+              "minutes": 63,
+              "offsides": 1,
+              "pass_completion_pct": 82,
+              "passes_attempted": 22,
+              "passes_completed": 18,
+              "passes_into_final_third": 2,
+              "possession_lost": 10,
+              "rating_365": 7.1,
+              "shots_blocked": 1,
+              "shots_off_target": 1,
+              "successful_dribbles": 1,
+              "tackle_success_pct": 50,
+              "tackles_attempted": 2,
+              "tackles_won": 1,
+              "total_shots": 2,
+              "touches": 37,
+              "was_dribbled_past": 1,
+              "was_fouled": 2
+            }
+          },
+          {
+            "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
             "playerNameHe": "אושר דוידה",
-            "assists": 1,
-            "expectedAssists": 0.59,
-            "keyPasses": 2
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "roleGroup": "Attacker",
+            "minutes": 90,
+            "metrics": {
+              "assists": 1,
+              "backward_passes": 6,
+              "ball_recovery": 3,
+              "clearances": 0,
+              "cross_completion_pct": 50,
+              "crosses_attempted": 4,
+              "crosses_completed": 2,
+              "dribble_success_pct": 33,
+              "dribbles_attempted": 3,
+              "expected_assists": 0.59,
+              "expected_goals": 0.09,
+              "expected_goals_on_target": 0.05,
+              "final_third_possession_won": 1,
+              "fouls_made": 2,
+              "goals": 0,
+              "interceptions": 2,
+              "key_passes": 2,
+              "long_pass_completion_pct": 100,
+              "long_passes_attempted": 2,
+              "long_passes_completed": 2,
+              "minutes": 90,
+              "offsides": 0,
+              "pass_completion_pct": 100,
+              "passes_attempted": 17,
+              "passes_completed": 17,
+              "passes_into_final_third": 3,
+              "possession_lost": 7,
+              "rating_365": 7.3,
+              "shots_blocked": 1,
+              "shots_off_target": 1,
+              "shots_on_target": 1,
+              "successful_dribbles": 1,
+              "tackle_success_pct": 100,
+              "tackles_attempted": 2,
+              "tackles_won": 2,
+              "total_shots": 3,
+              "touches": 39,
+              "was_dribbled_past": 0,
+              "was_fouled": 0
+            }
+          },
+          {
+            "playerId": "ff574781-01f2-4586-86c8-e7c7620f2496",
+            "playerNameHe": "נועם בן הרוש",
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "roleGroup": "Defender",
+            "minutes": 90,
+            "metrics": {
+              "assists": 1,
+              "backward_passes": 7,
+              "ball_recovery": 6,
+              "big_chances_created": 1,
+              "blocks": 1,
+              "clearances": 2,
+              "expected_assists": 0.41,
+              "expected_goals": 0.05,
+              "fouls_made": 1,
+              "goals": 0,
+              "interceptions": 0,
+              "key_passes": 2,
+              "minutes": 90,
+              "offsides": 0,
+              "pass_completion_pct": 86,
+              "passes_attempted": 49,
+              "passes_completed": 42,
+              "passes_into_final_third": 6,
+              "possession_lost": 13,
+              "rating_365": 7.4,
+              "shots_off_target": 2,
+              "tackle_success_pct": 100,
+              "tackles_attempted": 3,
+              "tackles_won": 3,
+              "total_shots": 2,
+              "touches": 67,
+              "was_dribbled_past": 0,
+              "was_fouled": 0
+            }
+          },
+          {
+            "playerId": "098e3b9d-fbe2-49d7-9bed-692b201eb781",
+            "playerNameHe": "אופק נדיר",
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "roleGroup": "Defender",
+            "minutes": 90,
+            "metrics": {
+              "assists": 0,
+              "backward_passes": 11,
+              "ball_recovery": 1,
+              "big_chances_created": 2,
+              "clearances": 2,
+              "cross_completion_pct": 38,
+              "crosses_attempted": 8,
+              "crosses_completed": 3,
+              "expected_assists": 0.55,
+              "fouls_made": 0,
+              "goals": 0,
+              "interceptions": 0,
+              "key_passes": 3,
+              "long_pass_completion_pct": 60,
+              "long_passes_attempted": 5,
+              "long_passes_completed": 3,
+              "minutes": 90,
+              "offsides": 0,
+              "pass_completion_pct": 91,
+              "passes_attempted": 46,
+              "passes_completed": 42,
+              "passes_into_final_third": 5,
+              "possession_lost": 12,
+              "rating_365": 6.6,
+              "tackle_success_pct": 100,
+              "tackles_attempted": 1,
+              "tackles_won": 1,
+              "total_shots": 0,
+              "touches": 67,
+              "was_dribbled_past": 0,
+              "was_fouled": 1
+            }
+          },
+          {
+            "playerId": "85837afe-e193-4566-958d-01b06534365a",
+            "playerNameHe": "אנדרו אידוקו",
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "roleGroup": "Attacker",
+            "minutes": 90,
+            "metrics": {
+              "aerial_duel_win_pct": 25,
+              "aerial_duels_attempted": 4,
+              "aerial_duels_won": 1,
+              "assists": 0,
+              "backward_passes": 7,
+              "ball_recovery": 3,
+              "clearances": 1,
+              "cross_completion_pct": 33,
+              "crosses_attempted": 3,
+              "crosses_completed": 1,
+              "dribble_success_pct": 50,
+              "dribbles_attempted": 2,
+              "expected_assists": 0.06,
+              "expected_goals": 0.25,
+              "expected_goals_on_target": 0.09,
+              "final_third_possession_won": 1,
+              "fouls_made": 0,
+              "goals": 0,
+              "ground_duel_win_pct": 18,
+              "ground_duels_attempted": 11,
+              "ground_duels_won": 2,
+              "interceptions": 0,
+              "key_passes": 1,
+              "long_pass_completion_pct": 50,
+              "long_passes_attempted": 2,
+              "long_passes_completed": 1,
+              "minutes": 90,
+              "offsides": 0,
+              "pass_completion_pct": 84,
+              "passes_attempted": 32,
+              "passes_completed": 27,
+              "passes_into_final_third": 6,
+              "possession_lost": 19,
+              "rating_365": 6.5,
+              "shots_blocked": 2,
+              "shots_off_target": 3,
+              "shots_on_target": 1,
+              "successful_dribbles": 1,
+              "total_shots": 6,
+              "touches": 59,
+              "was_dribbled_past": 0,
+              "was_fouled": 2
+            }
+          },
+          {
+            "playerId": "ec3d7fb9-7a4e-46fd-bca3-4b4c17025174",
+            "playerNameHe": "ויטאלי דאמשקאן",
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "roleGroup": "Attacker",
+            "minutes": 90,
+            "metrics": {
+              "aerial_duel_win_pct": 50,
+              "aerial_duels_attempted": 4,
+              "aerial_duels_won": 2,
+              "assists": 0,
+              "backward_passes": 9,
+              "ball_recovery": 2,
+              "big_chances_missed": 1,
+              "clearances": 0,
+              "cross_completion_pct": 100,
+              "crosses_attempted": 1,
+              "crosses_completed": 1,
+              "expected_assists": 0.06,
+              "expected_goals": 0.32,
+              "expected_goals_on_target": 0.18,
+              "final_third_possession_won": 1,
+              "fouls_made": 2,
+              "goals": 1,
+              "ground_duel_win_pct": 29,
+              "ground_duels_attempted": 7,
+              "ground_duels_won": 2,
+              "interceptions": 0,
+              "key_passes": 1,
+              "long_pass_completion_pct": 100,
+              "long_passes_attempted": 2,
+              "long_passes_completed": 2,
+              "minutes": 90,
+              "offsides": 1,
+              "pass_completion_pct": 84,
+              "passes_attempted": 25,
+              "passes_completed": 21,
+              "passes_into_final_third": 3,
+              "possession_lost": 10,
+              "rating_365": 7,
+              "shots_blocked": 1,
+              "shots_off_target": 1,
+              "shots_on_target": 1,
+              "tackle_success_pct": 100,
+              "tackles_attempted": 1,
+              "tackles_won": 1,
+              "total_shots": 3,
+              "touches": 37,
+              "was_dribbled_past": 0,
+              "was_fouled": 2
+            }
           }
         ]
       }
     },
     {
-      "id": "hapoel.best_chance",
-      "label": "ההזדמנות הגדולה של ישראל דאפה",
+      "id": "match.best_chances",
+      "label": "המצבים האיכותיים במשחק",
       "sourceView": "api_match_shots",
-      "sourceRows": 1,
+      "sourceRows": 8,
       "values": [
+        63,
+        0.91,
+        1,
+        45,
+        0.79,
+        0.68,
+        71,
+        0.45,
+        0.76,
+        44,
+        0.34,
+        0.91,
         20,
         0.28,
-        0.65
-      ]
+        0.65,
+        35,
+        0.22,
+        0,
+        87,
+        0.2,
+        0,
+        21,
+        0.17,
+        0
+      ],
+      "context": {
+        "shots": [
+          {
+            "minute": 63,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+            "playerNameHe": "דור פרץ",
+            "expectedGoals": 0.91,
+            "expectedGoalsOnTarget": 1,
+            "outcome": "Goal"
+          },
+          {
+            "minute": 45,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+            "playerNameHe": "דור פרץ",
+            "expectedGoals": 0.79,
+            "expectedGoalsOnTarget": 0.68,
+            "outcome": "Goal"
+          },
+          {
+            "minute": 71,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+            "playerNameHe": "דור פרץ",
+            "expectedGoals": 0.45,
+            "expectedGoalsOnTarget": 0.76,
+            "outcome": "Goal"
+          },
+          {
+            "minute": 44,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+            "playerNameHe": "דור פרץ",
+            "expectedGoals": 0.34,
+            "expectedGoalsOnTarget": 0.91,
+            "outcome": "Saved"
+          },
+          {
+            "minute": 20,
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "teamNameHe": "הפועל ירושלים",
+            "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
+            "playerNameHe": "ישראל דאפה",
+            "expectedGoals": 0.28,
+            "expectedGoalsOnTarget": 0.65,
+            "outcome": "Saved"
+          },
+          {
+            "minute": 35,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerId": "713ec20b-f06b-4502-85cf-ba2ba0d9c770",
+            "playerNameHe": "הליו וארלה",
+            "expectedGoals": 0.22,
+            "expectedGoalsOnTarget": 0,
+            "outcome": "Missed"
+          },
+          {
+            "minute": 87,
+            "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+            "teamNameHe": "הפועל ירושלים",
+            "playerId": "ec3d7fb9-7a4e-46fd-bca3-4b4c17025174",
+            "playerNameHe": "ויטאלי דאמשקאן",
+            "expectedGoals": 0.2,
+            "expectedGoalsOnTarget": 0,
+            "outcome": "Missed"
+          },
+          {
+            "minute": 21,
+            "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+            "teamNameHe": "מכבי תל אביב",
+            "playerId": "8a8630d8-5074-4607-91c0-f9f6a07acfa4",
+            "playerNameHe": "עידו שחר",
+            "expectedGoals": 0.17,
+            "expectedGoalsOnTarget": 0,
+            "outcome": "Missed"
+          }
+        ]
+      }
     },
     {
       "id": "timeline.goals",
@@ -7902,19 +9226,20 @@
         33,
         16,
         17,
-        1.3,
-        3.57
+        1.27,
+        3.56
       ],
       "context": {
+        "metricNoteHe": "סיכום xG משתמש בנתון הקבוצתי הרשמי; מיקומי הבעיטות עצמם מגיעים מאירועי הבעיטה",
         "home": {
           "teamNameHe": "הפועל ירושלים",
           "shots": 16,
-          "expectedGoals": 1.3
+          "expectedGoals": 1.27
         },
         "away": {
           "teamNameHe": "מכבי תל אביב",
           "shots": 17,
-          "expectedGoals": 3.57
+          "expectedGoals": 3.56
         }
       }
     },
@@ -10157,6 +11482,309 @@
       }
     },
     {
+      "id": "history.player.9f103f85-cedd-48b6-88ae-44107efdc0db",
+      "label": "סייד אבו פרחי מול הופעותיו הקודמות",
+      "sourceView": "api_match_player_stats",
+      "sourceRows": 5,
+      "values": [
+        90,
+        5,
+        319,
+        11,
+        36.67,
+        125,
+        35.27,
+        8.51,
+        1.4,
+        3.97,
+        5,
+        319,
+        8,
+        26.67,
+        68,
+        19.18,
+        4.41,
+        7.49,
+        39.05,
+        5,
+        319,
+        3,
+        10,
+        50,
+        14.11,
+        4.22,
+        -4.11,
+        -29.13,
+        5,
+        319,
+        2,
+        6.67,
+        7,
+        1.97,
+        1.83,
+        4.7,
+        238.58,
+        5,
+        319,
+        0,
+        0,
+        18,
+        5.08,
+        1.62,
+        -5.08,
+        -100,
+        5,
+        319,
+        5,
+        16.67,
+        42,
+        11.85,
+        3.05,
+        4.82,
+        40.68,
+        5,
+        319,
+        1,
+        3.33,
+        7,
+        1.97,
+        1.29,
+        1.36,
+        69.04,
+        5,
+        319,
+        22,
+        6.41,
+        2.42,
+        5,
+        309,
+        7,
+        2.04,
+        1.96,
+        5,
+        309,
+        13,
+        3.79,
+        0.77,
+        5,
+        309,
+        5,
+        1.46,
+        0.51,
+        5,
+        309,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        319,
+        1,
+        3.33,
+        0,
+        0,
+        0,
+        3.33,
+        5,
+        319,
+        0,
+        0,
+        7,
+        1.97,
+        2.22,
+        -1.97,
+        -100,
+        5,
+        319,
+        0,
+        0,
+        6,
+        1.69,
+        1.15,
+        -1.69,
+        -100,
+        5,
+        319
+      ],
+      "context": {
+        "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
+        "nameHe": "סייד אבו פרחי",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "appearanceCount": 5,
+        "totalMinutes": 319,
+        "metrics": {
+          "touches": {
+            "current": 11,
+            "currentPer90": 36.67,
+            "previousTotal": 125,
+            "previousPer90": 35.27,
+            "previousStdDevPer90": 8.51,
+            "deltaPer90": 1.4,
+            "changePercent": 3.97,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "passes_attempted": {
+            "current": 8,
+            "currentPer90": 26.67,
+            "previousTotal": 68,
+            "previousPer90": 19.18,
+            "previousStdDevPer90": 4.41,
+            "deltaPer90": 7.49,
+            "changePercent": 39.05,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "passes_completed": {
+            "current": 3,
+            "currentPer90": 10,
+            "previousTotal": 50,
+            "previousPer90": 14.11,
+            "previousStdDevPer90": 4.22,
+            "deltaPer90": -4.11,
+            "changePercent": -29.13,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "passes_into_final_third": {
+            "current": 2,
+            "currentPer90": 6.67,
+            "previousTotal": 7,
+            "previousPer90": 1.97,
+            "previousStdDevPer90": 1.83,
+            "deltaPer90": 4.7,
+            "changePercent": 238.58,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "backward_passes": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 18,
+            "previousPer90": 5.08,
+            "previousStdDevPer90": 1.62,
+            "deltaPer90": -5.08,
+            "changePercent": -100,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "possession_lost": {
+            "current": 5,
+            "currentPer90": 16.67,
+            "previousTotal": 42,
+            "previousPer90": 11.85,
+            "previousStdDevPer90": 3.05,
+            "deltaPer90": 4.82,
+            "changePercent": 40.68,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "ball_recovery": {
+            "current": 1,
+            "currentPer90": 3.33,
+            "previousTotal": 7,
+            "previousPer90": 1.97,
+            "previousStdDevPer90": 1.29,
+            "deltaPer90": 1.36,
+            "changePercent": 69.04,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "ground_duels_attempted": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 22,
+            "previousPer90": 6.41,
+            "previousStdDevPer90": 2.42,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "ground_duels_won": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 7,
+            "previousPer90": 2.04,
+            "previousStdDevPer90": 1.96,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "aerial_duels_attempted": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 13,
+            "previousPer90": 3.79,
+            "previousStdDevPer90": 0.77,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "aerial_duels_won": {
+            "current": null,
+            "currentPer90": null,
+            "previousTotal": 5,
+            "previousPer90": 1.46,
+            "previousStdDevPer90": 0.51,
+            "deltaPer90": null,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 309
+          },
+          "interceptions": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 0,
+            "previousPer90": 0,
+            "previousStdDevPer90": 0,
+            "deltaPer90": 0,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "clearances": {
+            "current": 1,
+            "currentPer90": 3.33,
+            "previousTotal": 0,
+            "previousPer90": 0,
+            "previousStdDevPer90": 0,
+            "deltaPer90": 3.33,
+            "changePercent": null,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "was_fouled": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 7,
+            "previousPer90": 1.97,
+            "previousStdDevPer90": 2.22,
+            "deltaPer90": -1.97,
+            "changePercent": -100,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          },
+          "fouls_made": {
+            "current": 0,
+            "currentPer90": 0,
+            "previousTotal": 6,
+            "previousPer90": 1.69,
+            "previousStdDevPer90": 1.15,
+            "deltaPer90": -1.69,
+            "changePercent": -100,
+            "sampleSize": 5,
+            "minutesWithMetric": 319
+          }
+        },
+        "notableChanges": []
+      }
+    },
+    {
       "id": "history.player.85837afe-e193-4566-958d-01b06534365a",
       "label": "אנדרו אידוקו מול הופעותיו הקודמות",
       "sourceView": "api_match_player_stats",
@@ -10499,303 +12127,305 @@
       }
     },
     {
-      "id": "history.player.9f103f85-cedd-48b6-88ae-44107efdc0db",
-      "label": "סייד אבו פרחי מול הופעותיו הקודמות",
+      "id": "history.player.435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+      "label": "רוי רביבו מול הופעותיו הקודמות",
       "sourceView": "api_match_player_stats",
       "sourceRows": 5,
       "values": [
         90,
         5,
-        319,
-        11,
-        36.67,
-        125,
-        35.27,
-        8.51,
-        1.4,
-        3.97,
+        352,
+        82,
+        82,
+        274,
+        70.06,
+        23.85,
+        11.94,
+        17.04,
         5,
-        319,
-        8,
-        26.67,
-        68,
-        19.18,
-        4.41,
-        7.49,
-        39.05,
+        352,
+        52,
+        52,
+        162,
+        41.42,
+        18.84,
+        10.58,
+        25.54,
         5,
-        319,
+        352,
+        47,
+        47,
+        136,
+        34.77,
+        15.38,
+        12.23,
+        35.17,
+        5,
+        352,
+        4,
+        4,
+        36,
+        9.2,
+        7.44,
+        -5.2,
+        -56.52,
+        5,
+        352,
         3,
-        10,
-        50,
-        14.11,
-        4.22,
-        -4.11,
-        -29.13,
+        3,
+        26,
+        6.65,
+        2.74,
+        -3.65,
+        -54.89,
         5,
-        319,
+        352,
+        16,
+        16,
+        68,
+        17.39,
+        13.42,
+        -1.39,
+        -7.99,
+        5,
+        352,
+        5,
+        5,
+        15,
+        3.84,
+        1.52,
+        1.16,
+        30.21,
+        5,
+        352,
+        32,
+        6.4,
+        3.5,
+        5,
+        450,
+        16,
+        3.2,
+        2.32,
+        5,
+        450,
+        16,
+        3.2,
+        1.17,
+        5,
+        450,
+        9,
+        1.8,
+        1.17,
+        5,
+        450,
+        1,
+        1,
+        1,
+        0.26,
+        0.54,
+        0.74,
+        284.62,
+        5,
+        352,
         2,
-        6.67,
-        7,
-        1.97,
-        1.83,
-        4.7,
-        238.58,
+        2,
+        9,
+        2.3,
+        1.42,
+        -0.3,
+        -13.04,
         5,
-        319,
-        0,
-        0,
-        18,
-        5.08,
-        1.62,
-        -5.08,
-        -100,
-        5,
-        319,
-        5,
-        16.67,
-        42,
-        11.85,
-        3.05,
-        4.82,
-        40.68,
-        5,
-        319,
+        352,
         1,
-        3.33,
-        7,
-        1.97,
-        1.29,
-        1.36,
-        69.04,
-        5,
-        319,
-        22,
-        6.41,
-        2.42,
-        5,
-        309,
-        7,
-        2.04,
-        1.96,
-        5,
-        309,
-        13,
-        3.79,
-        0.77,
-        5,
-        309,
-        5,
-        1.46,
-        0.51,
-        5,
-        309,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        5,
-        319,
         1,
-        3.33,
-        0,
-        0,
-        0,
-        3.33,
+        10,
+        2.56,
+        1.6,
+        -1.56,
+        -60.94,
         5,
-        319,
+        352,
         0,
         0,
-        7,
-        1.97,
-        2.22,
-        -1.97,
+        5,
+        1.28,
+        1.48,
+        -1.28,
         -100,
         5,
-        319,
-        0,
-        0,
-        6,
-        1.69,
-        1.15,
-        -1.69,
-        -100,
-        5,
-        319
+        352
       ],
       "context": {
-        "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
-        "nameHe": "סייד אבו פרחי",
+        "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+        "nameHe": "רוי רביבו",
         "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
         "appearanceCount": 5,
-        "totalMinutes": 319,
+        "totalMinutes": 352,
         "metrics": {
           "touches": {
-            "current": 11,
-            "currentPer90": 36.67,
-            "previousTotal": 125,
-            "previousPer90": 35.27,
-            "previousStdDevPer90": 8.51,
-            "deltaPer90": 1.4,
-            "changePercent": 3.97,
+            "current": 82,
+            "currentPer90": 82,
+            "previousTotal": 274,
+            "previousPer90": 70.06,
+            "previousStdDevPer90": 23.85,
+            "deltaPer90": 11.94,
+            "changePercent": 17.04,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "passes_attempted": {
-            "current": 8,
-            "currentPer90": 26.67,
-            "previousTotal": 68,
-            "previousPer90": 19.18,
-            "previousStdDevPer90": 4.41,
-            "deltaPer90": 7.49,
-            "changePercent": 39.05,
+            "current": 52,
+            "currentPer90": 52,
+            "previousTotal": 162,
+            "previousPer90": 41.42,
+            "previousStdDevPer90": 18.84,
+            "deltaPer90": 10.58,
+            "changePercent": 25.54,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "passes_completed": {
-            "current": 3,
-            "currentPer90": 10,
-            "previousTotal": 50,
-            "previousPer90": 14.11,
-            "previousStdDevPer90": 4.22,
-            "deltaPer90": -4.11,
-            "changePercent": -29.13,
+            "current": 47,
+            "currentPer90": 47,
+            "previousTotal": 136,
+            "previousPer90": 34.77,
+            "previousStdDevPer90": 15.38,
+            "deltaPer90": 12.23,
+            "changePercent": 35.17,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "passes_into_final_third": {
-            "current": 2,
-            "currentPer90": 6.67,
-            "previousTotal": 7,
-            "previousPer90": 1.97,
-            "previousStdDevPer90": 1.83,
-            "deltaPer90": 4.7,
-            "changePercent": 238.58,
+            "current": 4,
+            "currentPer90": 4,
+            "previousTotal": 36,
+            "previousPer90": 9.2,
+            "previousStdDevPer90": 7.44,
+            "deltaPer90": -5.2,
+            "changePercent": -56.52,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "backward_passes": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 18,
-            "previousPer90": 5.08,
-            "previousStdDevPer90": 1.62,
-            "deltaPer90": -5.08,
-            "changePercent": -100,
+            "current": 3,
+            "currentPer90": 3,
+            "previousTotal": 26,
+            "previousPer90": 6.65,
+            "previousStdDevPer90": 2.74,
+            "deltaPer90": -3.65,
+            "changePercent": -54.89,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "possession_lost": {
-            "current": 5,
-            "currentPer90": 16.67,
-            "previousTotal": 42,
-            "previousPer90": 11.85,
-            "previousStdDevPer90": 3.05,
-            "deltaPer90": 4.82,
-            "changePercent": 40.68,
+            "current": 16,
+            "currentPer90": 16,
+            "previousTotal": 68,
+            "previousPer90": 17.39,
+            "previousStdDevPer90": 13.42,
+            "deltaPer90": -1.39,
+            "changePercent": -7.99,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "ball_recovery": {
-            "current": 1,
-            "currentPer90": 3.33,
-            "previousTotal": 7,
-            "previousPer90": 1.97,
-            "previousStdDevPer90": 1.29,
-            "deltaPer90": 1.36,
-            "changePercent": 69.04,
+            "current": 5,
+            "currentPer90": 5,
+            "previousTotal": 15,
+            "previousPer90": 3.84,
+            "previousStdDevPer90": 1.52,
+            "deltaPer90": 1.16,
+            "changePercent": 30.21,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "ground_duels_attempted": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 22,
-            "previousPer90": 6.41,
-            "previousStdDevPer90": 2.42,
+            "previousTotal": 32,
+            "previousPer90": 6.4,
+            "previousStdDevPer90": 3.5,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "ground_duels_won": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 7,
-            "previousPer90": 2.04,
-            "previousStdDevPer90": 1.96,
+            "previousTotal": 16,
+            "previousPer90": 3.2,
+            "previousStdDevPer90": 2.32,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "aerial_duels_attempted": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 13,
-            "previousPer90": 3.79,
-            "previousStdDevPer90": 0.77,
+            "previousTotal": 16,
+            "previousPer90": 3.2,
+            "previousStdDevPer90": 1.17,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "aerial_duels_won": {
             "current": null,
             "currentPer90": null,
-            "previousTotal": 5,
-            "previousPer90": 1.46,
-            "previousStdDevPer90": 0.51,
+            "previousTotal": 9,
+            "previousPer90": 1.8,
+            "previousStdDevPer90": 1.17,
             "deltaPer90": null,
             "changePercent": null,
             "sampleSize": 5,
-            "minutesWithMetric": 309
+            "minutesWithMetric": 450
           },
           "interceptions": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 0,
-            "previousPer90": 0,
-            "previousStdDevPer90": 0,
-            "deltaPer90": 0,
-            "changePercent": null,
+            "current": 1,
+            "currentPer90": 1,
+            "previousTotal": 1,
+            "previousPer90": 0.26,
+            "previousStdDevPer90": 0.54,
+            "deltaPer90": 0.74,
+            "changePercent": 284.62,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "clearances": {
-            "current": 1,
-            "currentPer90": 3.33,
-            "previousTotal": 0,
-            "previousPer90": 0,
-            "previousStdDevPer90": 0,
-            "deltaPer90": 3.33,
-            "changePercent": null,
+            "current": 2,
+            "currentPer90": 2,
+            "previousTotal": 9,
+            "previousPer90": 2.3,
+            "previousStdDevPer90": 1.42,
+            "deltaPer90": -0.3,
+            "changePercent": -13.04,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "was_fouled": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 7,
-            "previousPer90": 1.97,
-            "previousStdDevPer90": 2.22,
-            "deltaPer90": -1.97,
-            "changePercent": -100,
+            "current": 1,
+            "currentPer90": 1,
+            "previousTotal": 10,
+            "previousPer90": 2.56,
+            "previousStdDevPer90": 1.6,
+            "deltaPer90": -1.56,
+            "changePercent": -60.94,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           },
           "fouls_made": {
             "current": 0,
             "currentPer90": 0,
-            "previousTotal": 6,
-            "previousPer90": 1.69,
-            "previousStdDevPer90": 1.15,
-            "deltaPer90": -1.69,
+            "previousTotal": 5,
+            "previousPer90": 1.28,
+            "previousStdDevPer90": 1.48,
+            "deltaPer90": -1.28,
             "changePercent": -100,
             "sampleSize": 5,
-            "minutesWithMetric": 319
+            "minutesWithMetric": 352
           }
         },
         "notableChanges": []
@@ -11128,311 +12758,6 @@
       }
     },
     {
-      "id": "history.player.435633b7-a385-48e2-88b9-73c3c0cdb7d7",
-      "label": "רוי רביבו מול הופעותיו הקודמות",
-      "sourceView": "api_match_player_stats",
-      "sourceRows": 5,
-      "values": [
-        90,
-        5,
-        352,
-        82,
-        82,
-        274,
-        70.06,
-        23.85,
-        11.94,
-        17.04,
-        5,
-        352,
-        52,
-        52,
-        162,
-        41.42,
-        18.84,
-        10.58,
-        25.54,
-        5,
-        352,
-        47,
-        47,
-        136,
-        34.77,
-        15.38,
-        12.23,
-        35.17,
-        5,
-        352,
-        4,
-        4,
-        36,
-        9.2,
-        7.44,
-        -5.2,
-        -56.52,
-        5,
-        352,
-        3,
-        3,
-        26,
-        6.65,
-        2.74,
-        -3.65,
-        -54.89,
-        5,
-        352,
-        16,
-        16,
-        68,
-        17.39,
-        13.42,
-        -1.39,
-        -7.99,
-        5,
-        352,
-        5,
-        5,
-        15,
-        3.84,
-        1.52,
-        1.16,
-        30.21,
-        5,
-        352,
-        32,
-        6.4,
-        3.5,
-        5,
-        450,
-        16,
-        3.2,
-        2.32,
-        5,
-        450,
-        16,
-        3.2,
-        1.17,
-        5,
-        450,
-        9,
-        1.8,
-        1.17,
-        5,
-        450,
-        1,
-        1,
-        1,
-        0.26,
-        0.54,
-        0.74,
-        284.62,
-        5,
-        352,
-        2,
-        2,
-        9,
-        2.3,
-        1.42,
-        -0.3,
-        -13.04,
-        5,
-        352,
-        1,
-        1,
-        10,
-        2.56,
-        1.6,
-        -1.56,
-        -60.94,
-        5,
-        352,
-        0,
-        0,
-        5,
-        1.28,
-        1.48,
-        -1.28,
-        -100,
-        5,
-        352
-      ],
-      "context": {
-        "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
-        "nameHe": "רוי רביבו",
-        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-        "appearanceCount": 5,
-        "totalMinutes": 352,
-        "metrics": {
-          "touches": {
-            "current": 82,
-            "currentPer90": 82,
-            "previousTotal": 274,
-            "previousPer90": 70.06,
-            "previousStdDevPer90": 23.85,
-            "deltaPer90": 11.94,
-            "changePercent": 17.04,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "passes_attempted": {
-            "current": 52,
-            "currentPer90": 52,
-            "previousTotal": 162,
-            "previousPer90": 41.42,
-            "previousStdDevPer90": 18.84,
-            "deltaPer90": 10.58,
-            "changePercent": 25.54,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "passes_completed": {
-            "current": 47,
-            "currentPer90": 47,
-            "previousTotal": 136,
-            "previousPer90": 34.77,
-            "previousStdDevPer90": 15.38,
-            "deltaPer90": 12.23,
-            "changePercent": 35.17,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "passes_into_final_third": {
-            "current": 4,
-            "currentPer90": 4,
-            "previousTotal": 36,
-            "previousPer90": 9.2,
-            "previousStdDevPer90": 7.44,
-            "deltaPer90": -5.2,
-            "changePercent": -56.52,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "backward_passes": {
-            "current": 3,
-            "currentPer90": 3,
-            "previousTotal": 26,
-            "previousPer90": 6.65,
-            "previousStdDevPer90": 2.74,
-            "deltaPer90": -3.65,
-            "changePercent": -54.89,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "possession_lost": {
-            "current": 16,
-            "currentPer90": 16,
-            "previousTotal": 68,
-            "previousPer90": 17.39,
-            "previousStdDevPer90": 13.42,
-            "deltaPer90": -1.39,
-            "changePercent": -7.99,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "ball_recovery": {
-            "current": 5,
-            "currentPer90": 5,
-            "previousTotal": 15,
-            "previousPer90": 3.84,
-            "previousStdDevPer90": 1.52,
-            "deltaPer90": 1.16,
-            "changePercent": 30.21,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "ground_duels_attempted": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 32,
-            "previousPer90": 6.4,
-            "previousStdDevPer90": 3.5,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "ground_duels_won": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 16,
-            "previousPer90": 3.2,
-            "previousStdDevPer90": 2.32,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "aerial_duels_attempted": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 16,
-            "previousPer90": 3.2,
-            "previousStdDevPer90": 1.17,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "aerial_duels_won": {
-            "current": null,
-            "currentPer90": null,
-            "previousTotal": 9,
-            "previousPer90": 1.8,
-            "previousStdDevPer90": 1.17,
-            "deltaPer90": null,
-            "changePercent": null,
-            "sampleSize": 5,
-            "minutesWithMetric": 450
-          },
-          "interceptions": {
-            "current": 1,
-            "currentPer90": 1,
-            "previousTotal": 1,
-            "previousPer90": 0.26,
-            "previousStdDevPer90": 0.54,
-            "deltaPer90": 0.74,
-            "changePercent": 284.62,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "clearances": {
-            "current": 2,
-            "currentPer90": 2,
-            "previousTotal": 9,
-            "previousPer90": 2.3,
-            "previousStdDevPer90": 1.42,
-            "deltaPer90": -0.3,
-            "changePercent": -13.04,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "was_fouled": {
-            "current": 1,
-            "currentPer90": 1,
-            "previousTotal": 10,
-            "previousPer90": 2.56,
-            "previousStdDevPer90": 1.6,
-            "deltaPer90": -1.56,
-            "changePercent": -60.94,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          },
-          "fouls_made": {
-            "current": 0,
-            "currentPer90": 0,
-            "previousTotal": 5,
-            "previousPer90": 1.28,
-            "previousStdDevPer90": 1.48,
-            "deltaPer90": -1.28,
-            "changePercent": -100,
-            "sampleSize": 5,
-            "minutesWithMetric": 352
-          }
-        },
-        "notableChanges": []
-      }
-    },
-    {
       "id": "history.player.1ead46df-49b8-49ba-88dd-3ee49cbce441",
       "label": "ינאי דיסטלפילד מול הופעותיו הקודמות",
       "sourceView": "api_match_player_stats",
@@ -11708,7 +13033,7 @@
   ],
   "factCheck": {
     "status": "passed",
-    "checkedAt": "2026-08-27T05:19:54.991Z",
+    "checkedAt": "2026-08-27T23:20:46.420Z",
     "checks": [
       {
         "id": "match-ended",
@@ -11730,37 +13055,37 @@
       },
       {
         "id": "shots-home",
-        "label": "בעיטות הפועל תואמות למפת הבעיטות",
+        "label": "בעיטות הפועל ירושלים תואמות למפת הבעיטות",
         "status": "passed",
         "detail": "16 בעיטות"
       },
       {
         "id": "shots-away",
-        "label": "בעיטות מכבי תואמות למפת הבעיטות",
+        "label": "בעיטות מכבי תל אביב תואמות למפת הבעיטות",
         "status": "passed",
         "detail": "17 בעיטות"
       },
       {
         "id": "target-home",
-        "label": "בעיטות הפועל למסגרת תואמות",
+        "label": "בעיטות הפועל ירושלים למסגרת תואמות",
         "status": "passed",
         "detail": "5 למסגרת"
       },
       {
         "id": "target-away",
-        "label": "בעיטות מכבי למסגרת תואמות",
+        "label": "בעיטות מכבי תל אביב למסגרת תואמות",
         "status": "passed",
         "detail": "8 למסגרת"
       },
       {
         "id": "xg-home",
-        "label": "xG הפועל עקבי בין המקורות",
+        "label": "xG הפועל ירושלים עקבי בין המקורות",
         "status": "passed",
         "detail": "1.27 מול 1.3"
       },
       {
         "id": "xg-away",
-        "label": "xG מכבי עקבי בין המקורות",
+        "label": "xG מכבי תל אביב עקבי בין המקורות",
         "status": "passed",
         "detail": "3.56 מול 3.57"
       },
@@ -11810,25 +13135,49 @@
         "id": "editorial-review",
         "label": "הנוסח עבר בקרת עברית, בהירות ורצף",
         "status": "passed",
-        "detail": "הניסוח הלא טבעי \"בבעיטה שערכה 0.09 xG\" הוחלף ב\"בבעיטה בשווי 0.09 xG\". | המונח \"החזרות כדור\" הוחלף ב\"חילוצי כדור\". | הוסרו ערכי העומק 57.6 ו-43.3, שלא ניתן היה לפרשם בלי הסבר על סולם המדידה; נשמרה הפרשנות המבנית הנתמכת במפת החום. | במסקנה הובהר שנתוני ההחזקה הם 51% ו-49%. | הפסקה על הרחקת אופק מליקה שולבה תחת כותרת שמכסה גם את זרימת המשחק המאוחרת. | נשמרה השוואה היסטורית של כל קבוצה לחמשת משחקיה הקודמים, וכן השוואת השחקן המובהקת של אופק נדיר."
+        "detail": "הכותרת והפתיח נערכו כך שיבהירו מיד מה נמדד ומדוע מספר הבעיטות הסופי מטעה. | נוסחים סיבתיים כמו \"הכריעה באמצעות\" ו\"מסביר את התוצאה\" הוחלפו בתיאור הפערים שנצפו בזרימת המשחק ובאיכות המצבים. | דור פרץ וסייד אבו פרחי הוזכרו כאירועים במשחק הנוכחי, ללא הפיכתם למגמה היסטורית. | ההשוואות ההיסטוריות, מפת החום וניתוח חוליות הקישור הושמטו בהתאם לתוכנית הניתוח."
       },
       {
         "id": "independent-quality-review",
         "label": "מבקר איכות בלתי־תלוי אישר את הנוסח",
         "status": "passed",
-        "detail": "אושר בניסיון 2"
+        "detail": "אושר בניסיון 1"
       },
       {
-        "id": "analytical-coverage",
-        "label": "הכתבה כוללת ניתוח מרחבי ומאבק בין חוליות",
+        "id": "analysis-plan",
+        "label": "האנליסט בחר תזה, תובנות והשמטות תקינות",
         "status": "passed",
-        "detail": "מרחב: כן; matchup: כן; נדרשים heatmap.spatial_profile ומזהה matchup.*"
+        "detail": "4 תובנות ו-4 קטגוריות שהושמטו"
       },
       {
-        "id": "historical-coverage",
-        "label": "הכתבה משווה את הקבוצות והשחקנים להופעות קודמות",
+        "id": "plan-followed",
+        "label": "הכתבה עוקבת אחר התזה והקשת הסיפורית",
         "status": "passed",
-        "detail": "שתי קבוצות: כן; חריגת שחקן: כן"
+        "detail": "4 שיוכי תובנה נבדקו"
+      },
+      {
+        "id": "game-state-story",
+        "label": "מצב המשחק מקבל משקל לפני המספרים המצטברים",
+        "status": "passed",
+        "detail": "נתוני הבעיטות דורשים הקשר באחד מ-2 הסעיפים הראשונים"
+      },
+      {
+        "id": "number-discipline",
+        "label": "המספרים תומכים בסיפור ואינם מחליפים אותו",
+        "status": "passed",
+        "detail": "מספרים בפסקאות: 4, 5, 4, 4, 2, 2, 2, 2"
+      },
+      {
+        "id": "takeaways-summarize",
+        "label": "התקציר אינו מציג מספרים חדשים",
+        "status": "passed",
+        "detail": "כל מספר בתקציר הופיע קודם בגוף הכתבה"
+      },
+      {
+        "id": "graphic-plan",
+        "label": "הגרפיקות נבחרו עבור תובנות ושחקנים קיימים",
+        "status": "passed",
+        "detail": "2 גרפיקות מתוכננות"
       },
       {
         "id": "structured-evidence-context",
@@ -11840,13 +13189,13 @@
         "id": "article-tags",
         "label": "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה",
         "status": "passed",
-        "detail": "10 תגיות נשמרו"
+        "detail": "6 תגיות נשמרו"
       },
       {
         "id": "evidence-links",
         "label": "לכל טענה יש הפניה לראיות",
         "status": "passed",
-        "detail": "16 טענות מקושרות"
+        "detail": "14 טענות מקושרות"
       },
       {
         "id": "numeric-claims",
@@ -11855,8 +13204,8 @@
         "detail": "לא נמצאו מספרים לא מבוססים"
       }
     ],
-    "evidenceCount": 32,
-    "claimCount": 16,
+    "evidenceCount": 30,
+    "claimCount": 14,
     "sourceViews": [
       "api_matches",
       "api_match_team_stats",
