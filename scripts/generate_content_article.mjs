@@ -6,6 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
+import { buildGameStateContext, buildInsightCandidates, gameStateEvidenceValues } from "./content_analysis.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -647,28 +648,30 @@ function historicalPlayerEvidenceValues(player) {
   ];
 }
 
-function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile, historicalContext) {
-  const dor = players.find((player) => player.name === "Dor Peretz");
-  const creators = players.filter((player) => ["Hélio Varela", "Noam Ben Harush", "Osher Davida"].includes(player.name));
-  const rightSideCreators = players.filter((player) => ["Noam Ben Harush", "Osher Davida"].includes(player.name));
-  const creatorTotals = {
-    assists: creators.reduce((sum, player) => sum + Number(player.metrics.assists ?? 0), 0),
-    expectedAssists: round(creators.reduce((sum, player) => sum + Number(player.metrics.expected_assists ?? 0), 0)),
-    keyPasses: creators.reduce((sum, player) => sum + Number(player.metrics.key_passes ?? 0), 0),
-    bigChances: creators.reduce((sum, player) => sum + Number(player.metrics.big_chances_created ?? 0), 0),
-  };
+function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile, historicalContext, gameStateContext) {
   const goals = shots.filter((shot) => shot.outcome === "Goal");
-  const dappaChance = shots.find((shot) => shot.display_name === "Israel Dappa" && shot.xg >= 0.2);
+  const firstGoal = [...goals].sort((left, right) => Number(left.minute) - Number(right.minute))[0];
+  const standoutPlayers = [...players]
+    .filter((player) => Number(player.minutes ?? 0) >= 30 && player.roleGroup !== "Goalkeeper")
+    .sort((left, right) => {
+      const score = (player) => (
+        Number(player.metrics.rating_365 ?? 0)
+        + Number(player.metrics.expected_goals ?? 0) * 2
+        + Number(player.metrics.expected_assists ?? 0) * 2
+        + Number(player.metrics.key_passes ?? 0) * 0.5
+        + Number(player.metrics.total_shots ?? 0) * 0.25
+      );
+      return score(right) - score(left);
+    })
+    .slice(0, 8);
+  const bestChances = [...shots]
+    .sort((left, right) => Number(right.xg ?? 0) - Number(left.xg ?? 0))
+    .slice(0, 8);
   const homeMidfield = unitMatchups.home.midfielders;
   const awayMidfield = unitMatchups.away.midfielders;
   const homeAttack = unitMatchups.home.attackers;
   const awayAttack = unitMatchups.away.attackers;
   const awayDefense = unitMatchups.away.defenders;
-  const redCard = timelineEvents.find((event) => event.type === "Red Card");
-  const homeShotsAfterRed = redCard
-    ? shots.filter((shot) => shot.team_id === home.teamId && Number(shot.minute) > redCard.minute)
-    : [];
-  const homeShotsThrough75 = shots.filter((shot) => shot.team_id === home.teamId && Number(shot.minute) <= 75);
   const historicalEvidence = [
     evidenceItem(
       "history.team.home",
@@ -697,7 +700,14 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
   ];
   return [
     evidenceItem("match.result", "תוצאת המשחק", "api_matches", 1, [home.score, away.score], { home: { teamNameHe: home.nameHe, score: home.score }, away: { teamNameHe: away.nameHe, score: away.score } }),
-    evidenceItem("match.opening_goal", "שער היתרון המוקדם", "api_match_shots", 1, [1, 0.09], { teamNameHe: home.nameHe, minute: 1, expectedGoals: 0.09 }),
+    evidenceItem("match.opening_goal", "שער הפתיחה", "api_match_shots", firstGoal ? 1 : 0, firstGoal ? [firstGoal.minute, firstGoal.xg] : [], firstGoal ? {
+      teamId: firstGoal.team_id,
+      teamNameHe: firstGoal.team_name_he ?? firstGoal.team_name,
+      playerId: firstGoal.player_id,
+      playerNameHe: firstGoal.display_name_he ?? firstGoal.display_name,
+      minute: Number(firstGoal.minute),
+      expectedGoals: numberValue(firstGoal.xg),
+    } : null),
     evidenceItem("team.volume", "נפח החזקה ובעיטות", "api_match_team_stats", 4, [
       home.stats.team_possession, away.stats.team_possession, home.stats.team_total_shots, away.stats.team_total_shots,
     ], { home: { teamNameHe: home.nameHe, possession: home.stats.team_possession, shots: home.stats.team_total_shots }, away: { teamNameHe: away.nameHe, possession: away.stats.team_possession, shots: away.stats.team_total_shots } }),
@@ -762,23 +772,7 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       window.away.shots, window.away.xg, window.away.goals,
     ]), { windows: flowWindows, homeTeamNameHe: home.nameHe, awayTeamNameHe: away.nameHe }),
     evidenceItem("timeline.match_events", "אירועי משחק לפי דקה", "365scores_game_detail", timelineEvents.length, timelineEvents.map((event) => event.minute), { events: timelineEvents }),
-    evidenceItem("flow.after_red", "בעיטות הפועל אחרי הכרטיס האדום", "api_match_shots + 365scores_game_detail", homeShotsAfterRed.length, [
-      redCard?.minute,
-      homeShotsAfterRed.length,
-      round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
-      75,
-      homeShotsThrough75.length,
-    ], {
-      redCard,
-      teamNameHe: home.nameHe,
-      comparison: {
-        throughMinute: 75,
-        shotsThroughMinute: homeShotsThrough75.length,
-        shotsAfterRed: homeShotsAfterRed.length,
-        expectedGoalsAfterRed: round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
-        interpretationHe: "ההשוואה מתארת קצב בעיטות גבוה יותר אחרי הכרטיס האדום, אך אינה מוכיחה שהכרטיס הוא שגרם לעלייה",
-      },
-    }),
+    evidenceItem("flow.game_state_context", "המספרים המצטברים לפי מצב המשחק", "api_match_shots + 365scores_game_detail", shots.length + timelineEvents.length, gameStateEvidenceValues(gameStateContext), gameStateContext),
     evidenceItem("heatmap.spatial_profile", "מבנה מרחבי מצטבר של שחקני ההרכב", "api_match_player_heatmaps", heatmaps.length, spatialProfile ? [
       spatialProfile.starterHeatmaps,
       ...spatialTeamEvidenceValues(spatialProfile.home),
@@ -789,23 +783,42 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       awayTeamNameHe: away.nameHe,
       profile: spatialProfile,
     } : null),
-    evidenceItem("player.dor_peretz", "משחקו של דור פרץ", "api_match_player_stats", 12, dor ? [
-      dor.metrics.goals, dor.metrics.total_shots, dor.metrics.expected_goals, dor.metrics.rating_365, dor.minutes,
-      ...goals.filter((shot) => shot.display_name === "Dor Peretz").flatMap((shot) => [shot.minute, shot.event_time?.includes("+") ? 2 : null]),
-    ] : [], dor ? { playerNameHe: dor.nameHe, goals: dor.metrics.goals, shots: dor.metrics.total_shots, expectedGoals: dor.metrics.expected_goals, rating: dor.metrics.rating_365, minutes: dor.minutes } : null),
-    evidenceItem("player.creators", "יוצרי המצבים של מכבי", "api_match_player_stats", creators.length * 4, [
-      creatorTotals.assists, creatorTotals.expectedAssists, creatorTotals.keyPasses, creatorTotals.bigChances,
-      ...creators.flatMap((player) => [player.metrics.assists, player.metrics.expected_assists, player.metrics.key_passes, player.metrics.big_chances_created]),
-    ], { totals: creatorTotals, players: creators.map((player) => ({ playerNameHe: player.nameHe, assists: player.metrics.assists, expectedAssists: player.metrics.expected_assists, keyPasses: player.metrics.key_passes, bigChancesCreated: player.metrics.big_chances_created })) }),
-    evidenceItem("player.right_triangle", "היוצרים בצד ימין של מכבי", "api_match_player_stats", rightSideCreators.length * 4, [
-      rightSideCreators.reduce((sum, player) => sum + Number(player.metrics.assists ?? 0), 0),
-      round(rightSideCreators.reduce((sum, player) => sum + Number(player.metrics.expected_assists ?? 0), 0)),
-      rightSideCreators.reduce((sum, player) => sum + Number(player.metrics.key_passes ?? 0), 0),
-      ...rightSideCreators.flatMap((player) => [player.metrics.assists, player.metrics.expected_assists, player.metrics.key_passes]),
-    ], { players: rightSideCreators.map((player) => ({ playerNameHe: player.nameHe, assists: player.metrics.assists, expectedAssists: player.metrics.expected_assists, keyPasses: player.metrics.key_passes })) }),
-    evidenceItem("hapoel.best_chance", "ההזדמנות הגדולה של ישראל דאפה", "api_match_shots", dappaChance ? 1 : 0, dappaChance ? [
-      dappaChance.minute, dappaChance.xg, dappaChance.xgot,
-    ] : []),
+    evidenceItem("player.match_standouts", "שחקנים בולטים במשחק", "api_match_player_stats", standoutPlayers.length, standoutPlayers.flatMap((player) => [
+      player.minutes,
+      player.metrics.rating_365,
+      player.metrics.goals,
+      player.metrics.assists,
+      player.metrics.total_shots,
+      player.metrics.shots_on_target,
+      player.metrics.expected_goals,
+      player.metrics.expected_assists,
+      player.metrics.key_passes,
+      player.metrics.touches,
+      player.metrics.passes_attempted,
+      player.metrics.passes_into_final_third,
+      player.metrics.ball_recovery,
+    ]), {
+      players: standoutPlayers.map((player) => ({
+        playerId: player.playerId,
+        playerNameHe: player.nameHe,
+        teamId: player.teamId,
+        roleGroup: player.roleGroup,
+        minutes: player.minutes,
+        metrics: player.metrics,
+      })),
+    }),
+    evidenceItem("match.best_chances", "המצבים האיכותיים במשחק", "api_match_shots", bestChances.length, bestChances.flatMap((shot) => [shot.minute, shot.xg, shot.xgot]), {
+      shots: bestChances.map((shot) => ({
+        minute: Number(shot.minute),
+        teamId: shot.team_id,
+        teamNameHe: shot.team_name_he ?? shot.team_name,
+        playerId: shot.player_id,
+        playerNameHe: shot.display_name_he ?? shot.display_name,
+        expectedGoals: numberValue(shot.xg),
+        expectedGoalsOnTarget: numberValue(shot.xgot),
+        outcome: shot.outcome,
+      })),
+    }),
     evidenceItem("timeline.goals", "ציר שערי המשחק", "api_match_shots", goals.length, goals.flatMap((shot) => [
       shot.minute, shot.event_time?.includes("+") ? Number(shot.event_time.match(/\+\s*(\d+)/)?.[1] ?? 0) : null,
     ])),
@@ -819,12 +832,13 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
 function fallbackEditorial(match, home, away) {
   return {
     headline: "פחות כדור, יותר איום: מכבי מצאה את דור פרץ בדיוק בזמן",
-    headlineEvidenceIds: ["history.team.away", "player.dor_peretz", "heatmap.spatial_profile"],
+    headlineEvidenceIds: ["history.team.away", "player.match_standouts", "heatmap.spatial_profile"],
     dek: "מול הפועל ירושלים, מכבי תל אביב נראתה אחרת מ־5 משחקיה הקודמים: ההחזקה ירדה, הבעיטות זינקו, והמשחק דרך צד ימין סידר לדור פרץ את המצבים לשלושער. ה־5:2 לא נולד משליטה רציפה, אלא מ־2 פרקי זמן שבהם מכבי תקפה בחדות.",
-    dekEvidenceIds: ["history.team.away", "match.result", "flow.shot_windows", "player.dor_peretz", "heatmap.spatial_profile"],
+    dekEvidenceIds: ["history.team.away", "match.result", "flow.shot_windows", "player.match_standouts", "heatmap.spatial_profile"],
     sections: [
       {
         heading: "השער הראשון הסתיר את הכיוון האמיתי",
+        insightIds: ["decisive_match_window"],
         paragraphs: [
           {
             text: "הפועל ירושלים כבשה בדקה 1 וכמעט כתבה מראש סיפור על מכבי שרודפת אחרי המשחק. בפועל, היתרון הזה רק דחה את הרגע שבו המשחק התהפך: מכבי לא השתלטה על כל דקה, אבל ידעה לזהות את החלונות שבהם ההגנה הירושלמית נפתחה.",
@@ -838,6 +852,7 @@ function fallbackEditorial(match, home, away) {
       },
       {
         heading: "מכבי החליפה החזקה באיום",
+        insightIds: ["team_history_change"],
         paragraphs: [
           {
             text: "ב־5 המשחקים הקודמים שלה בכל המסגרות מכבי החזיקה בממוצע 56% מהכדור, בעטה 10.6 פעמים ומצאה את המסגרת 3 פעמים למשחק. בירושלים ההחזקה ירדה ל־51%, אבל נפח האיום קפץ ל־17 בעיטות ול־8 למסגרת. פחות זמן עם הכדור, הרבה יותר סיומות.",
@@ -851,32 +866,35 @@ function fallbackEditorial(match, home, away) {
       },
       {
         heading: "דור פרץ הגיע שוב ושוב למקום הנכון",
+        insightIds: ["spatial_structure"],
         paragraphs: [
           {
             text: "מפת החום מציבה את דור פרץ כשחקן השדה הקדמי ביותר של מכבי. הוא לא נשאר מאחור כדי לנהל את המשחק, אלא נכנס שוב ושוב לאזורים שמהם אפשר לסיים התקפה. המיקום הזה מסביר מדוע כל כך הרבה מהמצבים הטובים של מכבי הגיעו דווקא אליו.",
-            evidenceIds: ["player.dor_peretz", "heatmap.spatial_profile"],
+            evidenceIds: ["player.match_standouts", "heatmap.spatial_profile"],
           },
           {
             text: "פרץ בעט 4 פעמים, וכל הבעיטות שלו הלכו למסגרת. המצבים שמהם בעט היו שווים יחד 2.50 xG, והוא ניצל 3 מתוך 4 הבעיטות כדי לכבוש שלושער. זו הייתה גם יכולת סיום מצוינת וגם תוצאה של הגעה עקבית למצבים באיכות גבוהה.",
-            evidenceIds: ["player.dor_peretz", "heatmap.spatial_profile"],
+            evidenceIds: ["player.match_standouts", "heatmap.spatial_profile"],
           },
         ],
       },
       {
         heading: "רוב המצבים של הפועל הגיעו אחרי האדום",
+        insightIds: ["game_state_distortion"],
         paragraphs: [
           {
-            text: "במחצית הפועל הוציאה את זוברו שראני, שחקן הגנה, והכניסה את אוהד אלמגור, שחקן התקפה. החילוף סימן מעבר למבנה התקפי יותר, אבל בדקות 46–60 הפועל ייצרה 3 בעיטות בשווי 0.14 xG בלבד. הכמות עלתה לפני שהאיכות הגיעה.",
+            text: "במחצית הפועל הוציאה את זוברו שראני, שחקן הגנה, והכניסה את אוהד אלמגור, שחקן התקפה. החילוף סימן מעבר למבנה התקפי יותר, אבל בדקות 46–60 הפועל בעטה 3 פעמים בשווי 0.14 xG בלבד. הכמות עלתה לפני שהאיכות הגיעה.",
             evidenceIds: ["timeline.match_events", "flow.shot_windows", "heatmap.spatial_profile"],
           },
           {
             text: "רק אחרי הכרטיס האדום לאופק מליקה בדקה 77 נוצר לחץ רציף: בחלון 76–90 הפועל רשמה 9 בעיטות ו־0.68 xG, מול בעיטה אחת ו־0.14 xG של מכבי, וגם כבשה בדקה 90. לכן הנתון הסופי, 17–16 בבעיטות, מעט מטעה: חלק גדול מהבעיטות של הפועל הגיע כשהמשחק כבר הוכרע ומכבי הייתה בחיסרון מספרי.",
-            evidenceIds: ["timeline.match_events", "flow.shot_windows", "flow.after_red", "team.volume"],
+            evidenceIds: ["timeline.match_events", "flow.shot_windows", "flow.game_state_context", "team.volume"],
           },
         ],
       },
       {
         heading: "הצד הימני חיבר את כל החלקים",
+        insightIds: ["spatial_structure", "player_volume_outlier"],
         paragraphs: [
           {
             text: "מפות החום משלימות את הסיפור: נועם בן הרוש נתן רוחב מעמדה נמוכה יותר, אושר דוידה נשאר גבוה ורחב, ודור פרץ מילא את חצי־המרחב ונכנס מעבר לשניהם. לא עומס כללי במרכז, אלא מסלול התקפה ברור בצד אחד.",
@@ -884,20 +902,126 @@ function fallbackEditorial(match, home, away) {
           },
           {
             text: "אצל דוידה השינוי בולט גם מול העבר הקרוב. הוא נגע בכדור 39 פעמים, לעומת 66.4 נגיעות ל־90 דקות ב־5 הופעות ההשוואה. ובכל זאת, הוא מסר 2 מסירות מפתח, בישל שער, והמסירות שלו יצרו 0.59 בישולים צפויים. פחות נגיעות, ובכל זאת תרומה ישירה ליצירת המצבים של מכבי.",
-            evidenceIds: ["history.player.d331b8fc-d76c-4f8c-8a13-19e329c9b67a", "player.right_triangle", "history.team.away", "heatmap.spatial_profile"],
+            evidenceIds: ["history.player.d331b8fc-d76c-4f8c-8a13-19e329c9b67a", "player.match_standouts", "history.team.away", "heatmap.spatial_profile"],
           },
         ],
       },
     ],
     takeaways: [
       { text: "מכבי עלתה מ־10.6 בעיטות בממוצע ל־17, אף שההחזקה ירדה ל־51%.", evidenceIds: ["history.team.away"] },
-      { text: "דור פרץ בעט 4 פעמים, כולן למסגרת, והמצבים שלו הסתכמו ב־2.50 xG.", evidenceIds: ["player.dor_peretz"] },
-      { text: "9 מבעיטות הפועל הגיעו אחרי האדום בדקה 77.", evidenceIds: ["flow.after_red"] },
+      { text: "דור פרץ בעט 4 פעמים, כולן למסגרת, והמצבים שלו הסתכמו ב־2.50 xG.", evidenceIds: ["player.match_standouts"] },
+      { text: "9 מבעיטות הפועל הגיעו אחרי האדום בדקה 77.", evidenceIds: ["flow.game_state_context"] },
     ],
     conclusion: "מכבי לא ניצחה מפני ששיחקה יותר מאותו הדבר. היא ניצחה מפני ששיחקה אחרת: פחות החזקה, יותר חדירה, תיאום טוב בצד ימין ודור פרץ שקיבל שוב ושוב את הכדור במקום שממנו אפשר לכבוש.",
-    conclusionEvidenceIds: ["history.team.away", "heatmap.spatial_profile", "player.right_triangle", "player.dor_peretz"],
+    conclusionEvidenceIds: ["history.team.away", "heatmap.spatial_profile", "player.match_standouts"],
   };
 }
+
+const FOOTBALL_HEBREW_GUIDE = [
+  "השתמש בעברית של כדורגל ישראלי: מרכז השדה, אגפים או כנפיים, חילוצי כדור, מצבים, בעיטות ולחץ.",
+  "אל תשתמש במילה 'נתיב' או 'נתיבים' לתיאור אזורים במגרש.",
+  "חצי־מרחב הוא האזור שבין מרכז השדה לאגף. בכתיבה לקהל רחב, כתוב בפעם הראשונה 'חצי־המרחב שבין המרכז לאגף'.",
+  "אל תכתוב שקבוצה 'ייצרה בעיטות', 'צברה איום' או 'קיבלה איומים'. כתוב שהיא בעטה, הגיעה למצבים או אפשרה ליריבה להגיע למצבים.",
+].join("\n");
+
+const analysisPlanSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    thesis: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        claimHe: { type: "string" },
+        whyItMattersHe: { type: "string" },
+        evidenceIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
+      },
+      required: ["claimHe", "whyItMattersHe", "evidenceIds"],
+    },
+    rankedInsights: {
+      type: "array",
+      minItems: 3,
+      maxItems: 5,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          titleHe: { type: "string" },
+          findingHe: { type: "string" },
+          whyItMattersHe: { type: "string" },
+          evidenceIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 },
+          importance: { type: "string", enum: ["primary", "supporting", "context"] },
+          narrativeRole: { type: "string", enum: ["setup", "turning_point", "explanation", "context", "caveat"] },
+        },
+        required: ["id", "titleHe", "findingHe", "whyItMattersHe", "evidenceIds", "importance", "narrativeRole"],
+      },
+    },
+    narrativeArc: {
+      type: "array",
+      minItems: 3,
+      maxItems: 5,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          headingIdeaHe: { type: "string" },
+          purposeHe: { type: "string" },
+          insightIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 2 },
+        },
+        required: ["headingIdeaHe", "purposeHe", "insightIds"],
+      },
+    },
+    graphics: {
+      type: "array",
+      minItems: 2,
+      maxItems: 4,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          type: { type: "string", enum: ["match_flow", "shot_map", "team_history", "tactical_heatmap", "player_focus"] },
+          titleHe: { type: "string" },
+          subtitleHe: { type: "string" },
+          placementInsightId: { type: "string" },
+          evidenceIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 4 },
+          metricCodes: { type: "array", items: { type: "string" }, maxItems: 4 },
+          focusPlayerId: { type: "string" },
+        },
+        required: ["type", "titleHe", "subtitleHe", "placementInsightId", "evidenceIds", "metricCodes", "focusPlayerId"],
+      },
+    },
+    coverageDecisions: {
+      type: "array",
+      minItems: 8,
+      maxItems: 8,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          category: { type: "string", enum: ["game_state", "flow", "quality", "style", "matchup", "spatial", "history", "player"] },
+          decision: { type: "string", enum: ["use", "omit"] },
+          reasonHe: { type: "string" },
+          evidenceIds: { type: "array", items: { type: "string" }, maxItems: 5 },
+        },
+        required: ["category", "decision", "reasonHe", "evidenceIds"],
+      },
+    },
+    quality: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        singleThesis: { type: "boolean" },
+        explainsRatherThanLists: { type: "boolean" },
+        gameStateAdjusted: { type: "boolean" },
+        selectiveEvidence: { type: "boolean" },
+        graphicsServeStory: { type: "boolean" },
+      },
+      required: ["singleThesis", "explainsRatherThanLists", "gameStateAdjusted", "selectiveEvidence", "graphicsServeStory"],
+    },
+  },
+  required: ["thesis", "rankedInsights", "narrativeArc", "graphics", "coverageDecisions", "quality"],
+};
 
 const editorialSchema = {
   type: "object",
@@ -909,13 +1033,14 @@ const editorialSchema = {
     dekEvidenceIds: { type: "array", items: { type: "string" }, minItems: 1 },
     sections: {
       type: "array",
-      minItems: 4,
+      minItems: 3,
       maxItems: 5,
       items: {
         type: "object",
         additionalProperties: false,
         properties: {
           heading: { type: "string" },
+          insightIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 2 },
           paragraphs: {
             type: "array",
             minItems: 1,
@@ -931,7 +1056,7 @@ const editorialSchema = {
             },
           },
         },
-        required: ["heading", "paragraphs"],
+        required: ["heading", "insightIds", "paragraphs"],
       },
     },
     takeaways: {
@@ -964,14 +1089,17 @@ const editorialReviewResponseSchema = {
       additionalProperties: false,
       properties: {
         naturalHebrew: { type: "boolean" },
+        footballHebrew: { type: "boolean" },
         numericClarity: { type: "boolean" },
         cohesiveNarrative: { type: "boolean" },
+        storyValue: { type: "boolean" },
+        numberDiscipline: { type: "boolean" },
         highVolumeComparisonsOnly: { type: "boolean" },
         evidenceFaithfulness: { type: "boolean" },
-        analyticalDepth: { type: "boolean" },
-        historicalContext: { type: "boolean" },
+        gameStateContext: { type: "boolean" },
+        graphicRelevance: { type: "boolean" },
       },
-      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness", "analyticalDepth", "historicalContext"],
+      required: ["naturalHebrew", "footballHebrew", "numericClarity", "cohesiveNarrative", "storyValue", "numberDiscipline", "highVolumeComparisonsOnly", "evidenceFaithfulness", "gameStateContext", "graphicRelevance"],
     },
     notes: { type: "array", items: { type: "string" }, maxItems: 6 },
   },
@@ -987,14 +1115,17 @@ const qualityReviewResponseSchema = {
       additionalProperties: false,
       properties: {
         naturalHebrew: { type: "boolean" },
+        footballHebrew: { type: "boolean" },
         numericClarity: { type: "boolean" },
         cohesiveNarrative: { type: "boolean" },
+        storyValue: { type: "boolean" },
+        numberDiscipline: { type: "boolean" },
         highVolumeComparisonsOnly: { type: "boolean" },
         evidenceFaithfulness: { type: "boolean" },
-        analyticalDepth: { type: "boolean" },
-        historicalContext: { type: "boolean" },
+        gameStateContext: { type: "boolean" },
+        graphicRelevance: { type: "boolean" },
       },
-      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness", "analyticalDepth", "historicalContext"],
+      required: ["naturalHebrew", "footballHebrew", "numericClarity", "cohesiveNarrative", "storyValue", "numberDiscipline", "highVolumeComparisonsOnly", "evidenceFaithfulness", "gameStateContext", "graphicRelevance"],
     },
     issues: { type: "array", items: { type: "string" }, maxItems: 12 },
   },
@@ -1007,7 +1138,59 @@ function responseOutputText(payload) {
     .find((item) => item.type === "output_text")?.text;
 }
 
-async function generateEditorialWithAi(match, evidence, historicalContext) {
+async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext) {
+  const model = process.env.OPENAI_ANALYST_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5.6";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      store: false,
+      instructions: [
+        "אתה האנליסט הראשי של מדור כדורגל מבוסס נתונים. לפני שנכתבת כתבה, עליך לבחור מהו הסיפור האמיתי של המשחק ומה לא ראוי להיכנס אליה.",
+        "בחר תזה מרכזית אחת ועד 5 תובנות שמסבירות אותה. דירוג אלגוריתמי של מועמדים הוא נקודת פתיחה בלבד; בדוק את ההקשר והראיות בעצמך.",
+        "בדוק תמיד אם התוצאה, כרטיס אדום, חילופים או דקות מאוחרות מעוותים נתונים מצטברים. כאשר rawShotTotalsNeedGameStateContext=true, game_state_distortion חייבת להיות תובנה primary, להופיע בתחילת הקשת הסיפורית ולהיתמך ב-flow.game_state_context.",
+        "אל תתייחס ל-16 בעיטות בדקות שוויון כמו ל-16 בעיטות אחרי שהמשחק הוכרע. נפח מאוחר עשוי ללמד על זרימת המשחק, אבל לא בהכרח על מאזן הכוחות לפני האירוע.",
+        "היסטוריה, מפות חום, מאבקים בין חוליות ושחקנים הם חומרי גלם לבחירה, לא סעיפי חובה. סמן use רק אם הם מסבירים את התזה; סמן omit כאשר הם רק מוסיפים מספרים.",
+        "העדף דפוסי נפח ממדגם סביר על פני שער או בישול בודד. אל תסיק סיבתיות מנתון תצפיתי, ואל תמציא שינוי בזמן ממפת חום מצטברת.",
+        "תכנן 2–4 גרפיקות בלבד. כל גרפיקה חייבת לתמוך בתובנה שנבחרה ולהציג משהו שקל יותר להבין חזותית מאשר בטקסט. אל תבחר גרפיקה כדי למלא מקום.",
+        "לגרפיקת team_history בחר metricCodes מתוך מדדי ההיסטוריה שבחבילת הראיות. לגרפיקת player_focus בחר focusPlayerId קיים. בסוגים אחרים החזר מערכים או מזהים ריקים כאשר אינם נדרשים.",
+        "coverageDecisions חייב להכיל פעם אחת בדיוק כל אחת מ-8 הקטגוריות. סמן use רק לקטגוריות שמהן בחרת rankedInsight, ו-omit לכל היתר. rankedInsights ו-narrativeArc חייבים להשתמש רק במזהי המועמדים שסופקו.",
+        "בחר בדיוק תובנת primary אחת. בחר סוג גרפיקה שונה לכל גרפיקה, כדי שכל המחשה תוסיף זווית אחרת ולא תחזור על אותה תבנית.",
+        FOOTBALL_HEBREW_GUIDE,
+      ].join("\n"),
+      input: JSON.stringify({
+        match: {
+          competition: match.competition_name_he ?? match.competition_name,
+          scheduledAt: match.scheduled_at,
+          home: match.home_team_name_he ?? match.home_team_name,
+          away: match.away_team_name_he ?? match.away_team_name,
+        },
+        gameStateContext,
+        insightCandidates,
+        evidence,
+      }),
+      text: {
+        format: {
+          type: "json_schema",
+          name: "hebrew_match_analysis_plan",
+          strict: true,
+          schema: analysisPlanSchema,
+        },
+      },
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenAI analyst failed (${response.status}): ${await response.text()}`);
+  const payload = await response.json();
+  const outputText = responseOutputText(payload);
+  if (!outputText) throw new Error("The analyst returned no structured plan.");
+  return { plan: JSON.parse(outputText), model };
+}
+
+async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -1018,22 +1201,24 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
       model: process.env.OPENAI_MODEL ?? "gpt-5.6",
       store: false,
       instructions: [
-        "אתה עורך ספורט נתונים בעברית. כתוב כתבת ניתוח מקורית, בהירה ומדויקת בעברית בלבד.",
+        "אתה כתב כדורגל ישראלי. כתוב כתבת ניתוח מקורית, בהירה ומדויקת בעברית בלבד לפי analysisPlan שסיפק האנליסט.",
         "השתמש אך ורק בחבילת הראיות שסופקה. אין להוסיף הקשר חיצוני, ציטוטים, סיבות טקטיות שלא נמדדו או עובדות שאינן בחבילה.",
         "לכל טענה מספרית צרף רק מזהי evidenceIds שמכילים את המספרים הללו. שמור על טון עיתונאי ולא שיווקי.",
         "כל מספר שמופיע בטקסט חייב להופיע כפי שהוא במערך values של אחת הראיות המצורפות. אל תחשב הפרשים, ממוצעים, אחוזים או יחסים חדשים בעצמך.",
         "כתוב כל כמות ומספר בספרות (למשל 6, לא שישה), כדי שמנוע האימות יוכל לבדוק אותם.",
         "המונחים המקצועיים היחידים שמותר לכתוב באותיות לטיניות הם xG ו-xGOT. אם משתמשים ב-xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)' ואל תשתמש בניסוח המעורפל 'שערים צפויים לאחר הבעיטה'.",
-        "בנה לכתבה תזה אחת כבר בכותרת ובפתיח, והתקדם איתה מסעיף לסעיף. כל פסקה צריכה להוסיף שלב לסיפור, לא להתחיל ניתוח חדש.",
-        "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומרשימות נתונים שאינן מקדמות את הטענה המרכזית.",
-        "השווה בפועל את שתי הקבוצות לעד 5 משחקיהן הקודמים בכל המסגרות, באמצעות history.team.home וגם history.team.away. ציין במפורש את גודל המדגם, השתמש רק במדדים עם sampleSize, והצג את ההשוואה כהקשר ולא כהוכחה מוחלטת לשינוי טקטי.",
-        "אם קיימת לפחות רשומת notableChanges אחת, שלב לפחות השוואת שחקן אחת שמקדמת את התזה. השוואה היסטורית של שחקן מותרת רק מתוך notableChanges: אלה מדדי נפח עם לפחות 3 משחקי בסיס וחריגה מספקת. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה סטטיסטית.",
+        "הכותרת והפתיח צריכים להציג את התזה, וכל סעיף צריך לקדם את הקשת הסיפורית שנבחרה. השתמש רק בתובנות שסומנו use וב-rankedInsights; אל תכניס בכוח קטגוריה שסומנה omit.",
+        "כל סעיף חייב לקבל insightIds מתוך analysisPlan. סדר הסעיפים חייב לעקוב אחר narrativeArc, ותובנת primary חייבת להופיע באחד מ-2 הסעיפים הראשונים.",
+        "כל פסקה צריכה לעבוד כך: טענה אחת, הסבר למה היא חשובה, ורק אז 1–3 מספרים חיוניים כתמיכה. אל תכתוב רשימת מדדים ואל תנסה להכניס את כל הנתונים הזמינים.",
+        "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומפסקאות שנשמעות כמו טבלת נתונים.",
+        "השתמש בהשוואה היסטורית רק אם analysisPlan בחר בה. ציין את גודל המדגם והצג אותה כהקשר, לא כהוכחה מוחלטת לשינוי טקטי.",
+        "אם נבחרה השוואת שחקן היסטורית, היא מותרת רק מתוך notableChanges: מדדי נפח עם לפחות 3 משחקי בסיס. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה.",
         "הזכר בשם לפחות שחקן אחד שיש לו ראיות משמעותיות, כדי שהכתבה תוכל לקבל תגית שחקן שימושית.",
         "אל תבנה סעיף שלם סביב בעיטה אחת או אירוע אישי יחיד. דוגמת שחקן חייבת להסביר, להמחיש או לסייג את התזה המרכזית של הכתבה.",
-        "הסבר את זרימת המשחק דרך חלונות הבעיטות ואירועי המשחק, והבדל בין מה שקרה לפני ואחרי חילופים או כרטיסים.",
+        "כאשר gameStateContext.rawShotTotalsNeedGameStateContext=true, אל תציג את סך הבעיטות כהשוואה מאוזנת בלי להסביר מוקדם בכתבה כמה מהן הגיעו אחרי האירוע המעוות ובאיזה מצב תוצאה.",
         "השתמש בפרופיל המרחבי ממפות החום כדי לזהות מבנה, רוחב, חצי־מרחבים ועומס מקומי. אל תכתוב לקורא הערה מתודולוגית על זמן, צבירה או מגבלות מפות החום, ואל תצטט קואורדינטות טכניות; פשוט הימנע מטענות על שינוי במהלך המשחק שאינן נתמכות.",
-        "הכתבה חייבת לכלול לפחות טענה מרחבית אחת שמצטטת heatmap.spatial_profile ולפחות טענת matchup אחת שמצטטת מזהה שמתחיל ב-matchup. אל תציג נתונים אלה כרשימה; הסבר מה הם מלמדים על מבנה הקבוצות או המאבק בין החוליות.",
         "תאר שינוי טקטי רק כשהוא נתמך גם בחילוף בין תפקידים או באירוע מתוזמן; מפות החום לבדן מתארות את זמן ההופעה המצטבר.",
+        FOOTBALL_HEBREW_GUIDE,
       ].join("\n"),
       input: JSON.stringify({
         match: {
@@ -1042,7 +1227,8 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
         },
-        historicalContext,
+        analysisPlan,
+        gameStateContext,
         evidence,
       }),
       text: {
@@ -1062,7 +1248,7 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
   return JSON.parse(outputText);
 }
 
-async function editEditorialWithAi(match, evidence, historicalContext, draft, qualityFeedback = []) {
+async function editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
   const model = process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -1079,20 +1265,22 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft, qu
         "אל תשתמש בצירופים מופשטים כמו 'לצבור איום'. כתוב במונחי כדורגל טבעיים ומוחשיים: להגיע למצבים, לבעוט, להחזיק בכדור, ללחוץ או לייצר הזדמנויות.",
         "אל תכתוב 'להציב יותר נוכחות' או שקבוצה 'קיבלה יותר איומים'. כתוב מי הציב יותר שחקנים באזור, או איזו חוליה תרמה יותר בעיטות, מצבים או שערים.",
         "ודא שכל רצף מספרי מובן מיד: כתוב מה נמדד, מהו הסכום, ומה קרה בפועל. אל תצמיד מספר ל-xG ולמספר שערים באותו חצי משפט אם הקשר ביניהם אינו מפורש.",
-        "שמור על תזה אחת ורצף בין הפסקאות. הסר משפטים שנשמעים כמו סיכום אוטומטי או שאינם מוסיפים טענה חדשה.",
+        "שמור על התזה, התובנות והקשת הסיפורית שב-analysisPlan. הסר משפטים שנשמעים כמו סיכום אוטומטי, רשימת מדדים או ניתוח צדדי שלא נבחר בתוכנית.",
+        "בכל פסקה שמור על טענה אחת, הסבר של המשמעות, ורק המספרים החיוניים. אם יש 4 מספרים או יותר, פצל או הסר את אלה שאינם נדרשים להבנת הטענה.",
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
-        "הגרסה הסופית חייבת להשתמש גם ב-history.team.home וגם ב-history.team.away ולהשוות בפועל כל קבוצה למדגם המשחקים הקודמים שלה. אם קיימת לפחות רשומת notableChanges אחת, חייבת להישמר גם השוואת שחקן אחת שמקדמת את התזה.",
-        "השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges. כל רשומה כזאת כבר עברה סף של לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
+        "השוואה היסטורית נדרשת רק אם analysisPlan בחר בה. השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges עם לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
         "כל מספר חייב להופיע כפי שהוא ב-values של הראיות המצורפות לטענה. אל תחשב בעצמך הפרש, ממוצע, אחוז או יחס חדש, גם אם החישוב פשוט.",
         "שמור בנוסח לפחות אזכור אחד בשם של שחקן בעל ראיה משמעותית. אסור להסיר את כל שמות השחקנים, מפני שהפרסום דורש לפחות תגית שחקן אחת.",
         "אם מופיע xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)'. אל תכתוב 'שערים צפויים לאחר הבעיטה' ואל תבנה סעיף נפרד סביב בעיטה יחידה שאינה מקדמת את התזה.",
-        "הגרסה הסופית חייבת לשמר לפחות טענה אחת עם heatmap.spatial_profile ולפחות טענה אחת עם evidenceId שמתחיל ב-matchup. הטענות צריכות לפרש מבנה או מאבק בין חוליות, לא להסביר את שיטת המדידה. הסר מהנוסח הערות לקורא על כך שמפת החום מצטברת, אינה תלויה בזמן או אינה מוכיחה שינוי.",
+        "מפת חום או matchup יישארו רק אם analysisPlan בחר בהם. כאשר הם נבחרו, הטענות צריכות לפרש מבנה או מאבק בין חוליות ולא להסביר את שיטת המדידה.",
         "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
         "נתוני משחק תצפיתיים מראים קשר ולא סיבתיות. בלי ראיה סיבתית מפורשת, אל תכתוב 'בזכות', 'הכריע', 'הוביל ל-', 'גרם' או 'הסביר את התוצאה'; כתוב מה היה הפער הבולט בנתונים.",
         "נתון מצטבר אחרי אירוע אינו מוכיח לבדו שקצב הפעולה עלה. כאשר context כולל השוואת לפני־ואחרי מפורשת, מותר לתאר את ההבדל בקצב; עדיין אסור לטעון שהאירוע גרם לו בלי ראיה סיבתית.",
+        "כאשר gameStateContext.rawShotTotalsNeedGameStateContext=true, ודא שהסיפור המרכזי ואחד מ-2 הסעיפים הראשונים מסבירים מדוע נתוני הבעיטות הכוללים מטעים. תיקון במסקנה בלבד אינו מספיק.",
+        FOOTBALL_HEBREW_GUIDE,
         "כאשר qualityFeedback כולל ניסוח שנפסל ותיקון מוצע, ודא שהנוסח הפסול אינו נשאר בגרסה החדשה ושמשמעות התיקון יושמה במלואה. אל תחליף אותו במשפט שסותר את הראיה.",
-        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 7 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
+        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
         qualityFeedback.length
           ? "מבקר האיכות פסל גרסה קודמת. תקן במפורש כל סעיף ב-qualityFeedback ואל תסתפק בהחלפת מילה מקומית אם המשפט כולו אינו טבעי."
           : "זוהי עריכת הנוסח הראשונה; בצע עריכה מלאה ולא הגהה שטחית.",
@@ -1104,7 +1292,8 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft, qu
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
         },
-        historicalContext,
+        analysisPlan,
+        gameStateContext,
         evidence,
         draft,
         qualityFeedback,
@@ -1138,7 +1327,7 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft, qu
   };
 }
 
-async function reviewEditorialQualityWithAi(match, evidence, editorial, attempt) {
+async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameStateContext, editorial, attempt) {
   const model = process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -1153,16 +1342,20 @@ async function reviewEditorialQualityWithAi(match, evidence, editorial, attempt)
         "אתה מבקר האיכות האחרון והבלתי־תלוי של מדור ספורט עברי. אינך עורך את הכתבה ואינך מתבקש להיות מנומס; תפקידך למנוע פרסום של נוסח שאינו ראוי.",
         "קרא כל משפט כאילו הוא עומד להתפרסם עכשיו באתר ספורט ישראלי. אפילו שגיאת התאמה אחת, מילה מומצאת אחת או צירוף שאינו קיים בעברית מחייבים naturalHebrew=false.",
         "פסול תרגום מילולי, מליצות ריקות ופעלים שאינם מתאימים לנתון. דוגמאות לסוגי כשל: 'השערים פונו', 'קבוצה כיתרה 51%', 'המצביה היו', 'ריבוי דו־קרקעי', 'גלים של איומים', 'להציב יותר נוכחות', 'לקבל יותר איומים' או 'שימור איזון בנפח'.",
+        "footballHebrew=true רק אם הטקסט נשמע כמו ניתוח כדורגל ישראלי: מרכז השדה, אגפים או כנפיים, חילוצי כדור ומצבים. המילה 'נתיב' לתיאור אזור במגרש, 'לייצר בעיטות' או ניסוח מופשט של איום מחייבים false.",
         "numericClarity=true רק אם ברור לקורא מה כל מספר מודד, מהו בסיס ההשוואה, ומה ההבדל בין נתון של המשחק למדגם היסטורי.",
         "cohesiveNarrative=true רק אם לכתבה יש טענה מרכזית אחת, כל פסקה מקדמת אותה, ואין חזרות, סתירות או משפטי מילוי אוטומטיים.",
+        "storyValue=true רק אם כל סעיף מסביר למה הנתונים חשובים לתזה. פסקה שמונה מדדים בלי להסביר מה הם מלמדים על המשחק מחייבת false.",
+        "numberDiscipline=true רק אם המספרים נבחרו במשורה. פסקה עם 4 מספרים או יותר שאינה מפרידה בבירור בין טענה להסבר מחייבת false.",
         "שלוש נקודות הסיכום רשאיות לתמצת בקצרה טענות מהכתבה; אל תפסול אותן רק משום שהן מסכמות. פסול חזרה כמעט מילולית בתוך גוף הכתבה או מסקנה שאינה מוסיפה סינתזה.",
         "highVolumeComparisonsOnly=true רק אם מגמות שחקנים נשענות על מדדי נפח ועל notableChanges, ולא על שער, בישול או אירוע יחיד.",
         "evidenceFaithfulness=true רק אם הפרשנות נובעת מהראיות. פסול סיבתיות, שינוי טקטי, צד מגרש או תזמון שאינם נתמכים במפורש.",
-        "analyticalDepth=true רק אם הכתבה משתמשת בפועל גם ב-heatmap.spatial_profile וגם בראיית matchup, ומחברת אותן לתזה על מבנה הקבוצות או המאבק בין החוליות. אזכור טכני של הנתונים אינו מספיק.",
-        "historicalContext=true רק אם הכתבה משתמשת גם ב-history.team.home וגם ב-history.team.away כדי להשוות כל קבוצה למדגם הקודם שלה. אם קיימת בראיות רשומת notableChanges, נדרשת גם השוואת שחקן אחת המבוססת עליה.",
+        "gameStateContext=true רק אם הכתבה נותנת להקשר מצב המשחק את המשקל שקבע analysisPlan. כאשר rawShotTotalsNeedGameStateContext=true, אחד מ-2 הסעיפים הראשונים חייב להסביר מדוע הסכומים הסופיים מטעים; אזכור מאוחר אינו מספיק.",
+        "graphicRelevance=true רק אם כל גרפיקה בתוכנית קשורה לתובנה שמופיעה בכתבה, הכותרת שלה מתארת את התובנה, והיא אינה קישוט או שכפול של טקסט.",
         "אל תדרוש הערה מתודולוגית על מפות החום. להפך: פסול הסבר לקורא על כך שהמפה מצטברת, אינה תלויה בזמן או אינה מוכיחה שינוי. יש להציג רק תובנה מבנית בטוחה ולהימנע מטענת שינוי בזמן.",
         "issues חייב להכיל כל בעיה שמצאת, עם ציטוט קצר מהנוסח והסבר מעשי לעורך. אם issues אינו ריק, לפחות בדיקה אחת חייבת להיות false. אל תכתוב מחמאות ב-issues.",
         "אשר את הכתבה רק אם עורך אנושי דובר עברית לא היה צריך לשנות אף משפט לפני הפרסום.",
+        FOOTBALL_HEBREW_GUIDE,
       ].join("\n"),
       input: JSON.stringify({
         match: {
@@ -1172,6 +1365,8 @@ async function reviewEditorialQualityWithAi(match, evidence, editorial, attempt)
           away: match.away_team_name_he ?? match.away_team_name,
         },
         evidence,
+        analysisPlan,
+        gameStateContext,
         editorial,
       }),
       text: {
@@ -1209,12 +1404,15 @@ function curatedEditorialSeed(editorial) {
       status: "passed",
       checks: {
         naturalHebrew: true,
+        footballHebrew: true,
         numericClarity: true,
         cohesiveNarrative: true,
+        storyValue: true,
+        numberDiscipline: true,
         highVolumeComparisonsOnly: true,
         evidenceFaithfulness: true,
-        analyticalDepth: true,
-        historicalContext: true,
+        gameStateContext: true,
+        graphicRelevance: true,
       },
       notes: ["נוסח הדוגמה נערך כחלק מהקוד; מעבר עריכת ה־AI אינו רץ במצב --no-ai."],
     },
@@ -1228,12 +1426,15 @@ function fixtureQualityReview() {
     status: "passed",
     checks: {
       naturalHebrew: true,
+      footballHebrew: true,
       numericClarity: true,
       cohesiveNarrative: true,
+      storyValue: true,
+      numberDiscipline: true,
       highVolumeComparisonsOnly: true,
       evidenceFaithfulness: true,
-      analyticalDepth: true,
-      historicalContext: true,
+      gameStateContext: true,
+      graphicRelevance: true,
     },
     issues: [],
     attempt: 0,
@@ -1291,7 +1492,50 @@ function validateEditorial(editorial, evidence) {
   return failures;
 }
 
-function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, requiresAiReview) {
+function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameStateContext) {
+  const failures = [];
+  const evidenceIds = new Set(evidence.map((item) => item.id));
+  const candidateIds = new Set(insightCandidates.map((candidate) => candidate.id));
+  const candidateById = new Map(insightCandidates.map((candidate) => [candidate.id, candidate]));
+  const plannedInsightIds = new Set(analysisPlan.rankedInsights.map((insight) => insight.id));
+  const categories = analysisPlan.coverageDecisions.map((item) => item.category);
+  const requiredCategories = ["game_state", "flow", "quality", "style", "matchup", "spatial", "history", "player"];
+  if (new Set(categories).size !== requiredCategories.length || !requiredCategories.every((category) => categories.includes(category))) {
+    failures.push("coverageDecisions must contain every analysis category exactly once");
+  }
+  if (plannedInsightIds.size !== analysisPlan.rankedInsights.length) failures.push("rankedInsights contains duplicates");
+  if (!analysisPlan.rankedInsights.every((insight) => candidateIds.has(insight.id))) failures.push("rankedInsights contains an unknown candidate");
+  const selectedCategories = new Set(analysisPlan.rankedInsights.map((insight) => candidateById.get(insight.id)?.category));
+  for (const decision of analysisPlan.coverageDecisions) {
+    if ((selectedCategories.has(decision.category)) !== (decision.decision === "use")) {
+      failures.push(`coverage decision for ${decision.category} does not match the selected insights`);
+    }
+  }
+  const referencedEvidenceIds = [
+    ...analysisPlan.thesis.evidenceIds,
+    ...analysisPlan.rankedInsights.flatMap((insight) => insight.evidenceIds),
+    ...analysisPlan.graphics.flatMap((graphic) => graphic.evidenceIds),
+    ...analysisPlan.coverageDecisions.flatMap((decision) => decision.evidenceIds),
+  ];
+  if (referencedEvidenceIds.some((id) => !evidenceIds.has(id))) failures.push("analysis plan references unknown evidence");
+  if (analysisPlan.narrativeArc.some((step) => step.insightIds.some((id) => !plannedInsightIds.has(id)))) failures.push("narrativeArc references an unselected insight");
+  if (analysisPlan.graphics.some((graphic) => !plannedInsightIds.has(graphic.placementInsightId))) failures.push("a graphic is not attached to a selected insight");
+  if (new Set(analysisPlan.graphics.map((graphic) => graphic.type)).size !== analysisPlan.graphics.length) failures.push("graphic types must be distinct within one article");
+  if (!Object.values(analysisPlan.quality).every(Boolean)) failures.push("the analyst did not pass its own planning checks");
+  if (analysisPlan.rankedInsights.filter((insight) => insight.importance === "primary").length !== 1) failures.push("the plan must have exactly one primary insight");
+  if (gameStateContext.rawShotTotalsNeedGameStateContext) {
+    const gameStateInsight = analysisPlan.rankedInsights.find((insight) => insight.id === "game_state_distortion");
+    if (!gameStateInsight || gameStateInsight.importance !== "primary" || !gameStateInsight.evidenceIds.includes("flow.game_state_context")) {
+      failures.push("misleading cumulative totals were not promoted to a primary game-state insight");
+    }
+    if (!analysisPlan.narrativeArc.slice(0, 2).some((step) => step.insightIds.includes("game_state_distortion"))) {
+      failures.push("the game-state distortion is not positioned in the opening of the narrative");
+    }
+  }
+  return failures;
+}
+
+function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, requiresAiReview, analysisPlan, insightCandidates, gameStateContext) {
   const homeGoals = shots.filter((shot) => shot.team_id === home.teamId && shot.outcome === "Goal").length;
   const awayGoals = shots.filter((shot) => shot.team_id === away.teamId && shot.outcome === "Goal").length;
   const playerGoals = players.reduce((sum, player) => sum + Number(player.metrics.goals ?? 0), 0);
@@ -1319,16 +1563,35 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   )));
   const copy = editorialText(editorial);
   const usedEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds));
-  const hasSpatialInsight = usedEvidenceIds.has("heatmap.spatial_profile");
-  const hasMatchupInsight = [...usedEvidenceIds].some((id) => id.startsWith("matchup."));
-  const notableHistoricalPlayerEvidenceIds = historicalContext.players
-    .filter((player) => player.notableChanges.length > 0)
-    .map((player) => `history.player.${player.playerId}`);
-  const hasTeamHistory = usedEvidenceIds.has("history.team.home") && usedEvidenceIds.has("history.team.away");
-  const hasRequiredPlayerHistory = notableHistoricalPlayerEvidenceIds.length === 0
-    || notableHistoricalPlayerEvidenceIds.some((id) => usedEvidenceIds.has(id));
-  const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.after_red", "heatmap.spatial_profile"];
+  const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.game_state_context", "heatmap.spatial_profile"];
   const structuredEvidenceReady = structuredEvidenceIds.every((id) => evidence.find((item) => item.id === id)?.context);
+  const planFailures = requiresAiReview ? validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameStateContext) : [];
+  const plannedInsightIds = new Set(analysisPlan.rankedInsights.map((insight) => insight.id));
+  const sectionInsightIds = editorial.sections.flatMap((section) => section.insightIds ?? []);
+  const primaryInsightIds = analysisPlan.rankedInsights.filter((insight) => insight.importance === "primary").map((insight) => insight.id);
+  const planFollowed = !requiresAiReview || (
+    sectionInsightIds.every((id) => plannedInsightIds.has(id))
+    && primaryInsightIds.every((id) => sectionInsightIds.includes(id))
+  );
+  const gameStateStoryPassed = !requiresAiReview || !gameStateContext.rawShotTotalsNeedGameStateContext || (
+    editorial.sections.slice(0, 2).some((section) => (
+      section.insightIds?.includes("game_state_distortion")
+      && section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes("flow.game_state_context"))
+    ))
+  );
+  const paragraphNumbers = editorial.sections.flatMap((section) => section.paragraphs.map((paragraph) => extractNumbers(paragraph.text).length));
+  const disciplinedNumbers = !requiresAiReview || (paragraphNumbers.every((count) => count <= 6)
+    && (paragraphNumbers.reduce((sum, count) => sum + count, 0) / Math.max(paragraphNumbers.length, 1)) <= 4);
+  const knownPlayerIds = new Set(players.map((player) => player.playerId));
+  const plannedInsightById = new Map(analysisPlan.rankedInsights.map((insight) => [insight.id, insight]));
+  const graphicPlanReady = !requiresAiReview || analysisPlan.graphics.every((graphic) => (
+    (graphic.type !== "player_focus" || (graphic.focusPlayerId && knownPlayerIds.has(graphic.focusPlayerId)))
+    && (graphic.type !== "team_history" || (
+      graphic.metricCodes.length > 0
+      && graphic.metricCodes.every((code) => historicalContext.teams.home.metrics[code] || historicalContext.teams.away.metrics[code])
+    ))
+    && graphic.evidenceIds.some((id) => plannedInsightById.get(graphic.placementInsightId)?.evidenceIds.includes(id))
+  ));
   const awkwardPatterns = [
     /הפך מחריגה לסיפור/,
     /ההיסטוריה הקצרה שלהם/,
@@ -1343,6 +1606,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /שימור איזון בנפח/,
     /הציב(?:ה|ו)?\s+יותר\s+נוכחות/,
     /קיבל(?:ה|ו)?[^.]{0,80}יותר\s+איומים/,
+    /נתיב(?:ים|י|י־|ה)?/,
+    /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/,
     /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
   ];
   const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
@@ -1356,12 +1621,12 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["match-ended", "המשחק הסתיים", match.status === "Ended", `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
     ["score-vs-players", "סך שערי השחקנים תואם לתוצאה", playerGoals === home.score + away.score, `${playerGoals} שערים בשורות השחקנים`],
-    ["shots-home", "בעיטות הפועל תואמות למפת הבעיטות", home.stats.team_total_shots === home.shotSummary.count, `${home.shotSummary.count} בעיטות`],
-    ["shots-away", "בעיטות מכבי תואמות למפת הבעיטות", away.stats.team_total_shots === away.shotSummary.count, `${away.shotSummary.count} בעיטות`],
-    ["target-home", "בעיטות הפועל למסגרת תואמות", home.stats.team_shots_on_target === home.shotSummary.onTarget, `${home.shotSummary.onTarget} למסגרת`],
-    ["target-away", "בעיטות מכבי למסגרת תואמות", away.stats.team_shots_on_target === away.shotSummary.onTarget, `${away.shotSummary.onTarget} למסגרת`],
-    ["xg-home", "xG הפועל עקבי בין המקורות", Math.abs(home.stats.team_expected_goals - home.shotSummary.xg) <= 0.05, `${home.stats.team_expected_goals} מול ${home.shotSummary.xg}`],
-    ["xg-away", "xG מכבי עקבי בין המקורות", Math.abs(away.stats.team_expected_goals - away.shotSummary.xg) <= 0.05, `${away.stats.team_expected_goals} מול ${away.shotSummary.xg}`],
+    ["shots-home", `בעיטות ${home.nameHe} תואמות למפת הבעיטות`, home.stats.team_total_shots === home.shotSummary.count, `${home.shotSummary.count} בעיטות`],
+    ["shots-away", `בעיטות ${away.nameHe} תואמות למפת הבעיטות`, away.stats.team_total_shots === away.shotSummary.count, `${away.shotSummary.count} בעיטות`],
+    ["target-home", `בעיטות ${home.nameHe} למסגרת תואמות`, home.stats.team_shots_on_target === home.shotSummary.onTarget, `${home.shotSummary.onTarget} למסגרת`],
+    ["target-away", `בעיטות ${away.nameHe} למסגרת תואמות`, away.stats.team_shots_on_target === away.shotSummary.onTarget, `${away.shotSummary.onTarget} למסגרת`],
+    ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - home.shotSummary.xg) <= 0.05, `${home.stats.team_expected_goals} מול ${home.shotSummary.xg}`],
+    ["xg-away", `xG ${away.nameHe} עקבי בין המקורות`, Math.abs(away.stats.team_expected_goals - away.shotSummary.xg) <= 0.05, `${away.stats.team_expected_goals} מול ${away.shotSummary.xg}`],
     ["player-goal-events", "שערי השחקנים תואמים לאירועי הבעיטה", playerGoalEventsMatch, `${playerGoals} שערים נבדקו ברמת השחקן`],
     ["flow-shot-total", "חלונות הזמן מכסים את כל הבעיטות", windowShotTotal === shots.length, `${windowShotTotal} בעיטות בחלונות הזמן`],
     ["timeline-goals", "אירועי המשחק תואמים לשערים", timelineGoalTotal === home.score + away.score, `${timelineGoalTotal} שערים בציר האירועים`],
@@ -1371,8 +1636,11 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", awkwardPatterns.every((pattern) => !pattern.test(copy)), "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
     ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
     ["independent-quality-review", "מבקר איכות בלתי־תלוי אישר את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
-    ["analytical-coverage", "הכתבה כוללת ניתוח מרחבי ומאבק בין חוליות", !requiresAiReview || (hasSpatialInsight && hasMatchupInsight), `מרחב: ${hasSpatialInsight ? "כן" : "חסר"}; matchup: ${hasMatchupInsight ? "כן" : "חסר"}; נדרשים heatmap.spatial_profile ומזהה matchup.*`],
-    ["historical-coverage", "הכתבה משווה את הקבוצות והשחקנים להופעות קודמות", !requiresAiReview || (hasTeamHistory && hasRequiredPlayerHistory), `שתי קבוצות: ${hasTeamHistory ? "כן" : "חסר"}; חריגת שחקן: ${hasRequiredPlayerHistory ? "כן" : "חסר"}`],
+    ["analysis-plan", "האנליסט בחר תזה, תובנות והשמטות תקינות", planFailures.length === 0, planFailures.length ? planFailures.join(" | ") : `${analysisPlan.rankedInsights.length} תובנות ו-${analysisPlan.coverageDecisions.filter((item) => item.decision === "omit").length} קטגוריות שהושמטו`],
+    ["plan-followed", "הכתבה עוקבת אחר התזה והקשת הסיפורית", planFollowed, `${sectionInsightIds.length} שיוכי תובנה נבדקו`],
+    ["game-state-story", "מצב המשחק מקבל משקל לפני המספרים המצטברים", gameStateStoryPassed, gameStateContext.rawShotTotalsNeedGameStateContext ? "נתוני הבעיטות דורשים הקשר באחד מ-2 הסעיפים הראשונים" : "לא זוהה עיוות מהותי בסכומי הבעיטות"],
+    ["number-discipline", "המספרים תומכים בסיפור ואינם מחליפים אותו", disciplinedNumbers, `מספרים בפסקאות: ${paragraphNumbers.join(", ")}`],
+    ["graphic-plan", "הגרפיקות נבחרו עבור תובנות ושחקנים קיימים", graphicPlanReady, `${analysisPlan.graphics.length} גרפיקות מתוכננות`],
     ["structured-evidence-context", "ראיות הניתוח כוללות שמות מדדים וקבוצות", structuredEvidenceReady, `${structuredEvidenceIds.length} חבילות ראיות מובנות נבדקו`],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
     ["evidence-links", "לכל טענה יש הפניה לראיות", claimEntries(editorial).every((claim) => claim.evidenceIds.length > 0), `${claimEntries(editorial).length} טענות מקושרות`],
@@ -1396,6 +1664,38 @@ function normalizeShot(shot) {
     outcome: shot.outcome,
     bodyPart: shot.body_part,
     situation: shot.situation,
+  };
+}
+
+function fixtureAnalysisPlan(insightCandidates) {
+  const ids = insightCandidates.slice(0, 3).map((candidate) => candidate.id);
+  const fallbackIds = ids.length ? ids : ["decisive_match_window"];
+  return {
+    thesis: { claimHe: "תוכנית בדיקה מכנית", whyItMattersHe: "מצב זה אינו מיועד לפרסום", evidenceIds: ["match.result"] },
+    rankedInsights: fallbackIds.map((id, index) => ({
+      id,
+      titleHe: id,
+      findingHe: id,
+      whyItMattersHe: id,
+      evidenceIds: ["match.result"],
+      importance: index === 0 ? "primary" : "supporting",
+      narrativeRole: index === 0 ? "setup" : "explanation",
+    })),
+    narrativeArc: fallbackIds.map((id) => ({ headingIdeaHe: id, purposeHe: id, insightIds: [id] })),
+    graphics: [],
+    coverageDecisions: ["game_state", "flow", "quality", "style", "matchup", "spatial", "history", "player"].map((category) => ({
+      category,
+      decision: "omit",
+      reasonHe: "מצב בדיקה מכנית",
+      evidenceIds: [],
+    })),
+    quality: {
+      singleThesis: true,
+      explainsRatherThanLists: true,
+      gameStateAdjusted: true,
+      selectiveEvidence: true,
+      graphicsServeStory: true,
+    },
   };
 }
 
@@ -1455,6 +1755,16 @@ async function main() {
   const timelineEvents = normalizeTimelineEvents(providerGame, players, home, away);
   const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId);
   const historicalContext = buildHistoricalContext(home, away, players, homeHistoryDataset, awayHistoryDataset, playerHistoryDataset);
+  const gameStateContext = buildGameStateContext(dataset.shots, timelineEvents, home, away);
+  const insightCandidates = buildInsightCandidates({
+    home,
+    away,
+    flowWindows,
+    gameStateContext,
+    historicalContext,
+    unitMatchups,
+    spatialProfile,
+  });
   const evidence = buildEvidence(
     match,
     home,
@@ -1467,13 +1777,18 @@ async function main() {
     timelineEvents,
     spatialProfile,
     historicalContext,
+    gameStateContext,
   );
   const usedAi = !args.noAi;
+  const analysisResult = usedAi
+    ? await generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext)
+    : { plan: fixtureAnalysisPlan(insightCandidates), model: null };
+  const analysisPlan = analysisResult.plan;
   const draftEditorial = usedAi
-    ? await generateEditorialWithAi(match, evidence, historicalContext)
+    ? await generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext)
     : fallbackEditorial(match, home, away);
   const reviewed = usedAi
-    ? await editEditorialWithAi(match, evidence, historicalContext, draftEditorial)
+    ? await editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, draftEditorial)
     : curatedEditorialSeed(draftEditorial);
   let { editorial, review: editorialReview } = reviewed;
   let qualityReview = fixtureQualityReview();
@@ -1482,7 +1797,7 @@ async function main() {
   let failedChecks = [];
   if (usedAi) {
     for (let attempt = 1; attempt <= MAX_QUALITY_ATTEMPTS; attempt += 1) {
-      qualityReview = await reviewEditorialQualityWithAi(match, evidence, editorial, attempt);
+      qualityReview = await reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameStateContext, editorial, attempt);
       console.log(JSON.stringify({
         qualityAttempt: attempt,
         status: qualityReview.status,
@@ -1491,7 +1806,7 @@ async function main() {
       let currentFeedback = [];
       if (qualityReview.status === "passed") {
         tags = buildArticleTags(home, away, players, editorial);
-        checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, true);
+        checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, true, analysisPlan, insightCandidates, gameStateContext);
         failedChecks = checks.filter((check) => check.status === "failed");
         if (failedChecks.length === 0) break;
         currentFeedback = failedChecks.map((check) => `בדיקה דטרמיניסטית נכשלה — ${check.label}: ${check.detail}`);
@@ -1499,7 +1814,7 @@ async function main() {
         currentFeedback = qualityReview.issues;
       }
       if (attempt === MAX_QUALITY_ATTEMPTS) break;
-      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, [...new Set(currentFeedback)]);
+      const revised = await editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, editorial, [...new Set(currentFeedback)]);
       editorial = revised.editorial;
       editorialReview = revised.review;
     }
@@ -1508,7 +1823,7 @@ async function main() {
     }
   } else {
     tags = buildArticleTags(home, away, players, editorial);
-    checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, false);
+    checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, false, analysisPlan, insightCandidates, gameStateContext);
     failedChecks = checks.filter((check) => check.status === "failed");
   }
   if (failedChecks.length) {
@@ -1525,11 +1840,12 @@ async function main() {
     publishedAt: generatedAt,
     generatedAt,
     generation: {
-      mode: usedAi ? "openai_writer_editor_and_qa" : "mechanical_fixture_dry_run",
+      mode: usedAi ? "openai_analyst_writer_editor_and_qa" : "mechanical_fixture_dry_run",
+      analystModel: analysisResult.model,
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v10",
+      pipelineVersion: "match-review-v11",
     },
     match: {
       matchId: match.match_id,
@@ -1560,6 +1876,9 @@ async function main() {
       total: providerGame.actualPlayTime.totalTime?.name ?? null,
     } : null,
     historicalContext,
+    gameStateContext,
+    insightCandidates,
+    analysisPlan,
     shots: dataset.shots.map(normalizeShot),
     editorialReview,
     qualityReview,

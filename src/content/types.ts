@@ -235,12 +235,15 @@ export type ArticleEditorialReview = {
   status: "passed" | "failed";
   checks: {
     naturalHebrew: boolean;
+    footballHebrew: boolean;
     numericClarity: boolean;
     cohesiveNarrative: boolean;
+    storyValue: boolean;
+    numberDiscipline: boolean;
     highVolumeComparisonsOnly: boolean;
     evidenceFaithfulness: boolean;
-    analyticalDepth: boolean;
-    historicalContext: boolean;
+    gameStateContext: boolean;
+    graphicRelevance: boolean;
   };
   notes: string[];
 };
@@ -261,6 +264,46 @@ export type ArticleHistoricalContext = {
   players: ArticleHistoricalPlayer[];
 };
 
+export type ArticleInsight = {
+  id: string;
+  titleHe: string;
+  findingHe: string;
+  whyItMattersHe: string;
+  evidenceIds: string[];
+  importance: "primary" | "supporting" | "context";
+  narrativeRole: "setup" | "turning_point" | "explanation" | "context" | "caveat";
+};
+
+export type ArticleGraphicSpec = {
+  type: "match_flow" | "shot_map" | "team_history" | "tactical_heatmap" | "player_focus";
+  titleHe: string;
+  subtitleHe: string;
+  placementInsightId: string;
+  evidenceIds: string[];
+  metricCodes: string[];
+  focusPlayerId: string;
+};
+
+export type ArticleAnalysisPlan = {
+  thesis: { claimHe: string; whyItMattersHe: string; evidenceIds: string[] };
+  rankedInsights: ArticleInsight[];
+  narrativeArc: Array<{ headingIdeaHe: string; purposeHe: string; insightIds: string[] }>;
+  graphics: ArticleGraphicSpec[];
+  coverageDecisions: Array<{
+    category: "game_state" | "flow" | "quality" | "style" | "matchup" | "spatial" | "history" | "player";
+    decision: "use" | "omit";
+    reasonHe: string;
+    evidenceIds: string[];
+  }>;
+  quality: {
+    singleThesis: boolean;
+    explainsRatherThanLists: boolean;
+    gameStateAdjusted: boolean;
+    selectiveEvidence: boolean;
+    graphicsServeStory: boolean;
+  };
+};
+
 export type ContentArticle = {
   schemaVersion: number;
   slug: string;
@@ -271,6 +314,7 @@ export type ContentArticle = {
   generatedAt: string;
   generation: {
     mode: string;
+    analystModel: string | null;
     model: string | null;
     editorModel: string | null;
     qualityModel: string | null;
@@ -299,6 +343,9 @@ export type ContentArticle = {
   flowWindows: ArticleFlowWindow[];
   actualPlayTime: { actual: string | null; total: string | null } | null;
   historicalContext: ArticleHistoricalContext;
+  gameStateContext: Record<string, unknown>;
+  insightCandidates: Array<{ id: string; category: string; score: number; evidenceIds: string[]; context: unknown }>;
+  analysisPlan: ArticleAnalysisPlan;
   shots: ArticleShot[];
   editorialReview: ArticleEditorialReview;
   qualityReview: ArticleQualityReview;
@@ -307,7 +354,7 @@ export type ContentArticle = {
     headlineEvidenceIds: string[];
     dek: string;
     dekEvidenceIds: string[];
-    sections: Array<{ heading: string; paragraphs: ArticleClaim[] }>;
+    sections: Array<{ heading: string; insightIds: string[]; paragraphs: ArticleClaim[] }>;
     takeaways: ArticleClaim[];
     conclusion: string;
     conclusionEvidenceIds: string[];

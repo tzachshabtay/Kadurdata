@@ -8,7 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { articles } from "../content/articles";
-import type { ArticleShot, ArticleTag, ContentArticle } from "../content/types";
+import type { ArticleGraphicSpec, ArticleShot, ArticleTag, ContentArticle } from "../content/types";
 import { renderSeasonHeatmap } from "../lib/seasonHeatmap";
 
 type BlogViewProps = {
@@ -59,7 +59,7 @@ function StoryScoreCard({ article }: { article: ContentArticle }) {
   );
 }
 
-function MatchFlowGraphic({ article }: { article: ContentArticle }) {
+function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
   const { home, away } = article.teams;
   const maxXg = Math.max(0.1, ...article.flowWindows.flatMap((window) => [window.home.xg, window.away.xg]));
   const eventTypeHe: Record<string, string> = {
@@ -72,7 +72,7 @@ function MatchFlowGraphic({ article }: { article: ContentArticle }) {
   return (
     <figure className="story-graphic match-flow-graphic">
       <figcaption>
-        <div><strong>זרימת המשחק: האיום הגיע בגלים</strong><small>xG ובעיטות בכל חלון של 15 דקות · אירועי המפתח מתחת</small></div>
+        <div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div>
       </figcaption>
       <div className="flow-legend">
         <span><i style={{ background: home.color }} />{home.nameHe}</span>
@@ -110,20 +110,33 @@ function MatchFlowGraphic({ article }: { article: ContentArticle }) {
   );
 }
 
-function HistoricalComparisonGraphic({ article }: { article: ContentArticle }) {
+function HistoricalComparisonGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
   const teams = [
     { team: article.teams.home, history: article.historicalContext.teams.home },
     { team: article.teams.away, history: article.historicalContext.teams.away },
   ];
-  const metrics = [
-    { code: "team_possession", label: "החזקה", suffix: "%", digits: 1 },
-    { code: "team_total_shots", label: "בעיטות", suffix: "", digits: 1 },
-    { code: "team_shots_on_target", label: "למסגרת", suffix: "", digits: 1 },
-  ];
+  const metricCatalog: Record<string, { label: string; suffix: string; digits: number }> = {
+    team_possession: { label: "החזקה", suffix: "%", digits: 1 },
+    team_total_shots: { label: "בעיטות", suffix: "", digits: 1 },
+    team_shots_on_target: { label: "למסגרת", suffix: "", digits: 1 },
+    team_expected_goals: { label: "xG", suffix: "", digits: 2 },
+    team_expected_goals_on_target: { label: "xGOT", suffix: "", digits: 2 },
+    team_big_chances_created: { label: "מצבים גדולים", suffix: "", digits: 1 },
+    team_key_passes: { label: "מסירות מפתח", suffix: "", digits: 1 },
+    team_crosses_completed: { label: "הגבהות מדויקות", suffix: "", digits: 1 },
+    team_passes_into_final_third: { label: "מסירות לשליש האחרון", suffix: "", digits: 1 },
+    team_interceptions: { label: "חטיפות", suffix: "", digits: 1 },
+    team_possession_lost: { label: "איבודי כדור", suffix: "", digits: 1 },
+    team_backward_passes: { label: "מסירות לאחור", suffix: "", digits: 1 },
+  };
+  const metrics = spec.metricCodes
+    .map((code) => ({ code, ...metricCatalog[code] }))
+    .filter((metric): metric is { code: string; label: string; suffix: string; digits: number } => Boolean(metric.label));
+  if (!metrics.length) return null;
   return (
     <figure className="story-graphic history-comparison-graphic">
       <figcaption>
-        <div><strong>מה השתנה לעומת 5 המשחקים הקודמים?</strong><small>בהיר: המשחק הנוכחי · כהה: הממוצע הקודם בכל המסגרות</small></div>
+        <div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div>
       </figcaption>
       <div className="history-comparison-grid">
         {teams.map(({ team, history }) => (
@@ -153,20 +166,21 @@ function HistoricalComparisonGraphic({ article }: { article: ContentArticle }) {
   );
 }
 
-function DorSpotlight({ article }: { article: ContentArticle }) {
-  const player = article.playerSpotlight.find((item) => item.name === "Dor Peretz");
+function PlayerSpotlight({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+  const player = article.players.find((item) => item.playerId === spec.focusPlayerId);
   if (!player) return null;
-  const teamGoals = article.teams.away.score;
-  const share = Math.round((Number(player.metrics.goals) / teamGoals) * 100);
+  const team = player.teamId === article.teams.home.teamId ? article.teams.home : article.teams.away;
+  const teamGoals = Math.max(1, team.score);
+  const share = Math.round((Number(player.metrics.goals ?? 0) / teamGoals) * 100);
   return (
     <aside className="player-spotlight">
       <div className="spotlight-ring" style={{ "--goal-share": `${share * 3.6}deg` } as CSSProperties}>
-        <span><strong>{share}%</strong><small>משערי מכבי</small></span>
+        <span><strong>{share}%</strong><small>משערי {team.nameHe}</small></span>
       </div>
       <div className="spotlight-copy">
-        <span className="spotlight-kicker">שחקן המשחק</span>
-        <h3>דור פרץ</h3>
-        <p>פרץ בעט 4 פעמים, כולן למסגרת. המצבים שמהם בעט היו שווים יחד {numeric(player.metrics.expected_goals, 2)} xG, והוא כבש 3 שערים.</p>
+        <span className="spotlight-kicker">{spec.titleHe}</span>
+        <h3>{player.nameHe}</h3>
+        <p>{spec.subtitleHe}</p>
         <div className="spotlight-stats">
           <span><strong>{player.metrics.goals}</strong><small>שערים במשחק</small></span>
           <span><strong>{player.metrics.total_shots}</strong><small>בעיטות</small></span>
@@ -178,12 +192,12 @@ function DorSpotlight({ article }: { article: ContentArticle }) {
   );
 }
 
-function ShotMap({ article }: { article: ContentArticle }) {
+function ShotMap({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
   const outcomeHe: Record<string, string> = { Goal: "שער", Saved: "נעצרה", Missed: "החטאה", Blocked: "נחסמה" };
   return (
     <figure className="story-graphic shot-map-graphic">
       <figcaption>
-        <div><strong>מפת הבעיטות: הגודל הוא הסיכוי</strong><small>{article.shots.length} בעיטות · כל הנקודות מכוונות לאותו שער להשוואה</small></div>
+        <div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div>
       </figcaption>
       <div className="article-shot-layout">
         <div className="article-shot-pitch" aria-label="מפת בעיטות">
@@ -225,7 +239,7 @@ function ShotMap({ article }: { article: ContentArticle }) {
   );
 }
 
-function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
+function TacticalHeatmapGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
   const homeCanvas = useRef<HTMLCanvasElement>(null);
   const awayCanvas = useRef<HTMLCanvasElement>(null);
   const [loaded, setLoaded] = useState(false);
@@ -247,7 +261,7 @@ function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
   return (
     <figure className="story-graphic tactical-heatmap-graphic">
       <figcaption>
-        <div><strong>איפה נוצרה הצפיפות</strong><small>מפות החום המאוחדות של שחקני ההרכב · שתי הקבוצות תוקפות לאותו כיוון</small></div>
+        <div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div>
       </figcaption>
       <div className={`tactical-heatmap-grid${loaded ? " loaded" : ""}`} dir="ltr">
         <div><strong>{article.teams.home.nameHe}</strong><canvas ref={homeCanvas} /></div>
@@ -257,8 +271,17 @@ function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
   );
 }
 
+function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+  if (spec.type === "match_flow") return <MatchFlowGraphic article={article} spec={spec} />;
+  if (spec.type === "shot_map") return <ShotMap article={article} spec={spec} />;
+  if (spec.type === "team_history") return <HistoricalComparisonGraphic article={article} spec={spec} />;
+  if (spec.type === "tactical_heatmap") return <TacticalHeatmapGraphic article={article} spec={spec} />;
+  if (spec.type === "player_focus") return <PlayerSpotlight article={article} spec={spec} />;
+  return null;
+}
+
 function FactCheckPanel({ article }: { article: ContentArticle }) {
-  const visibleCheckIds = ["score-vs-events", "history-order", "historical-player-volume", "historical-coverage", "editorial-review", "evidence-links", "numeric-claims"];
+  const visibleCheckIds = ["score-vs-events", "analysis-plan", "game-state-story", "number-discipline", "graphic-plan", "editorial-review", "numeric-claims"];
   const visibleChecks = visibleCheckIds
     .map((id) => article.factCheck.checks.find((check) => check.id === id))
     .filter((check): check is ContentArticle["factCheck"]["checks"][number] => Boolean(check));
@@ -294,13 +317,10 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
     : selectedArticle;
   if (!article) return <div className="story-empty">אין עדיין כתבות שעמדו בבדיקות הפרסום.</div>;
   const { editorial, match, teams } = article;
-  const sectionEvidenceIds = editorial.sections.map((section) => new Set(section.paragraphs.flatMap((paragraph) => paragraph.evidenceIds)));
-  const firstSectionUsing = (predicate: (evidenceId: string) => boolean) => sectionEvidenceIds.findIndex((ids) => [...ids].some(predicate));
-  const flowGraphicIndex = firstSectionUsing((id) => id === "flow.shot_windows" || id.startsWith("timeline."));
-  const historyGraphicIndex = firstSectionUsing((id) => id === "history.team.home" || id === "history.team.away");
-  const spotlightGraphicIndex = firstSectionUsing((id) => id === "player.dor_peretz");
-  const shotMapGraphicIndex = firstSectionUsing((id) => id === "match.shot_map" || id === "team.quality");
-  const heatmapGraphicIndex = firstSectionUsing((id) => id === "heatmap.spatial_profile");
+  const graphicsBySection = editorial.sections.map((section, index) => article.analysisPlan.graphics.filter((graphic) => (
+    section.insightIds.includes(graphic.placementInsightId)
+    && editorial.sections.findIndex((candidate) => candidate.insightIds.includes(graphic.placementInsightId)) === index
+  )));
   const activeTag = articles.flatMap((item) => item.tags ?? []).find((tag) => tag.id === activeTagId);
   const filterByTag = (tag: ArticleTag) => {
     const nextTagId = activeTagId === tag.id ? "" : tag.id;
@@ -364,11 +384,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
                 <h2>{section.heading}</h2>
                 {section.paragraphs.map((paragraph) => <p key={paragraph.text}>{paragraph.text}</p>)}
               </section>
-              {index === flowGraphicIndex && <MatchFlowGraphic article={article} />}
-              {index === historyGraphicIndex && <HistoricalComparisonGraphic article={article} />}
-              {index === spotlightGraphicIndex && <DorSpotlight article={article} />}
-              {index === shotMapGraphicIndex && <ShotMap article={article} />}
-              {index === heatmapGraphicIndex && <TacticalHeatmapGraphic article={article} />}
+              {graphicsBySection[index].map((graphic) => <PlannedGraphic article={article} key={`${graphic.type}:${graphic.placementInsightId}`} spec={graphic} />)}
             </div>
           ))}
 

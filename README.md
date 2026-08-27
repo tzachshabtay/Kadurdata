@@ -106,12 +106,12 @@ The Hebrew-only `בלוג` tab reads fact-checked article packages from
 
 1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
 2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
-3. Derive time-window flow, spatial-team profiles, and unit matchups, then convert current and historical data into a grounded evidence bundle with named teams, metrics, units, and players—not unlabeled number arrays.
-4. Ask the OpenAI Responses API for one cohesive Hebrew narrative whose claims cite evidence IDs.
-5. Run a separate senior-editor pass for idiomatic Hebrew, numerical clarity, narrative flow, and misuse of small samples.
-6. Run an independent adversarial Hebrew quality gate, then the deterministic evidence checks; accumulate issues from both and send the full history back to the editor for up to three revision cycles.
-7. Reject the draft if any independent review, score, event total, xG cross-check, historical date, evidence link, tag set, numeric claim, spatial insight, or unit-matchup insight still fails.
-8. Publish the JSON package with Hebrew team, player, and `סיכום משחק` tags; Vite discovers it automatically and adds it to the filterable blog archive.
+3. Derive time-window flow, spatial-team profiles, unit matchups, and game-state splits around red cards and late score states; flag when similar cumulative totals conceal a materially different match.
+4. Rank candidate insights, then ask a dedicated AI analyst to choose one thesis, explicitly omit weak angles, design the narrative arc, and select 2–4 evidence-backed graphics.
+5. Ask the OpenAI Responses API for a selective Hebrew narrative whose sections follow that plan and whose claims cite evidence IDs.
+6. Run a separate senior football-editor pass for idiomatic Israeli football Hebrew, numerical clarity, story value, and misuse of small samples.
+7. Run an independent adversarial quality gate plus deterministic checks for game-state context, plan adherence, graphic relevance, numeric density, score/event consistency, and evidence support; rejected drafts return to the editor for up to five attempts.
+8. Publish the JSON package—including its analysis and graphic plans—with Hebrew team, player, and `סיכום משחק` tags; Vite renders only the selected code-native graphics and adds the article to the filterable blog archive.
 
 Generate the latest eligible match with AI:
 
@@ -121,7 +121,7 @@ npm run content:validate
 npm run build
 ```
 
-Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL`, `OPENAI_EDITOR_MODEL`, and `OPENAI_QA_MODEL` in `.env`. Rebuild the sample
+Set `OPENAI_API_KEY` and optionally `OPENAI_ANALYST_MODEL`, `OPENAI_MODEL`, `OPENAI_EDITOR_MODEL`, and `OPENAI_QA_MODEL` in `.env`. Rebuild the sample
 through the same real writer-and-editor pipeline with `npm run content:generate:sample`. Publishing without
 both AI passes is rejected. `npm run content:check:fixture` is available only as a dry-run mechanical fixture;
 it never writes or publishes an article.
