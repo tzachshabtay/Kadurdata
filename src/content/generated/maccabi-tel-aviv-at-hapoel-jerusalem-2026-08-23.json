@@ -4,12 +4,12 @@
   "language": "he",
   "kind": "match_review",
   "status": "published",
-  "publishedAt": "2026-08-26T23:30:41.078Z",
-  "generatedAt": "2026-08-26T23:30:41.078Z",
+  "publishedAt": "2026-08-27T00:36:31.373Z",
+  "generatedAt": "2026-08-27T00:36:31.373Z",
   "generation": {
     "mode": "deterministic_editorial_fallback",
     "model": null,
-    "pipelineVersion": "match-review-v1"
+    "pipelineVersion": "match-review-v2"
   },
   "match": {
     "matchId": "5b2957d1-6f48-4269-baf6-2f53753eb160",
@@ -151,6 +151,144 @@
   "aiDisclosure": "גילוי נאות: הכתבה נוצרה בעזרת בינה מלאכותית על בסיס נתוני כדורדאטה. הנתונים והטענות המספריות עברו בדיקות אוטומטיות לפני הפרסום.",
   "players": [
     {
+      "playerId": "cd12fd24-dbd1-4b3b-a2a8-5af93d619f3d",
+      "name": "Itamar Noy",
+      "nameHe": "איתמר נוי",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Midfielder",
+      "formationPosition": "Attacking Midfield",
+      "shirtNumber": 30,
+      "roleGroup": "Midfielder",
+      "minutes": 90,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 10,
+        "ball_recovery": 8,
+        "blocks": 1,
+        "clearances": 1,
+        "dribble_success_pct": 50,
+        "dribbles_attempted": 2,
+        "expected_assists": 0.04,
+        "fouls_made": 1,
+        "goals": 0,
+        "interceptions": 1,
+        "key_passes": 2,
+        "long_pass_completion_pct": 67,
+        "long_passes_attempted": 3,
+        "long_passes_completed": 2,
+        "minutes": 90,
+        "offsides": 0,
+        "pass_completion_pct": 97,
+        "passes_attempted": 36,
+        "passes_completed": 35,
+        "passes_into_final_third": 4,
+        "possession_lost": 3,
+        "rating_365": 7,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 2,
+        "tackles_won": 2,
+        "total_shots": 0,
+        "touches": 51,
+        "was_dribbled_past": 1,
+        "was_fouled": 3
+      }
+    },
+    {
+      "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+      "name": "Dor Peretz",
+      "nameHe": "דור פרץ",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Midfielder",
+      "formationPosition": "Attacking Midfield",
+      "shirtNumber": 42,
+      "roleGroup": "Midfielder",
+      "minutes": 75,
+      "metrics": {
+        "aerial_duel_win_pct": 50,
+        "aerial_duels_attempted": 2,
+        "aerial_duels_won": 1,
+        "assists": 0,
+        "backward_passes": 3,
+        "ball_recovery": 0,
+        "big_chances_created": 1,
+        "big_chances_missed": 1,
+        "big_chances_scored": 3,
+        "clearances": 0,
+        "expected_assists": 0.17,
+        "expected_goals": 2.5,
+        "expected_goals_on_target": 3.34,
+        "fouls_made": 0,
+        "goals": 3,
+        "ground_duel_win_pct": 50,
+        "ground_duels_attempted": 2,
+        "ground_duels_won": 1,
+        "hit_woodwork": 1,
+        "interceptions": 0,
+        "key_passes": 1,
+        "minutes": 75,
+        "offsides": 0,
+        "pass_completion_pct": 84,
+        "passes_attempted": 19,
+        "passes_completed": 16,
+        "passes_into_final_third": 3,
+        "possession_lost": 6,
+        "rating_365": 9.7,
+        "shots_on_target": 4,
+        "total_shots": 4,
+        "touches": 30,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "b3bba426-e082-448f-bdbe-c6361caf339b",
+      "name": "Mohamed Ali Kamara",
+      "nameHe": "מוחמד עלי קאמארה",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Substitute",
+      "positionName": "Defender",
+      "formationPosition": "Centre Back",
+      "shirtNumber": 5,
+      "roleGroup": "Defender",
+      "minutes": 19,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 0,
+        "ball_recovery": 0,
+        "blocks": 2,
+        "clearances": 1,
+        "expected_assists": 0,
+        "expected_goals": 0.14,
+        "expected_goals_on_target": 0.09,
+        "fouls_made": 0,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 0,
+        "minutes": 19,
+        "offsides": 0,
+        "pass_completion_pct": 80,
+        "passes_attempted": 5,
+        "passes_completed": 4,
+        "passes_into_final_third": 1,
+        "possession_lost": 1,
+        "rating_365": 6.6,
+        "shots_on_target": 1,
+        "total_shots": 1,
+        "touches": 11,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
       "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
       "name": "Elay Madmon",
       "nameHe": "איליי מדמון",
@@ -249,147 +387,6 @@
       }
     },
     {
-      "playerId": "ff574781-01f2-4586-86c8-e7c7620f2496",
-      "name": "Noam Ben Harush",
-      "nameHe": "נועם בן הרוש",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Defender",
-      "formationPosition": "Right Back",
-      "shirtNumber": 2,
-      "roleGroup": "Defender",
-      "minutes": 90,
-      "metrics": {
-        "assists": 1,
-        "backward_passes": 7,
-        "ball_recovery": 6,
-        "big_chances_created": 1,
-        "blocks": 1,
-        "clearances": 2,
-        "expected_assists": 0.41,
-        "expected_goals": 0.05,
-        "fouls_made": 1,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 2,
-        "minutes": 90,
-        "offsides": 0,
-        "pass_completion_pct": 86,
-        "passes_attempted": 49,
-        "passes_completed": 42,
-        "passes_into_final_third": 6,
-        "possession_lost": 13,
-        "rating_365": 7.4,
-        "shots_off_target": 2,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 3,
-        "tackles_won": 3,
-        "total_shots": 2,
-        "touches": 67,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "cd12fd24-dbd1-4b3b-a2a8-5af93d619f3d",
-      "name": "Itamar Noy",
-      "nameHe": "איתמר נוי",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Midfielder",
-      "formationPosition": "Attacking Midfield",
-      "shirtNumber": 30,
-      "roleGroup": "Midfielder",
-      "minutes": 90,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 10,
-        "ball_recovery": 8,
-        "blocks": 1,
-        "clearances": 1,
-        "dribble_success_pct": 50,
-        "dribbles_attempted": 2,
-        "expected_assists": 0.04,
-        "fouls_made": 1,
-        "goals": 0,
-        "interceptions": 1,
-        "key_passes": 2,
-        "long_pass_completion_pct": 67,
-        "long_passes_attempted": 3,
-        "long_passes_completed": 2,
-        "minutes": 90,
-        "offsides": 0,
-        "pass_completion_pct": 97,
-        "passes_attempted": 36,
-        "passes_completed": 35,
-        "passes_into_final_third": 4,
-        "possession_lost": 3,
-        "rating_365": 7,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 2,
-        "tackles_won": 2,
-        "total_shots": 0,
-        "touches": 51,
-        "was_dribbled_past": 1,
-        "was_fouled": 3
-      }
-    },
-    {
-      "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
-      "name": "Dor Peretz",
-      "nameHe": "דור פרץ",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Midfielder",
-      "formationPosition": "Attacking Midfield",
-      "shirtNumber": 42,
-      "roleGroup": "Midfielder",
-      "minutes": 75,
-      "metrics": {
-        "aerial_duel_win_pct": 50,
-        "aerial_duels_attempted": 2,
-        "aerial_duels_won": 1,
-        "assists": 0,
-        "backward_passes": 3,
-        "ball_recovery": 0,
-        "big_chances_created": 1,
-        "big_chances_missed": 1,
-        "big_chances_scored": 3,
-        "clearances": 0,
-        "expected_assists": 0.17,
-        "expected_goals": 2.5,
-        "expected_goals_on_target": 3.34,
-        "fouls_made": 0,
-        "goals": 3,
-        "ground_duel_win_pct": 50,
-        "ground_duels_attempted": 2,
-        "ground_duels_won": 1,
-        "hit_woodwork": 1,
-        "interceptions": 0,
-        "key_passes": 1,
-        "minutes": 75,
-        "offsides": 0,
-        "pass_completion_pct": 84,
-        "passes_attempted": 19,
-        "passes_completed": 16,
-        "passes_into_final_third": 3,
-        "possession_lost": 6,
-        "rating_365": 9.7,
-        "shots_on_target": 4,
-        "total_shots": 4,
-        "touches": 30,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
       "playerId": "7f1e0990-2f7b-4047-a1b9-3d0ba31f7310",
       "name": "Omer Abuhav",
       "nameHe": "עומר אבוהב",
@@ -427,56 +424,6 @@
         "touches": 19,
         "was_dribbled_past": 1,
         "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
-      "name": "Israel Dappa",
-      "nameHe": "ישראל דאפה",
-      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "teamName": "Hapoel Jerusalem FC",
-      "side": "home",
-      "lineupStatus": "Starting",
-      "positionName": "Attacker",
-      "formationPosition": "Centre Forward",
-      "shirtNumber": 33,
-      "roleGroup": "Attacker",
-      "minutes": 61,
-      "metrics": {
-        "aerial_duel_win_pct": 67,
-        "aerial_duels_attempted": 3,
-        "aerial_duels_won": 2,
-        "assists": 0,
-        "backward_passes": 4,
-        "ball_recovery": 2,
-        "big_chances_missed": 1,
-        "clearances": 0,
-        "expected_assists": 0.03,
-        "expected_goals": 0.28,
-        "expected_goals_on_target": 0.65,
-        "fouls_made": 3,
-        "goals": 0,
-        "ground_duel_win_pct": 25,
-        "ground_duels_attempted": 8,
-        "ground_duels_won": 2,
-        "interceptions": 0,
-        "key_passes": 1,
-        "long_pass_completion_pct": 100,
-        "long_passes_attempted": 1,
-        "long_passes_completed": 1,
-        "minutes": 61,
-        "offsides": 1,
-        "pass_completion_pct": 100,
-        "passes_attempted": 10,
-        "passes_completed": 10,
-        "passes_into_final_third": 0,
-        "possession_lost": 7,
-        "rating_365": 6,
-        "shots_on_target": 1,
-        "total_shots": 1,
-        "touches": 22,
-        "was_dribbled_past": 1,
-        "was_fouled": 2
       }
     },
     {
@@ -582,6 +529,50 @@
       }
     },
     {
+      "playerId": "ff574781-01f2-4586-86c8-e7c7620f2496",
+      "name": "Noam Ben Harush",
+      "nameHe": "נועם בן הרוש",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Defender",
+      "formationPosition": "Right Back",
+      "shirtNumber": 2,
+      "roleGroup": "Defender",
+      "minutes": 90,
+      "metrics": {
+        "assists": 1,
+        "backward_passes": 7,
+        "ball_recovery": 6,
+        "big_chances_created": 1,
+        "blocks": 1,
+        "clearances": 2,
+        "expected_assists": 0.41,
+        "expected_goals": 0.05,
+        "fouls_made": 1,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 2,
+        "minutes": 90,
+        "offsides": 0,
+        "pass_completion_pct": 86,
+        "passes_attempted": 49,
+        "passes_completed": 42,
+        "passes_into_final_third": 6,
+        "possession_lost": 13,
+        "rating_365": 7.4,
+        "shots_off_target": 2,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 3,
+        "tackles_won": 3,
+        "total_shots": 2,
+        "touches": 67,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
       "playerId": "c17ac0f2-3e83-418e-a2c8-18e57cae7645",
       "name": "Ohad Almagor",
       "nameHe": "אוהד אלמגור",
@@ -628,6 +619,111 @@
         "total_shots": 2,
         "touches": 18,
         "was_dribbled_past": 2,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
+      "name": "Israel Dappa",
+      "nameHe": "ישראל דאפה",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamName": "Hapoel Jerusalem FC",
+      "side": "home",
+      "lineupStatus": "Starting",
+      "positionName": "Attacker",
+      "formationPosition": "Centre Forward",
+      "shirtNumber": 33,
+      "roleGroup": "Attacker",
+      "minutes": 61,
+      "metrics": {
+        "aerial_duel_win_pct": 67,
+        "aerial_duels_attempted": 3,
+        "aerial_duels_won": 2,
+        "assists": 0,
+        "backward_passes": 4,
+        "ball_recovery": 2,
+        "big_chances_missed": 1,
+        "clearances": 0,
+        "expected_assists": 0.03,
+        "expected_goals": 0.28,
+        "expected_goals_on_target": 0.65,
+        "fouls_made": 3,
+        "goals": 0,
+        "ground_duel_win_pct": 25,
+        "ground_duels_attempted": 8,
+        "ground_duels_won": 2,
+        "interceptions": 0,
+        "key_passes": 1,
+        "long_pass_completion_pct": 100,
+        "long_passes_attempted": 1,
+        "long_passes_completed": 1,
+        "minutes": 61,
+        "offsides": 1,
+        "pass_completion_pct": 100,
+        "passes_attempted": 10,
+        "passes_completed": 10,
+        "passes_into_final_third": 0,
+        "possession_lost": 7,
+        "rating_365": 6,
+        "shots_on_target": 1,
+        "total_shots": 1,
+        "touches": 22,
+        "was_dribbled_past": 1,
+        "was_fouled": 2
+      }
+    },
+    {
+      "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+      "name": "Osher Davida",
+      "nameHe": "אושר דוידה",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Attacker",
+      "formationPosition": "Right Forward",
+      "shirtNumber": 77,
+      "roleGroup": "Attacker",
+      "minutes": 90,
+      "metrics": {
+        "assists": 1,
+        "backward_passes": 6,
+        "ball_recovery": 3,
+        "clearances": 0,
+        "cross_completion_pct": 50,
+        "crosses_attempted": 4,
+        "crosses_completed": 2,
+        "dribble_success_pct": 33,
+        "dribbles_attempted": 3,
+        "expected_assists": 0.59,
+        "expected_goals": 0.09,
+        "expected_goals_on_target": 0.05,
+        "final_third_possession_won": 1,
+        "fouls_made": 2,
+        "goals": 0,
+        "interceptions": 2,
+        "key_passes": 2,
+        "long_pass_completion_pct": 100,
+        "long_passes_attempted": 2,
+        "long_passes_completed": 2,
+        "minutes": 90,
+        "offsides": 0,
+        "pass_completion_pct": 100,
+        "passes_attempted": 17,
+        "passes_completed": 17,
+        "passes_into_final_third": 3,
+        "possession_lost": 7,
+        "rating_365": 7.3,
+        "shots_blocked": 1,
+        "shots_off_target": 1,
+        "shots_on_target": 1,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 2,
+        "tackles_won": 2,
+        "total_shots": 3,
+        "touches": 39,
+        "was_dribbled_past": 0,
         "was_fouled": 0
       }
     },
@@ -717,102 +813,6 @@
         "touches": 37,
         "was_dribbled_past": 1,
         "was_fouled": 2
-      }
-    },
-    {
-      "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
-      "name": "Osher Davida",
-      "nameHe": "אושר דוידה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Attacker",
-      "formationPosition": "Right Forward",
-      "shirtNumber": 77,
-      "roleGroup": "Attacker",
-      "minutes": 90,
-      "metrics": {
-        "assists": 1,
-        "backward_passes": 6,
-        "ball_recovery": 3,
-        "clearances": 0,
-        "cross_completion_pct": 50,
-        "crosses_attempted": 4,
-        "crosses_completed": 2,
-        "dribble_success_pct": 33,
-        "dribbles_attempted": 3,
-        "expected_assists": 0.59,
-        "expected_goals": 0.09,
-        "expected_goals_on_target": 0.05,
-        "final_third_possession_won": 1,
-        "fouls_made": 2,
-        "goals": 0,
-        "interceptions": 2,
-        "key_passes": 2,
-        "long_pass_completion_pct": 100,
-        "long_passes_attempted": 2,
-        "long_passes_completed": 2,
-        "minutes": 90,
-        "offsides": 0,
-        "pass_completion_pct": 100,
-        "passes_attempted": 17,
-        "passes_completed": 17,
-        "passes_into_final_third": 3,
-        "possession_lost": 7,
-        "rating_365": 7.3,
-        "shots_blocked": 1,
-        "shots_off_target": 1,
-        "shots_on_target": 1,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 2,
-        "tackles_won": 2,
-        "total_shots": 3,
-        "touches": 39,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "b3bba426-e082-448f-bdbe-c6361caf339b",
-      "name": "Mohamed Ali Kamara",
-      "nameHe": "מוחמד עלי קאמארה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Substitute",
-      "positionName": "Defender",
-      "formationPosition": "Centre Back",
-      "shirtNumber": 5,
-      "roleGroup": "Defender",
-      "minutes": 19,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 0,
-        "blocks": 2,
-        "clearances": 1,
-        "expected_assists": 0,
-        "expected_goals": 0.14,
-        "expected_goals_on_target": 0.09,
-        "fouls_made": 0,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 0,
-        "minutes": 19,
-        "offsides": 0,
-        "pass_completion_pct": 80,
-        "passes_attempted": 5,
-        "passes_completed": 4,
-        "passes_into_final_third": 1,
-        "possession_lost": 1,
-        "rating_365": 6.6,
-        "shots_on_target": 1,
-        "total_shots": 1,
-        "touches": 11,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
       }
     },
     {
@@ -1049,97 +1049,6 @@
       }
     },
     {
-      "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
-      "name": "Sayed Abu Farchi",
-      "nameHe": "סייד אבו פרחי",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Substitute",
-      "positionName": "Attacker",
-      "formationPosition": "Centre Forward",
-      "shirtNumber": 34,
-      "roleGroup": "Attacker",
-      "minutes": 27,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 1,
-        "big_chances_scored": 1,
-        "clearances": 1,
-        "expected_assists": 0,
-        "expected_goals": 0.16,
-        "expected_goals_on_target": 0.74,
-        "fouls_made": 0,
-        "goals": 1,
-        "interceptions": 0,
-        "key_passes": 0,
-        "long_pass_completion_pct": 38,
-        "long_passes_attempted": 8,
-        "long_passes_completed": 3,
-        "minutes": 27,
-        "offsides": 0,
-        "pass_completion_pct": 38,
-        "passes_attempted": 8,
-        "passes_completed": 3,
-        "passes_into_final_third": 2,
-        "possession_lost": 5,
-        "rating_365": 7.2,
-        "shots_on_target": 1,
-        "total_shots": 1,
-        "touches": 11,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
-      "name": "Ofek Melika",
-      "nameHe": "אופק מליקה",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Goalkeeper",
-      "formationPosition": "Goalkeeper",
-      "shirtNumber": 1,
-      "roleGroup": "Goalkeeper",
-      "minutes": 77,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 0,
-        "ball_recovery": 12,
-        "clearances": 1,
-        "expected_assists": 0,
-        "expected_goals_on_target_conceded": 0.92,
-        "expected_goals_prevented": -0.08,
-        "fouls_made": 1,
-        "goalkeeper_saves": 2,
-        "goals": 0,
-        "goals_conceded": 2,
-        "high_claims": 1,
-        "interceptions": 0,
-        "key_passes": 0,
-        "long_pass_completion_pct": 71,
-        "long_passes_attempted": 7,
-        "long_passes_completed": 5,
-        "minutes": 77,
-        "offsides": 0,
-        "pass_completion_pct": 92,
-        "passes_attempted": 25,
-        "passes_completed": 23,
-        "passes_into_final_third": 0,
-        "played_sweeper": 1,
-        "possession_lost": 2,
-        "punches": 1,
-        "rating_365": 5.1,
-        "total_shots": 0,
-        "touches": 39,
-        "was_dribbled_past": 0,
-        "was_fouled": 0
-      }
-    },
-    {
       "playerId": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
       "name": "Noam Malmud",
       "nameHe": "נועם מלמוד",
@@ -1268,6 +1177,195 @@
       }
     },
     {
+      "playerId": "f59f01d2-1af4-4c49-8322-b39c4a27bd85",
+      "name": "Idan Cohen",
+      "nameHe": "עידן כהן",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamName": "Hapoel Jerusalem FC",
+      "side": "home",
+      "lineupStatus": "Starting",
+      "positionName": "Defender",
+      "formationPosition": "Right Back",
+      "shirtNumber": 26,
+      "roleGroup": "Defender",
+      "minutes": 71,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 3,
+        "ball_recovery": 4,
+        "clearances": 1,
+        "dribble_success_pct": 50,
+        "dribbles_attempted": 2,
+        "expected_assists": 0.07,
+        "fouls_made": 1,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 1,
+        "long_pass_completion_pct": 100,
+        "long_passes_attempted": 1,
+        "long_passes_completed": 1,
+        "minutes": 71,
+        "offsides": 0,
+        "pass_completion_pct": 95,
+        "passes_attempted": 21,
+        "passes_completed": 20,
+        "passes_into_final_third": 3,
+        "possession_lost": 7,
+        "rating_365": 5.5,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 75,
+        "tackles_attempted": 4,
+        "tackles_won": 3,
+        "total_shots": 0,
+        "touches": 39,
+        "was_dribbled_past": 1,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
+      "name": "Ofek Melika",
+      "nameHe": "אופק מליקה",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Goalkeeper",
+      "formationPosition": "Goalkeeper",
+      "shirtNumber": 1,
+      "roleGroup": "Goalkeeper",
+      "minutes": 77,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 0,
+        "ball_recovery": 12,
+        "clearances": 1,
+        "expected_assists": 0,
+        "expected_goals_on_target_conceded": 0.92,
+        "expected_goals_prevented": -0.08,
+        "fouls_made": 1,
+        "goalkeeper_saves": 2,
+        "goals": 0,
+        "goals_conceded": 2,
+        "high_claims": 1,
+        "interceptions": 0,
+        "key_passes": 0,
+        "long_pass_completion_pct": 71,
+        "long_passes_attempted": 7,
+        "long_passes_completed": 5,
+        "minutes": 77,
+        "offsides": 0,
+        "pass_completion_pct": 92,
+        "passes_attempted": 25,
+        "passes_completed": 23,
+        "passes_into_final_third": 0,
+        "played_sweeper": 1,
+        "possession_lost": 2,
+        "punches": 1,
+        "rating_365": 5.1,
+        "total_shots": 0,
+        "touches": 39,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
+      "name": "Sayed Abu Farchi",
+      "nameHe": "סייד אבו פרחי",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Substitute",
+      "positionName": "Attacker",
+      "formationPosition": "Centre Forward",
+      "shirtNumber": 34,
+      "roleGroup": "Attacker",
+      "minutes": 27,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 0,
+        "ball_recovery": 1,
+        "big_chances_scored": 1,
+        "clearances": 1,
+        "expected_assists": 0,
+        "expected_goals": 0.16,
+        "expected_goals_on_target": 0.74,
+        "fouls_made": 0,
+        "goals": 1,
+        "interceptions": 0,
+        "key_passes": 0,
+        "long_pass_completion_pct": 38,
+        "long_passes_attempted": 8,
+        "long_passes_completed": 3,
+        "minutes": 27,
+        "offsides": 0,
+        "pass_completion_pct": 38,
+        "passes_attempted": 8,
+        "passes_completed": 3,
+        "passes_into_final_third": 2,
+        "possession_lost": 5,
+        "rating_365": 7.2,
+        "shots_on_target": 1,
+        "total_shots": 1,
+        "touches": 11,
+        "was_dribbled_past": 0,
+        "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+      "name": "Roy Revivo",
+      "nameHe": "רוי רביבו",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Defender",
+      "formationPosition": "Left Back",
+      "shirtNumber": 3,
+      "roleGroup": "Defender",
+      "minutes": 90,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 3,
+        "ball_recovery": 5,
+        "big_chances_created": 1,
+        "blocks": 1,
+        "clearances": 2,
+        "cross_completion_pct": 25,
+        "crosses_attempted": 4,
+        "crosses_completed": 1,
+        "dribble_success_pct": 50,
+        "dribbles_attempted": 2,
+        "expected_assists": 0.46,
+        "expected_goals": 0.21,
+        "expected_goals_on_target": 0.54,
+        "fouls_made": 0,
+        "goals": 1,
+        "interceptions": 1,
+        "key_passes": 1,
+        "minutes": 90,
+        "offsides": 0,
+        "pass_completion_pct": 90,
+        "passes_attempted": 52,
+        "passes_completed": 47,
+        "passes_into_final_third": 4,
+        "possession_lost": 16,
+        "rating_365": 8.1,
+        "shots_blocked": 2,
+        "shots_on_target": 1,
+        "successful_dribbles": 1,
+        "tackle_success_pct": 100,
+        "tackles_attempted": 2,
+        "tackles_won": 2,
+        "total_shots": 3,
+        "touches": 82,
+        "was_dribbled_past": 0,
+        "was_fouled": 1
+      }
+    },
+    {
       "playerId": "67be92db-2f80-43c2-8baf-5f2c2cdd871d",
       "name": "Raz Shlomo",
       "nameHe": "רז שלמה",
@@ -1367,143 +1465,6 @@
       }
     },
     {
-      "playerId": "f59f01d2-1af4-4c49-8322-b39c4a27bd85",
-      "name": "Idan Cohen",
-      "nameHe": "עידן כהן",
-      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
-      "teamName": "Hapoel Jerusalem FC",
-      "side": "home",
-      "lineupStatus": "Starting",
-      "positionName": "Defender",
-      "formationPosition": "Right Back",
-      "shirtNumber": 26,
-      "roleGroup": "Defender",
-      "minutes": 71,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 3,
-        "ball_recovery": 4,
-        "clearances": 1,
-        "dribble_success_pct": 50,
-        "dribbles_attempted": 2,
-        "expected_assists": 0.07,
-        "fouls_made": 1,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 1,
-        "long_pass_completion_pct": 100,
-        "long_passes_attempted": 1,
-        "long_passes_completed": 1,
-        "minutes": 71,
-        "offsides": 0,
-        "pass_completion_pct": 95,
-        "passes_attempted": 21,
-        "passes_completed": 20,
-        "passes_into_final_third": 3,
-        "possession_lost": 7,
-        "rating_365": 5.5,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 75,
-        "tackles_attempted": 4,
-        "tackles_won": 3,
-        "total_shots": 0,
-        "touches": 39,
-        "was_dribbled_past": 1,
-        "was_fouled": 0
-      }
-    },
-    {
-      "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
-      "name": "Roy Revivo",
-      "nameHe": "רוי רביבו",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Defender",
-      "formationPosition": "Left Back",
-      "shirtNumber": 3,
-      "roleGroup": "Defender",
-      "minutes": 90,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 3,
-        "ball_recovery": 5,
-        "big_chances_created": 1,
-        "blocks": 1,
-        "clearances": 2,
-        "cross_completion_pct": 25,
-        "crosses_attempted": 4,
-        "crosses_completed": 1,
-        "dribble_success_pct": 50,
-        "dribbles_attempted": 2,
-        "expected_assists": 0.46,
-        "expected_goals": 0.21,
-        "expected_goals_on_target": 0.54,
-        "fouls_made": 0,
-        "goals": 1,
-        "interceptions": 1,
-        "key_passes": 1,
-        "minutes": 90,
-        "offsides": 0,
-        "pass_completion_pct": 90,
-        "passes_attempted": 52,
-        "passes_completed": 47,
-        "passes_into_final_third": 4,
-        "possession_lost": 16,
-        "rating_365": 8.1,
-        "shots_blocked": 2,
-        "shots_on_target": 1,
-        "successful_dribbles": 1,
-        "tackle_success_pct": 100,
-        "tackles_attempted": 2,
-        "tackles_won": 2,
-        "total_shots": 3,
-        "touches": 82,
-        "was_dribbled_past": 0,
-        "was_fouled": 1
-      }
-    },
-    {
-      "playerId": "a2155727-1afc-45a1-9d5e-592e9ef5195f",
-      "name": "Ester Sokler",
-      "nameHe": "אסטר סוקלר",
-      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
-      "teamName": "Maccabi Tel Aviv FC",
-      "side": "away",
-      "lineupStatus": "Starting",
-      "positionName": "Attacker",
-      "formationPosition": "Centre Forward",
-      "shirtNumber": 9,
-      "roleGroup": "Attacker",
-      "minutes": 63,
-      "metrics": {
-        "assists": 0,
-        "backward_passes": 4,
-        "ball_recovery": 1,
-        "clearances": 0,
-        "expected_assists": 0.01,
-        "final_third_possession_won": 1,
-        "fouls_made": 2,
-        "goals": 0,
-        "interceptions": 0,
-        "key_passes": 0,
-        "minutes": 63,
-        "offsides": 0,
-        "pass_completion_pct": 82,
-        "passes_attempted": 11,
-        "passes_completed": 9,
-        "passes_into_final_third": 0,
-        "penalty_won": 1,
-        "possession_lost": 4,
-        "rating_365": 6.6,
-        "total_shots": 0,
-        "touches": 15,
-        "was_dribbled_past": 2,
-        "was_fouled": 1
-      }
-    },
-    {
       "playerId": "1ead46df-49b8-49ba-88dd-3ee49cbce441",
       "name": "Yanai Distalfeld",
       "nameHe": "ינאי דיסטלפילד",
@@ -1544,6 +1505,45 @@
         "touches": 14,
         "was_dribbled_past": 0,
         "was_fouled": 0
+      }
+    },
+    {
+      "playerId": "a2155727-1afc-45a1-9d5e-592e9ef5195f",
+      "name": "Ester Sokler",
+      "nameHe": "אסטר סוקלר",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamName": "Maccabi Tel Aviv FC",
+      "side": "away",
+      "lineupStatus": "Starting",
+      "positionName": "Attacker",
+      "formationPosition": "Centre Forward",
+      "shirtNumber": 9,
+      "roleGroup": "Attacker",
+      "minutes": 63,
+      "metrics": {
+        "assists": 0,
+        "backward_passes": 4,
+        "ball_recovery": 1,
+        "clearances": 0,
+        "expected_assists": 0.01,
+        "final_third_possession_won": 1,
+        "fouls_made": 2,
+        "goals": 0,
+        "interceptions": 0,
+        "key_passes": 0,
+        "minutes": 63,
+        "offsides": 0,
+        "pass_completion_pct": 82,
+        "passes_attempted": 11,
+        "passes_completed": 9,
+        "passes_into_final_third": 0,
+        "penalty_won": 1,
+        "possession_lost": 4,
+        "rating_365": 6.6,
+        "total_shots": 0,
+        "touches": 15,
+        "was_dribbled_past": 2,
+        "was_fouled": 1
       }
     },
     {
@@ -2525,6 +2525,517 @@
       "observed_at": "2026-08-26T19:41:55.240191+00:00"
     }
   ],
+  "spatialProfile": {
+    "method": "full_appearance_density_centroid",
+    "timed": false,
+    "starterHeatmaps": 22,
+    "home": {
+      "sampleSize": 10,
+      "defenderCount": 5,
+      "midfielderCount": 2,
+      "attackerCount": 3,
+      "centralLanePlayers": 4,
+      "halfSpacePlayers": 3,
+      "wideLanePlayers": 3,
+      "leftLanePlayers": 2,
+      "rightLanePlayers": 2,
+      "averageDepth": 51.5,
+      "width": 62.4,
+      "playersInAttackingHalf": 5,
+      "playersInFinalThird": 0,
+      "defenderDepth": 48.1,
+      "midfielderDepth": 43.3,
+      "attackerDepth": 62.5,
+      "players": [
+        {
+          "playerId": "697e17b2-4ec4-46f6-9db4-a6123529e7da",
+          "nameHe": "כריסטי טייהי",
+          "roleGroup": "Midfielder",
+          "formationPosition": "Defensive Midfield",
+          "x": 44.9,
+          "y": 56.7
+        },
+        {
+          "playerId": "747a796a-7076-4e1b-93f8-97faf5da88b9",
+          "nameHe": "נדב זמיר",
+          "roleGroup": "Goalkeeper",
+          "formationPosition": "Goalkeeper",
+          "x": 15.4,
+          "y": 50.2
+        },
+        {
+          "playerId": "098e3b9d-fbe2-49d7-9bed-692b201eb781",
+          "nameHe": "אופק נדיר",
+          "roleGroup": "Defender",
+          "formationPosition": "Left Back",
+          "x": 52.2,
+          "y": 82.1
+        },
+        {
+          "playerId": "67cd4ed3-2b59-4e1d-9fd3-2c5d66fc7e95",
+          "nameHe": "תמיר חיימוביץ",
+          "roleGroup": "Defender",
+          "formationPosition": "Centre Back",
+          "x": 46.2,
+          "y": 60.2
+        },
+        {
+          "playerId": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
+          "nameHe": "נועם מלמוד",
+          "roleGroup": "Defender",
+          "formationPosition": "Centre Back",
+          "x": 40.2,
+          "y": 42.1
+        },
+        {
+          "playerId": "f59f01d2-1af4-4c49-8322-b39c4a27bd85",
+          "nameHe": "עידן כהן",
+          "roleGroup": "Defender",
+          "formationPosition": "Right Back",
+          "x": 47.7,
+          "y": 19.7
+        },
+        {
+          "playerId": "85837afe-e193-4566-958d-01b06534365a",
+          "nameHe": "אנדרו אידוקו",
+          "roleGroup": "Attacker",
+          "formationPosition": "Centre Forward",
+          "x": 61,
+          "y": 72.2
+        },
+        {
+          "playerId": "7f1e0990-2f7b-4047-a1b9-3d0ba31f7310",
+          "nameHe": "עומר אבוהב",
+          "roleGroup": "Midfielder",
+          "formationPosition": "Central Midfield",
+          "x": 41.8,
+          "y": 45.3
+        },
+        {
+          "playerId": "2152f1d5-8ad5-4720-a204-846407bed00c",
+          "nameHe": "זוברו שראני",
+          "roleGroup": "Defender",
+          "formationPosition": "Left Back",
+          "x": 54.4,
+          "y": 20.6
+        },
+        {
+          "playerId": "ec3d7fb9-7a4e-46fd-bca3-4b4c17025174",
+          "nameHe": "ויטאלי דאמשקאן",
+          "roleGroup": "Attacker",
+          "formationPosition": "Centre Forward",
+          "x": 63.8,
+          "y": 61.8
+        },
+        {
+          "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
+          "nameHe": "ישראל דאפה",
+          "roleGroup": "Attacker",
+          "formationPosition": "Centre Forward",
+          "x": 62.6,
+          "y": 47.9
+        }
+      ]
+    },
+    "away": {
+      "sampleSize": 10,
+      "defenderCount": 4,
+      "midfielderCount": 3,
+      "attackerCount": 3,
+      "centralLanePlayers": 3,
+      "halfSpacePlayers": 3,
+      "wideLanePlayers": 4,
+      "leftLanePlayers": 4,
+      "rightLanePlayers": 3,
+      "averageDepth": 51.9,
+      "width": 63.3,
+      "playersInAttackingHalf": 5,
+      "playersInFinalThird": 1,
+      "defenderDepth": 40.2,
+      "midfielderDepth": 57.6,
+      "attackerDepth": 61.8,
+      "players": [
+        {
+          "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+          "nameHe": "אושר דוידה",
+          "roleGroup": "Attacker",
+          "formationPosition": "Right Forward",
+          "x": 61.6,
+          "y": 78.4
+        },
+        {
+          "playerId": "a2155727-1afc-45a1-9d5e-592e9ef5195f",
+          "nameHe": "אסטר סוקלר",
+          "roleGroup": "Attacker",
+          "formationPosition": "Centre Forward",
+          "x": 64.8,
+          "y": 49.4
+        },
+        {
+          "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+          "nameHe": "דור פרץ",
+          "roleGroup": "Midfielder",
+          "formationPosition": "Attacking Midfield",
+          "x": 70.1,
+          "y": 67.1
+        },
+        {
+          "playerId": "67be92db-2f80-43c2-8baf-5f2c2cdd871d",
+          "nameHe": "רז שלמה",
+          "roleGroup": "Defender",
+          "formationPosition": "Centre Back",
+          "x": 36.7,
+          "y": 32.9
+        },
+        {
+          "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
+          "nameHe": "אופק מליקה",
+          "roleGroup": "Goalkeeper",
+          "formationPosition": "Goalkeeper",
+          "x": 12.8,
+          "y": 51.3
+        },
+        {
+          "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+          "nameHe": "רוי רביבו",
+          "roleGroup": "Defender",
+          "formationPosition": "Left Back",
+          "x": 44.5,
+          "y": 17.3
+        },
+        {
+          "playerId": "8a8630d8-5074-4607-91c0-f9f6a07acfa4",
+          "nameHe": "עידו שחר",
+          "roleGroup": "Midfielder",
+          "formationPosition": "Central Midfield",
+          "x": 58.4,
+          "y": 44.6
+        },
+        {
+          "playerId": "713ec20b-f06b-4502-85cf-ba2ba0d9c770",
+          "nameHe": "הליו וארלה",
+          "roleGroup": "Attacker",
+          "formationPosition": "Left Forward",
+          "x": 58.9,
+          "y": 20.5
+        },
+        {
+          "playerId": "ff574781-01f2-4586-86c8-e7c7620f2496",
+          "nameHe": "נועם בן הרוש",
+          "roleGroup": "Defender",
+          "formationPosition": "Right Back",
+          "x": 45.9,
+          "y": 80.6
+        },
+        {
+          "playerId": "cd12fd24-dbd1-4b3b-a2a8-5af93d619f3d",
+          "nameHe": "איתמר נוי",
+          "roleGroup": "Midfielder",
+          "formationPosition": "Attacking Midfield",
+          "x": 44.3,
+          "y": 49.7
+        },
+        {
+          "playerId": "36f15387-3195-4941-9e2d-b0538d24c9f3",
+          "nameHe": "איתי בן חמו",
+          "roleGroup": "Defender",
+          "formationPosition": "Centre Back",
+          "x": 33.8,
+          "y": 69.7
+        }
+      ]
+    },
+    "positions": [
+      {
+        "playerId": "697e17b2-4ec4-46f6-9db4-a6123529e7da",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Defensive Midfield",
+        "x": 44.9,
+        "y": 56.7
+      },
+      {
+        "playerId": "d331b8fc-d76c-4f8c-8a13-19e329c9b67a",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Attacker",
+        "formationPosition": "Right Forward",
+        "x": 61.6,
+        "y": 78.4
+      },
+      {
+        "playerId": "a2155727-1afc-45a1-9d5e-592e9ef5195f",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Attacker",
+        "formationPosition": "Centre Forward",
+        "x": 64.8,
+        "y": 49.4
+      },
+      {
+        "playerId": "8720d94d-4343-45e4-bf47-806e349c26bf",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Attacker",
+        "formationPosition": "Centre Forward",
+        "x": 31.8,
+        "y": 59.4
+      },
+      {
+        "playerId": "747a796a-7076-4e1b-93f8-97faf5da88b9",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Goalkeeper",
+        "formationPosition": "Goalkeeper",
+        "x": 15.4,
+        "y": 50.2
+      },
+      {
+        "playerId": "098e3b9d-fbe2-49d7-9bed-692b201eb781",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Left Back",
+        "x": 52.2,
+        "y": 82.1
+      },
+      {
+        "playerId": "d7ef6948-3112-4429-9e87-3dbf9a8f760b",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Defender",
+        "formationPosition": "Centre Back",
+        "x": 49.5,
+        "y": 47.6
+      },
+      {
+        "playerId": "1ead46df-49b8-49ba-88dd-3ee49cbce441",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Central Midfield",
+        "x": 75.3,
+        "y": 59.4
+      },
+      {
+        "playerId": "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Attacking Midfield",
+        "x": 70.1,
+        "y": 67.1
+      },
+      {
+        "playerId": "b3bba426-e082-448f-bdbe-c6361caf339b",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Defender",
+        "formationPosition": "Centre Back",
+        "x": 26.3,
+        "y": 37.3
+      },
+      {
+        "playerId": "7d956702-3e3e-4236-8270-9bd217dc1c06",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Defensive Midfield",
+        "x": 38.2,
+        "y": 58.1
+      },
+      {
+        "playerId": "ce1b8e8d-9762-4b7c-aa55-15dee4af4425",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Attacker",
+        "formationPosition": "Left Forward",
+        "x": 44.3,
+        "y": 23.9
+      },
+      {
+        "playerId": "67be92db-2f80-43c2-8baf-5f2c2cdd871d",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Centre Back",
+        "x": 36.7,
+        "y": 32.9
+      },
+      {
+        "playerId": "9f103f85-cedd-48b6-88ae-44107efdc0db",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Attacker",
+        "formationPosition": "Centre Forward",
+        "x": 17.3,
+        "y": 38.6
+      },
+      {
+        "playerId": "67cd4ed3-2b59-4e1d-9fd3-2c5d66fc7e95",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Centre Back",
+        "x": 46.2,
+        "y": 60.2
+      },
+      {
+        "playerId": "f8ef8256-3bd6-4f39-8f11-53a3166c55e4",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Centre Back",
+        "x": 40.2,
+        "y": 42.1
+      },
+      {
+        "playerId": "38f3b46c-326f-4e03-a1b9-4b175ca2383c",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Central Midfield",
+        "x": 60.8,
+        "y": 47.6
+      },
+      {
+        "playerId": "4140a683-2af3-47f0-b44f-45e9d00391e0",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Goalkeeper",
+        "formationPosition": "Goalkeeper",
+        "x": 12.8,
+        "y": 51.3
+      },
+      {
+        "playerId": "435633b7-a385-48e2-88b9-73c3c0cdb7d7",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Left Back",
+        "x": 44.5,
+        "y": 17.3
+      },
+      {
+        "playerId": "8a8630d8-5074-4607-91c0-f9f6a07acfa4",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Central Midfield",
+        "x": 58.4,
+        "y": 44.6
+      },
+      {
+        "playerId": "713ec20b-f06b-4502-85cf-ba2ba0d9c770",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Attacker",
+        "formationPosition": "Left Forward",
+        "x": 58.9,
+        "y": 20.5
+      },
+      {
+        "playerId": "f59f01d2-1af4-4c49-8322-b39c4a27bd85",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Right Back",
+        "x": 47.7,
+        "y": 19.7
+      },
+      {
+        "playerId": "85837afe-e193-4566-958d-01b06534365a",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Attacker",
+        "formationPosition": "Centre Forward",
+        "x": 61,
+        "y": 72.2
+      },
+      {
+        "playerId": "7f1e0990-2f7b-4047-a1b9-3d0ba31f7310",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Central Midfield",
+        "x": 41.8,
+        "y": 45.3
+      },
+      {
+        "playerId": "c17ac0f2-3e83-418e-a2c8-18e57cae7645",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Attacker",
+        "formationPosition": "Left Forward",
+        "x": 62.9,
+        "y": 50.2
+      },
+      {
+        "playerId": "ff574781-01f2-4586-86c8-e7c7620f2496",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Right Back",
+        "x": 45.9,
+        "y": 80.6
+      },
+      {
+        "playerId": "cd12fd24-dbd1-4b3b-a2a8-5af93d619f3d",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Attacking Midfield",
+        "x": 44.3,
+        "y": 49.7
+      },
+      {
+        "playerId": "2152f1d5-8ad5-4720-a204-846407bed00c",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Left Back",
+        "x": 54.4,
+        "y": 20.6
+      },
+      {
+        "playerId": "ec3d7fb9-7a4e-46fd-bca3-4b4c17025174",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Attacker",
+        "formationPosition": "Centre Forward",
+        "x": 63.8,
+        "y": 61.8
+      },
+      {
+        "playerId": "3e4b59a0-83f8-4d00-b66d-d47eeb7a69a3",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Starting",
+        "roleGroup": "Attacker",
+        "formationPosition": "Centre Forward",
+        "x": 62.6,
+        "y": 47.9
+      },
+      {
+        "playerId": "b6c85f6f-22f9-4a3d-be38-6bf9792af384",
+        "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+        "lineupStatus": "Substitute",
+        "roleGroup": "Midfielder",
+        "formationPosition": "Attacking Midfield",
+        "x": 77.4,
+        "y": 36.4
+      },
+      {
+        "playerId": "36f15387-3195-4941-9e2d-b0538d24c9f3",
+        "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+        "lineupStatus": "Starting",
+        "roleGroup": "Defender",
+        "formationPosition": "Centre Back",
+        "x": 33.8,
+        "y": 69.7
+      }
+    ]
+  },
   "unitMatchups": {
     "home": {
       "defenders": {
@@ -2644,6 +3155,346 @@
         "wasDribbledPast": 3
       }
     }
+  },
+  "timelineEvents": [
+    {
+      "id": "1-1'-3415166",
+      "minute": 1,
+      "eventTime": "1'",
+      "type": "Goal",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "ויטאלי דאמשקאן",
+      "relatedPlayerNamesHe": [
+        "זוברו שראני"
+      ]
+    },
+    {
+      "id": "1-24'-62020562",
+      "minute": 24,
+      "eventTime": "24'",
+      "type": "Goal",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "רוי רביבו",
+      "relatedPlayerNamesHe": [
+        "אושר דוידה"
+      ]
+    },
+    {
+      "id": "12-44'-517126",
+      "minute": 44,
+      "eventTime": "44'",
+      "type": "Woodwork",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "דור פרץ",
+      "relatedPlayerNamesHe": []
+    },
+    {
+      "id": "2-44'-61213615",
+      "minute": 44,
+      "eventTime": "44'",
+      "type": "Yellow Card",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "נועם מלמוד",
+      "relatedPlayerNamesHe": []
+    },
+    {
+      "id": "1-45'-517126",
+      "minute": 45,
+      "eventTime": "45'",
+      "type": "Goal",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "דור פרץ",
+      "relatedPlayerNamesHe": []
+    },
+    {
+      "id": "1000-46'-49707593",
+      "minute": 46,
+      "eventTime": "46'",
+      "type": "Substitution",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "איליי מדמון",
+      "relatedPlayerNamesHe": [
+        "עומר אבוהב"
+      ]
+    },
+    {
+      "id": "1000-46'-71387221",
+      "minute": 46,
+      "eventTime": "46'",
+      "type": "Substitution",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "אוהד אלמגור",
+      "relatedPlayerNamesHe": [
+        "זוברו שראני"
+      ]
+    },
+    {
+      "id": "2-53'-3108504",
+      "minute": 53,
+      "eventTime": "53'",
+      "type": "Yellow Card",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "רז שלמה",
+      "relatedPlayerNamesHe": []
+    },
+    {
+      "id": "1000-62'-72525063",
+      "minute": 62,
+      "eventTime": "62'",
+      "type": "Substitution",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "נדים וראסנה",
+      "relatedPlayerNamesHe": [
+        "ישראל דאפה"
+      ]
+    },
+    {
+      "id": "1-63'-517126",
+      "minute": 63,
+      "eventTime": "63'",
+      "type": "Goal",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "דור פרץ",
+      "relatedPlayerNamesHe": [
+        "הליו וארלה"
+      ]
+    },
+    {
+      "id": "1000-64'-537351",
+      "minute": 64,
+      "eventTime": "64'",
+      "type": "Substitution",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "דן גלזר",
+      "relatedPlayerNamesHe": [
+        "עידו שחר"
+      ]
+    },
+    {
+      "id": "1000-64'-40767523",
+      "minute": 64,
+      "eventTime": "64'",
+      "type": "Substitution",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "הישאם לאיוס",
+      "relatedPlayerNamesHe": [
+        "הליו וארלה"
+      ]
+    },
+    {
+      "id": "1000-64'-70791961",
+      "minute": 64,
+      "eventTime": "64'",
+      "type": "Substitution",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "סייד אבו פרחי",
+      "relatedPlayerNamesHe": [
+        "אסטר סוקלר"
+      ]
+    },
+    {
+      "id": "1-68'-70791961",
+      "minute": 68,
+      "eventTime": "68'",
+      "type": "Goal",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "סייד אבו פרחי",
+      "relatedPlayerNamesHe": []
+    },
+    {
+      "id": "1000-69'-66683654",
+      "minute": 69,
+      "eventTime": "69'",
+      "type": "Substitution",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "ינאי דיסטלפילד",
+      "relatedPlayerNamesHe": [
+        "כריסטי טייהי"
+      ]
+    },
+    {
+      "id": "1-71'-517126",
+      "minute": 71,
+      "eventTime": "71'",
+      "type": "Goal",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "דור פרץ",
+      "relatedPlayerNamesHe": [
+        "נועם בן הרוש"
+      ]
+    },
+    {
+      "id": "1000-72'-75393584",
+      "minute": 72,
+      "eventTime": "72'",
+      "type": "Substitution",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "יונתן לייש",
+      "relatedPlayerNamesHe": [
+        "עידן כהן"
+      ]
+    },
+    {
+      "id": "1000-72'-3723882",
+      "minute": 72,
+      "eventTime": "72'",
+      "type": "Substitution",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "מוחמד עלי קאמארה",
+      "relatedPlayerNamesHe": [
+        "רז שלמה"
+      ]
+    },
+    {
+      "id": "1000-76'-77562488",
+      "minute": 76,
+      "eventTime": "76'",
+      "type": "Substitution",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "עילאי בן סימון",
+      "relatedPlayerNamesHe": [
+        "דור פרץ"
+      ]
+    },
+    {
+      "id": "3-77'-68025904",
+      "minute": 77,
+      "eventTime": "77'",
+      "type": "Red Card",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "אופק מליקה",
+      "relatedPlayerNamesHe": []
+    },
+    {
+      "id": "2-87'-41367593",
+      "minute": 87,
+      "eventTime": "87'",
+      "type": "Yellow Card",
+      "teamId": "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+      "teamNameHe": "מכבי תל אביב",
+      "playerNameHe": "אושר דוידה",
+      "relatedPlayerNamesHe": []
+    },
+    {
+      "id": "1-90'-71387221",
+      "minute": 90,
+      "eventTime": "90'",
+      "type": "Goal",
+      "teamId": "ffe9a1f1-7c89-46b3-b771-c269876bd63a",
+      "teamNameHe": "הפועל ירושלים",
+      "playerNameHe": "אוהד אלמגור",
+      "relatedPlayerNamesHe": []
+    }
+  ],
+  "flowWindows": [
+    {
+      "start": 1,
+      "end": 15,
+      "home": {
+        "shots": 1,
+        "xg": 0.09,
+        "goals": 1
+      },
+      "away": {
+        "shots": 2,
+        "xg": 0.06,
+        "goals": 0
+      }
+    },
+    {
+      "start": 16,
+      "end": 30,
+      "home": {
+        "shots": 1,
+        "xg": 0.28,
+        "goals": 0
+      },
+      "away": {
+        "shots": 2,
+        "xg": 0.28,
+        "goals": 1
+      }
+    },
+    {
+      "start": 31,
+      "end": 45,
+      "home": {
+        "shots": 0,
+        "xg": 0,
+        "goals": 0
+      },
+      "away": {
+        "shots": 4,
+        "xg": 1.38,
+        "goals": 1
+      }
+    },
+    {
+      "start": 46,
+      "end": 60,
+      "home": {
+        "shots": 3,
+        "xg": 0.14,
+        "goals": 0
+      },
+      "away": {
+        "shots": 3,
+        "xg": 0.13,
+        "goals": 0
+      }
+    },
+    {
+      "start": 61,
+      "end": 75,
+      "home": {
+        "shots": 2,
+        "xg": 0.11,
+        "goals": 0
+      },
+      "away": {
+        "shots": 5,
+        "xg": 1.58,
+        "goals": 3
+      }
+    },
+    {
+      "start": 76,
+      "end": 90,
+      "home": {
+        "shots": 9,
+        "xg": 0.68,
+        "goals": 1
+      },
+      "away": {
+        "shots": 1,
+        "xg": 0.14,
+        "goals": 0
+      }
+    }
+  ],
+  "actualPlayTime": {
+    "actual": "Actual 56:31",
+    "total": "Total 99:40"
   },
   "shots": [
     {
@@ -3164,6 +4015,12 @@
               "match.result",
               "timeline.goals"
             ]
+          },
+          {
+            "text": "המהפך נבנה בשני גלים ברורים: בדקות 31–45 מכבי ייצרה 4 בעיטות ו־1.38 xG מול 0 בעיטות של הפועל; בדקות 61–75 היא הוסיפה 5 בעיטות, 1.58 xG ו־3 שערים. אלה היו פרקי הזמן שבהם המשחק הוכרע, לא לחץ רציף של 90 דקות.",
+            "evidenceIds": [
+              "flow.shot_windows"
+            ]
           }
         ]
       },
@@ -3203,38 +4060,41 @@
         ]
       },
       {
-        "heading": "מה המספרים אומרים על הפועל",
+        "heading": "הפועל שינתה מבנה — והמשחק השתנה שוב באדום",
         "paragraphs": [
           {
-            "text": "הפועל הכניסה 95 מסירות לשליש האחרון מול 70 של מכבי והשלימה 7 הגבהות מול 3. פרופיל המספרים מתאים לקבוצה שדחפה יותר כדורים קדימה ולרוחב, אבל היא גם איבדה את הכדור 110 פעמים מול 94 והגיעה ל־1.27 xG בלבד מול 3.56.",
+            "text": "במחצית הפועל החליפה את זוברו שראני, שחקן הגנה, באוהד אלמגור, שחקן התקפה — מעבר ברור מפתיחה עם 5 שחקני הגנה למבנה התקפי יותר. הוא לא הפך מיד למצבים טובים: בדקות 46–60 הפועל בעטה 3 פעמים וצברה רק 0.14 xG.",
             "evidenceIds": [
-              "style.team_profiles"
+              "timeline.match_events",
+              "flow.shot_windows",
+              "heatmap.spatial_profile"
             ]
           },
           {
-            "text": "ההחמצה המשמעותית הגיעה בדקה ה־20: ישראל דאפה נעצר במצב של 0.28 xG. אחרי ההזדמנות הזאת, היתרון המוקדם כבר לא קיבל מספיק תמיכה מאיכות המצבים הבאים.",
+            "text": "אחרי הכרטיס האדום לאופק מליקה בדקה ה־77, הזרימה התהפכה: בדקות 76–90 הפועל רשמה 9 בעיטות ו־0.68 xG מול בעיטה אחת ו־0.14 xG של מכבי, וכבשה בדקה ה־90. זו עדות ליתרון משחק מאוחר בחיסרון מספרי של מכבי — לא הוכחה שהפועל הייתה עדיפה לאורך הערב.",
             "evidenceIds": [
-              "hapoel.best_chance",
-              "match.opening_goal",
-              "team.quality"
+              "timeline.match_events",
+              "flow.shot_windows"
             ]
           }
         ]
       },
       {
-        "heading": "מי באמת ניצח את מרכז המגרש?",
+        "heading": "המשולש הימני שפתח לדור פרץ את הדרך",
         "paragraphs": [
           {
-            "text": "קשרי הפועל רשמו 16 חילוצי כדור ו־6 תיקולים מוצלחים מ־7 ניסיונות; קשרי מכבי הסתפקו ב־8 חילוצים וב־3 מ־4. במאבק ההגנתי במרכז, המספרים נוטים להפועל.",
+            "text": "מפות החום של שחקני ההרכב מצביעות על דפוס ברור בצד ימין של מכבי: נועם בן הרוש סיפק את הרוחב מאחור, אושר דוידה נשאר גבוה ורחב, ודור פרץ מילא את חצי־המרחב ביניהם ונכנס עמוק יותר מכל שחקן שדה אחר של מכבי. זה לא היה עומס במרכז כולו, אלא יתרון מקומי בצד אחד.",
             "evidenceIds": [
-              "matchup.midfield"
+              "heatmap.spatial_profile"
             ]
           },
           {
-            "text": "אבל ההשפעה ההתקפית התהפכה: קשרי מכבי ייצרו 2.67 xG, בעטו 4 פעמים למסגרת וכבשו 3; קשרי הפועל הגיעו ל־0.14 xG ול־0 שערים. מול ההתקפה הירושלמית, הגנת מכבי הוסיפה 7 מ־7 בתיקולים, 16 הרחקות ו־4 חסימות, ונעקפה בכדרור פעם אחת בלבד. חלוצי הפועל ייצרו 12 בעיטות ו־1.07 xG, אך ניצחו רק 6 מ־26 מאבקי קרקע.",
+            "text": "התפוקה מחזקת את הקריאה המרחבית: בן הרוש ודוידה סיפקו יחד 4 מסירות מפתח, 1.00 xA ו־2 בישולים; פרץ, שפעל בתוך המשולש ומעבר לו, הגיע ל־2.50 xG וכבש 3. מנגד, שלישיית ההתקפה של הפועל התכנסה יותר למרכז ולימין, והרוחב הגיע בעיקר משחקני הקו האחורי — דפוס שמתאים ל־7 הגבהות ול־95 מסירות לשליש האחרון, אבל לא יצר אותה איכות ברחבה.",
             "evidenceIds": [
-              "matchup.midfield",
-              "matchup.home_attack_away_defense"
+              "heatmap.spatial_profile",
+              "player.dor_peretz",
+              "player.right_triangle",
+              "style.team_profiles"
             ]
           }
         ]
@@ -3254,18 +4114,18 @@
         ]
       },
       {
-        "text": "קשרי הפועל הובילו 16–8 בחילוצים; קשרי מכבי הובילו 3–0 בשערים.",
+        "text": "מכבי הכריעה את המשחק בשני גלים: 1.38 xG לפני ההפסקה ו־1.58 xG בדקות 61–75.",
         "evidenceIds": [
-          "matchup.midfield"
+          "flow.shot_windows"
         ]
       }
     ],
-    "conclusion": "זה היה 5:2 שאינו מסביר את עצמו דרך שליטה בכדור או מתקפת בעיטות בלתי פוסקת. הפועל ניצחה ביותר פעולות הגנתיות בקישור; מכבי ניצחה באיכות המצבים, בהגעה מאחור ובסיומת.",
+    "conclusion": "זה היה 5:2 שנבנה ממבנה התקפי מדויק בצד ימין ומשני פרצי איכות קצרים, ואז קיבל אפילוג אחר לגמרי אחרי הכרטיס האדום. התוצאה מספרת מי ניצחה; רצף הבעיטות ומפות החום מסבירים איך.",
     "conclusionEvidenceIds": [
       "match.result",
-      "team.volume",
-      "team.quality",
-      "matchup.midfield",
+      "flow.shot_windows",
+      "timeline.match_events",
+      "heatmap.spatial_profile",
       "player.dor_peretz"
     ]
   },
@@ -3412,12 +4272,174 @@
       ]
     },
     {
-      "id": "heatmap.method",
-      "label": "מפות חום מצטברות לפי הופעה",
+      "id": "flow.shot_windows",
+      "label": "זרימת איומי הבעיטה בחלונות זמן",
+      "sourceView": "api_match_shots",
+      "sourceRows": 33,
+      "values": [
+        1,
+        15,
+        1,
+        0.09,
+        1,
+        2,
+        0.06,
+        0,
+        16,
+        30,
+        1,
+        0.28,
+        0,
+        2,
+        0.28,
+        1,
+        31,
+        45,
+        0,
+        0,
+        0,
+        4,
+        1.38,
+        1,
+        46,
+        60,
+        3,
+        0.14,
+        0,
+        3,
+        0.13,
+        0,
+        61,
+        75,
+        2,
+        0.11,
+        0,
+        5,
+        1.58,
+        3,
+        76,
+        90,
+        9,
+        0.68,
+        1,
+        1,
+        0.14,
+        0
+      ]
+    },
+    {
+      "id": "timeline.match_events",
+      "label": "אירועי משחק לפי דקה",
+      "sourceView": "365scores_game_detail",
+      "sourceRows": 22,
+      "values": [
+        1,
+        24,
+        44,
+        44,
+        45,
+        46,
+        46,
+        53,
+        62,
+        63,
+        64,
+        64,
+        64,
+        68,
+        69,
+        71,
+        72,
+        72,
+        76,
+        77,
+        87,
+        90
+      ]
+    },
+    {
+      "id": "heatmap.spatial_profile",
+      "label": "מבנה מרחבי מצטבר של שחקני ההרכב",
       "sourceView": "api_match_player_heatmaps",
       "sourceRows": 32,
       "values": [
-        32
+        22,
+        5,
+        2,
+        3,
+        4,
+        3,
+        3,
+        4,
+        3,
+        3,
+        3,
+        3,
+        4,
+        44.9,
+        56.7,
+        61.6,
+        78.4,
+        64.8,
+        49.4,
+        31.8,
+        59.4,
+        15.4,
+        50.2,
+        52.2,
+        82.1,
+        49.5,
+        47.6,
+        75.3,
+        59.4,
+        70.1,
+        67.1,
+        26.3,
+        37.3,
+        38.2,
+        58.1,
+        44.3,
+        23.9,
+        36.7,
+        32.9,
+        17.3,
+        38.6,
+        46.2,
+        60.2,
+        40.2,
+        42.1,
+        60.8,
+        47.6,
+        12.8,
+        51.3,
+        44.5,
+        17.3,
+        58.4,
+        44.6,
+        58.9,
+        20.5,
+        47.7,
+        19.7,
+        61,
+        72.2,
+        41.8,
+        45.3,
+        62.9,
+        50.2,
+        45.9,
+        80.6,
+        44.3,
+        49.7,
+        54.4,
+        20.6,
+        63.8,
+        61.8,
+        62.6,
+        47.9,
+        77.4,
+        36.4,
+        33.8,
+        69.7
       ]
     },
     {
@@ -3452,9 +4474,26 @@
         2,
         1,
         1,
+        0.59,
+        2,
+        1,
         0.49,
         3,
+        1
+      ]
+    },
+    {
+      "id": "player.right_triangle",
+      "label": "היוצרים בצד ימין של מכבי",
+      "sourceView": "api_match_player_stats",
+      "sourceRows": 8,
+      "values": [
+        2,
         1,
+        4,
+        1,
+        0.41,
+        2,
         1,
         0.59,
         2
@@ -3504,7 +4543,7 @@
   ],
   "factCheck": {
     "status": "passed",
-    "checkedAt": "2026-08-26T23:30:41.078Z",
+    "checkedAt": "2026-08-27T00:36:31.373Z",
     "checks": [
       {
         "id": "match-ended",
@@ -3561,16 +4600,34 @@
         "detail": "3.56 מול 3.57"
       },
       {
-        "id": "dor-hat-trick",
-        "label": "השלושער של דור פרץ מאומת",
+        "id": "player-goal-events",
+        "label": "שערי השחקנים תואמים לאירועי הבעיטה",
         "status": "passed",
-        "detail": "3 שערים בשני מקורות"
+        "detail": "7 שערים נבדקו ברמת השחקן"
+      },
+      {
+        "id": "flow-shot-total",
+        "label": "חלונות הזמן מכסים את כל הבעיטות",
+        "status": "passed",
+        "detail": "33 בעיטות בחלונות הזמן"
+      },
+      {
+        "id": "timeline-goals",
+        "label": "אירועי המשחק תואמים לשערים",
+        "status": "passed",
+        "detail": "7 שערים בציר האירועים"
+      },
+      {
+        "id": "heatmap-coverage",
+        "label": "כיסוי מפות החום מספיק לניתוח מבני",
+        "status": "passed",
+        "detail": "22 שחקני הרכב עם מפה"
       },
       {
         "id": "evidence-links",
         "label": "לכל טענה יש הפניה לראיות",
         "status": "passed",
-        "detail": "15 טענות מקושרות"
+        "detail": "16 טענות מקושרות"
       },
       {
         "id": "numeric-claims",
@@ -3579,14 +4636,15 @@
         "detail": "לא נמצאו מספרים לא מבוססים"
       }
     ],
-    "evidenceCount": 15,
-    "claimCount": 15,
+    "evidenceCount": 18,
+    "claimCount": 16,
     "sourceViews": [
       "api_matches",
       "api_match_team_stats",
       "api_match_player_stats",
       "api_match_shots",
-      "api_match_player_heatmaps"
+      "api_match_player_heatmaps",
+      "365scores_game_detail"
     ]
   }
 }

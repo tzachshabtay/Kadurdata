@@ -101,11 +101,11 @@ Without `VITE_SUPABASE_ANON_KEY`, the local frontend renders a demo data state s
 
 ## Hebrew Content Pipeline
 
-The Hebrew-only `כתבות` tab reads fact-checked article packages from
+The Hebrew-only `בלוג` tab reads fact-checked article packages from
 `src/content/generated/`. Each match review is built in five stages:
 
-1. Select a completed Ligat Ha'Al match with team, player, and shot data.
-2. Convert the source rows into a compact evidence bundle and derived graphics data.
+1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
+2. Derive time-window flow and spatial-team profiles, then convert them into a compact evidence bundle.
 3. Ask the OpenAI Responses API for a structured Hebrew draft whose claims cite evidence IDs.
 4. reject the draft if a score, event total, xG cross-check, evidence link, or numeric claim fails.
 5. Publish the JSON package; Vite discovers it automatically and adds it to the blog archive.

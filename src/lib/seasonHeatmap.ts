@@ -1,11 +1,11 @@
-import type { MatchPlayerHeatmap, PlayerSeasonHeatmap } from "./types";
+import type { MatchPlayerHeatmap } from "./types";
 
 const HEATMAP_WIDTH = 540;
 const HEATMAP_HEIGHT = 341;
 const HEATMAP_IMAGE_PROXY = "https://imagecache.365scores.com/image/fetch/w_1080,q_auto:eco,f_webp/";
 
 type LoadedHeatmap = {
-  row: PlayerSeasonHeatmap;
+  row: MatchPlayerHeatmap;
   image: HTMLImageElement;
   isRtl: boolean;
 };
@@ -170,7 +170,7 @@ function heatColor(value: number): [number, number, number] {
 
 export async function renderSeasonHeatmap(
   canvas: HTMLCanvasElement,
-  rows: PlayerSeasonHeatmap[],
+  rows: MatchPlayerHeatmap[],
   signal?: AbortSignal,
 ): Promise<SeasonHeatmapRenderResult> {
   const context = canvas.getContext("2d", { willReadFrequently: true });

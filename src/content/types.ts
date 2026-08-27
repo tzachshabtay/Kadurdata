@@ -97,6 +97,68 @@ export type ArticleTeamUnits = {
   attackers: ArticleUnitMetrics;
 };
 
+export type ArticleFlowWindow = {
+  start: number;
+  end: number;
+  home: { shots: number; xg: number; goals: number };
+  away: { shots: number; xg: number; goals: number };
+};
+
+export type ArticleTimelineEvent = {
+  id: string;
+  minute: number;
+  eventTime: string;
+  type: string;
+  teamId: string;
+  teamNameHe: string;
+  playerNameHe: string | null;
+  relatedPlayerNamesHe: string[];
+};
+
+export type ArticleSpatialTeamProfile = {
+  sampleSize: number;
+  defenderCount: number;
+  midfielderCount: number;
+  attackerCount: number;
+  centralLanePlayers: number;
+  halfSpacePlayers: number;
+  wideLanePlayers: number;
+  leftLanePlayers: number;
+  rightLanePlayers: number;
+  averageDepth: number;
+  width: number;
+  playersInAttackingHalf: number;
+  playersInFinalThird: number;
+  defenderDepth: number;
+  midfielderDepth: number;
+  attackerDepth: number;
+  players: Array<{
+    playerId: string;
+    nameHe: string;
+    roleGroup: ArticlePlayer["roleGroup"];
+    formationPosition: string | null;
+    x: number;
+    y: number;
+  }>;
+};
+
+export type ArticleSpatialProfile = {
+  method: string;
+  timed: false;
+  starterHeatmaps: number;
+  home: ArticleSpatialTeamProfile;
+  away: ArticleSpatialTeamProfile;
+  positions: Array<{
+    playerId: string;
+    teamId: string;
+    lineupStatus: string | null;
+    roleGroup: ArticlePlayer["roleGroup"];
+    formationPosition: string | null;
+    x: number;
+    y: number;
+  }>;
+};
+
 export type ContentArticle = {
   schemaVersion: number;
   slug: string;
@@ -122,7 +184,11 @@ export type ContentArticle = {
   players: ArticlePlayer[];
   playerSpotlight: ArticlePlayer[];
   heatmaps: ArticleHeatmap[];
+  spatialProfile: ArticleSpatialProfile | null;
   unitMatchups: { home: ArticleTeamUnits; away: ArticleTeamUnits };
+  timelineEvents: ArticleTimelineEvent[];
+  flowWindows: ArticleFlowWindow[];
+  actualPlayTime: { actual: string | null; total: string | null } | null;
   shots: ArticleShot[];
   editorial: {
     headline: string;

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/prepare_sites_dist.mjs",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
     "content:generate:latest": "node scripts/generate_content_article.mjs",
     "content:generate:sample": "node scripts/generate_content_article.mjs --match-id 5b2957d1-6f48-4269-baf6-2f53753eb160 --no-ai",
@@ -19,11 +19,11 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
-    "@openai/sites-vite-plugin": "^0.2.0",
     "@types/node": "^26.2.0",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.0.5",
+    "sharp": "0.35.4",
     "typescript": "^7.0.2",
     "vite": "^8.2.1"
   }

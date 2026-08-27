@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowLeft,
   Check,
@@ -8,8 +8,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { articles } from "../content/articles";
-import type { ArticlePlayer, ArticleShot, ContentArticle } from "../content/types";
-import { calculateMatchAveragePositions, type MatchAveragePosition } from "../lib/seasonHeatmap";
+import type { ArticleShot, ContentArticle } from "../content/types";
+import { renderSeasonHeatmap } from "../lib/seasonHeatmap";
 
 type BlogViewProps = {
   onOpenMatch: (article: ContentArticle) => void;
@@ -59,39 +59,54 @@ function StoryScoreCard({ article }: { article: ContentArticle }) {
   );
 }
 
-function GoalTimeline({ article }: { article: ContentArticle }) {
-  const goals = article.shots.filter((shot) => shot.outcome === "Goal");
-  let homeScore = 0;
-  let awayScore = 0;
-  const plottedGoals = goals.map((shot) => {
-    if (shot.teamId === article.teams.home.teamId) homeScore += 1;
-    else awayScore += 1;
-    return { ...shot, score: `${homeScore}:${awayScore}` };
-  });
-
+function MatchFlowGraphic({ article }: { article: ContentArticle }) {
+  const { home, away } = article.teams;
+  const maxXg = Math.max(0.1, ...article.flowWindows.flatMap((window) => [window.home.xg, window.away.xg]));
+  const eventTypeHe: Record<string, string> = {
+    Goal: "שער",
+    Substitution: "חילוף",
+    "Red Card": "אדום",
+    "Yellow Card": "צהוב",
+    Woodwork: "קורה",
+  };
   return (
-    <figure className="story-graphic story-timeline-graphic">
+    <figure className="story-graphic match-flow-graphic">
       <figcaption>
         <span>גרפיקה 01</span>
-        <div><strong>המשחק החל בהפתעה — ואז החליף בעלים</strong><small>כל השערים על ציר הזמן, לפי אירועי המשחק</small></div>
+        <div><strong>זרימת המשחק: האיום הגיע בגלים</strong><small>xG ובעיטות בכל חלון של 15 דקות · אירועי המפתח מתחת</small></div>
       </figcaption>
-      <div className="timeline-scroll">
-        <div className="goal-timeline" dir="ltr">
-          <span className="timeline-half">מחצית</span>
-          <span className="timeline-label start">0׳</span>
-          <span className="timeline-label end">90׳</span>
-          {plottedGoals.map((goal, index) => (
-            <div
-              className={`timeline-goal ${index % 2 ? "below" : "above"}`}
-              key={goal.eventId}
-              style={{ left: `${Math.min(98, (goal.minute / 95) * 100)}%`, "--goal-color": goal.teamId === article.teams.home.teamId ? article.teams.home.color : article.teams.away.color } as CSSProperties}
-            >
-              <span className="timeline-dot" />
-              <span className="timeline-goal-card"><b>{goal.score}</b><strong>{goal.playerNameHe}</strong><small>{goal.eventTime}</small></span>
-            </div>
-          ))}
-        </div>
+      <div className="flow-legend">
+        <span><i style={{ background: home.color }} />{home.nameHe}</span>
+        <span><i style={{ background: away.color }} />{away.nameHe}</span>
       </div>
+      <div className="flow-windows" dir="ltr">
+        {article.flowWindows.map((window) => {
+          const events = article.timelineEvents.filter((event) => event.minute >= window.start && event.minute <= (window.end === 90 ? 105 : window.end));
+          const substitutions = events.filter((event) => event.type === "Substitution").length;
+          const highlighted = events.filter((event) => ["Goal", "Red Card", "Woodwork"].includes(event.type));
+          return (
+            <section className="flow-window" key={window.start}>
+              <strong>{window.start}–{window.end}׳</strong>
+              <div className="flow-bars">
+                <span style={{ height: `${Math.max(3, window.home.xg / maxXg * 100)}%`, background: home.color }}><b>{numeric(window.home.xg, 2)}</b></span>
+                <span style={{ height: `${Math.max(3, window.away.xg / maxXg * 100)}%`, background: away.color }}><b>{numeric(window.away.xg, 2)}</b></span>
+              </div>
+              <small>{window.home.shots}–{window.away.shots} בעיטות</small>
+              <div className="flow-event-list" dir="rtl">
+                {highlighted.map((event) => <i className={event.type === "Red Card" ? "red" : ""} key={event.id}>{event.eventTime} {eventTypeHe[event.type]}</i>)}
+                {substitutions > 0 && <i>{substitutions} חילופים</i>}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+      {article.actualPlayTime && (
+        <div className="flow-playing-time">
+          <span>זמן משחק נטו</span>
+          <strong>{article.actualPlayTime.actual?.replace("Actual ", "") ?? "—"}</strong>
+          <small>מתוך {article.actualPlayTime.total?.replace("Total ", "") ?? "—"} זמן כולל</small>
+        </div>
+      )}
     </figure>
   );
 }
@@ -200,120 +215,35 @@ function ShotMap({ article }: { article: ContentArticle }) {
   );
 }
 
-function MatchupGraphic({ article }: { article: ContentArticle }) {
-  const { home, away } = article.teams;
-  const homeUnits = article.unitMatchups.home;
-  const awayUnits = article.unitMatchups.away;
-  return (
-    <figure className="story-graphic matchup-graphic">
-      <figcaption>
-        <span>גרפיקה 04</span>
-        <div><strong>אותו מרכז מגרש, שני סוגים של שליטה</strong><small>סכום פעולות השחקנים בכל חוליה · ללא נרמול ל־90 דקות</small></div>
-      </figcaption>
-      <div className="matchup-grid">
-        <section>
-          <span>העבודה ההגנתית בקישור</span>
-          <div><strong>{home.nameHe}</strong><b>{homeUnits.midfielders.recoveries}</b><small>חילוצים</small><b>{homeUnits.midfielders.tacklesWon}/{homeUnits.midfielders.tacklesAttempted}</b><small>תיקולים</small></div>
-          <div><strong>{away.nameHe}</strong><b>{awayUnits.midfielders.recoveries}</b><small>חילוצים</small><b>{awayUnits.midfielders.tacklesWon}/{awayUnits.midfielders.tacklesAttempted}</b><small>תיקולים</small></div>
-        </section>
-        <section>
-          <span>ההשפעה ההתקפית בקישור</span>
-          <div><strong>{home.nameHe}</strong><b>{numeric(homeUnits.midfielders.expectedGoals, 2)}</b><small>xG</small><b>{homeUnits.midfielders.goals}</b><small>שערים</small></div>
-          <div><strong>{away.nameHe}</strong><b>{numeric(awayUnits.midfielders.expectedGoals, 2)}</b><small>xG</small><b>{awayUnits.midfielders.goals}</b><small>שערים</small></div>
-        </section>
-        <section>
-          <span>הגנת {away.nameHe} מול התקפת {home.nameHe}</span>
-          <div><strong>הגנת {away.nameHe}</strong><b>{awayUnits.defenders.tacklesWon}/{awayUnits.defenders.tacklesAttempted}</b><small>תיקולים</small><b>{awayUnits.defenders.clearances}</b><small>הרחקות</small></div>
-          <div><strong>התקפת {home.nameHe}</strong><b>{homeUnits.attackers.groundDuelsWon}/{homeUnits.attackers.groundDuelsAttempted}</b><small>מאבקי קרקע</small><b>{numeric(homeUnits.attackers.expectedGoals, 2)}</b><small>xG</small></div>
-        </section>
-      </div>
-    </figure>
-  );
-}
-
-function shortPlayerName(player: ArticlePlayer) {
-  const words = player.nameHe.trim().split(/\s+/);
-  return words.length > 1 ? words[words.length - 1] : player.nameHe;
-}
-
-function TeamHeatmapShape({
-  article,
-  teamId,
-  positions,
-}: {
-  article: ContentArticle;
-  teamId: string;
-  positions: Map<string, MatchAveragePosition>;
-}) {
-  const players = article.players.filter((player) => (
-    player.teamId === teamId
-    && /start/i.test(player.lineupStatus ?? "")
-    && positions.has(player.playerId)
-  ));
-  return (
-    <div className="heatmap-team-shape">
-      <strong>{teamId === article.teams.home.teamId ? article.teams.home.nameHe : article.teams.away.nameHe}</strong>
-      <div className="heatmap-pitch">
-        <span className="heatmap-halfway" />
-        <span className="heatmap-centre-circle" />
-        <span className="heatmap-box top" />
-        <span className="heatmap-box bottom" />
-        {players.map((player) => {
-          const position = positions.get(player.playerId);
-          if (!position) return null;
-          return (
-            <span
-              className={`heatmap-player ${player.roleGroup.toLowerCase()}`}
-              key={player.playerId}
-              style={{ left: `${position.x}%`, top: `${position.y}%` } as CSSProperties}
-              title={`${player.nameHe} · ${player.formationPosition ?? player.positionName ?? ""}`}
-            >
-              <i>{player.shirtNumber ?? "·"}</i>
-              <small>{shortPlayerName(player)}</small>
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function HeatmapShapeGraphic({ article }: { article: ContentArticle }) {
-  const [positions, setPositions] = useState<MatchAveragePosition[]>([]);
-  const [loading, setLoading] = useState(true);
+function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
+  const homeCanvas = useRef<HTMLCanvasElement>(null);
+  const awayCanvas = useRef<HTMLCanvasElement>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    calculateMatchAveragePositions(article.heatmaps, controller.signal)
-      .then(setPositions)
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setPositions([]);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+    const starterIds = new Set(article.players.filter((player) => /start/i.test(player.lineupStatus ?? "")).map((player) => player.playerId));
+    const homeRows = article.heatmaps.filter((row) => row.team_id === article.teams.home.teamId && starterIds.has(row.player_id));
+    const awayRows = article.heatmaps.filter((row) => row.team_id === article.teams.away.teamId && starterIds.has(row.player_id));
+    if (!homeCanvas.current || !awayCanvas.current) return () => controller.abort();
+    setLoaded(false);
+    Promise.all([
+      renderSeasonHeatmap(homeCanvas.current, homeRows, controller.signal),
+      renderSeasonHeatmap(awayCanvas.current, awayRows, controller.signal),
+    ]).then(() => setLoaded(true)).catch(() => setLoaded(false));
     return () => controller.abort();
   }, [article]);
 
-  const positionByPlayer = new Map(positions.map((position) => [position.playerId, position]));
   return (
-    <figure className="story-graphic heatmap-shape-graphic">
+    <figure className="story-graphic tactical-heatmap-graphic">
       <figcaption>
-        <span>גרפיקה 05</span>
-        <div><strong>המבנה הממוצע לפי מפות החום</strong><small>{article.heatmaps.length} מפות שחקן · כיוון ההתקפה נורמל כך ששתי הקבוצות ניתנות להשוואה</small></div>
+        <span>גרפיקה 04</span>
+        <div><strong>איפה נוצרה הצפיפות</strong><small>מפות החום המאוחדות של שחקני ההרכב · שתי הקבוצות תוקפות לאותו כיוון</small></div>
       </figcaption>
-      <div className="heatmap-explainer">
-        <strong>חשוב: מפות החום אינן מבוססות זמן.</strong>
-        <p>כל מפה מציגה צפיפות מיקום מצטברת לאורך זמן ההופעה של השחקן. אפשר ללמוד ממנה על רוחב, עומק ומיקום ממוצע — אבל לא לקבוע מתי התרחש שינוי או לייחס אותו לדקה מסוימת.</p>
+      <div className={`tactical-heatmap-grid${loaded ? " loaded" : ""}`} dir="ltr">
+        <div><strong>{article.teams.home.nameHe}</strong><canvas ref={homeCanvas} /></div>
+        <div><strong>{article.teams.away.nameHe}</strong><canvas ref={awayCanvas} /></div>
       </div>
-      {loading ? <p className="heatmap-loading">מחשב מיקומים ממוצעים…</p> : positions.length ? (
-        <div className="heatmap-shapes" dir="ltr">
-          <TeamHeatmapShape article={article} teamId={article.teams.home.teamId} positions={positionByPlayer} />
-          <TeamHeatmapShape article={article} teamId={article.teams.away.teamId} positions={positionByPlayer} />
-        </div>
-      ) : <p className="heatmap-loading">מפות החום לא נטענו; הניתוח המספרי של החוליות נשאר זמין.</p>}
     </figure>
   );
 }
@@ -386,11 +316,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
                 <h2>{section.heading}</h2>
                 {section.paragraphs.map((paragraph) => <p key={paragraph.text}>{paragraph.text}</p>)}
               </section>
-              {index === 0 && <GoalTimeline article={article} />}
+              {index === 0 && <MatchFlowGraphic article={article} />}
               {index === 1 && <ComparisonGraphic article={article} />}
               {index === 2 && <DorSpotlight article={article} />}
               {index === 3 && <ShotMap article={article} />}
-              {index === 4 && <><MatchupGraphic article={article} /><HeatmapShapeGraphic article={article} /></>}
+              {index === 4 && <TacticalHeatmapGraphic article={article} />}
             </div>
           ))}
 
