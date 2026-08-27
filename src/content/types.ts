@@ -240,6 +240,7 @@ export type ArticleEditorialReview = {
     highVolumeComparisonsOnly: boolean;
     evidenceFaithfulness: boolean;
     analyticalDepth: boolean;
+    historicalContext: boolean;
   };
   notes: string[];
 };

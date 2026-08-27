@@ -258,7 +258,7 @@ function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
 }
 
 function FactCheckPanel({ article }: { article: ContentArticle }) {
-  const visibleCheckIds = ["score-vs-events", "history-order", "historical-player-volume", "editorial-review", "evidence-links", "numeric-claims"];
+  const visibleCheckIds = ["score-vs-events", "history-order", "historical-player-volume", "historical-coverage", "editorial-review", "evidence-links", "numeric-claims"];
   const visibleChecks = visibleCheckIds
     .map((id) => article.factCheck.checks.find((check) => check.id === id))
     .filter((check): check is ContentArticle["factCheck"]["checks"][number] => Boolean(check));
@@ -294,6 +294,13 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
     : selectedArticle;
   if (!article) return <div className="story-empty">אין עדיין כתבות שעמדו בבדיקות הפרסום.</div>;
   const { editorial, match, teams } = article;
+  const sectionEvidenceIds = editorial.sections.map((section) => new Set(section.paragraphs.flatMap((paragraph) => paragraph.evidenceIds)));
+  const firstSectionUsing = (predicate: (evidenceId: string) => boolean) => sectionEvidenceIds.findIndex((ids) => [...ids].some(predicate));
+  const flowGraphicIndex = firstSectionUsing((id) => id === "flow.shot_windows" || id.startsWith("timeline."));
+  const historyGraphicIndex = firstSectionUsing((id) => id === "history.team.home" || id === "history.team.away");
+  const spotlightGraphicIndex = firstSectionUsing((id) => id === "player.dor_peretz");
+  const shotMapGraphicIndex = firstSectionUsing((id) => id === "match.shot_map" || id === "team.quality");
+  const heatmapGraphicIndex = firstSectionUsing((id) => id === "heatmap.spatial_profile");
   const activeTag = articles.flatMap((item) => item.tags ?? []).find((tag) => tag.id === activeTagId);
   const filterByTag = (tag: ArticleTag) => {
     const nextTagId = activeTagId === tag.id ? "" : tag.id;
@@ -357,11 +364,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
                 <h2>{section.heading}</h2>
                 {section.paragraphs.map((paragraph) => <p key={paragraph.text}>{paragraph.text}</p>)}
               </section>
-              {index === 0 && <MatchFlowGraphic article={article} />}
-              {index === 1 && <HistoricalComparisonGraphic article={article} />}
-              {index === 2 && <DorSpotlight article={article} />}
-              {index === 3 && <ShotMap article={article} />}
-              {index === 4 && <TacticalHeatmapGraphic article={article} />}
+              {index === flowGraphicIndex && <MatchFlowGraphic article={article} />}
+              {index === historyGraphicIndex && <HistoricalComparisonGraphic article={article} />}
+              {index === spotlightGraphicIndex && <DorSpotlight article={article} />}
+              {index === shotMapGraphicIndex && <ShotMap article={article} />}
+              {index === heatmapGraphicIndex && <TacticalHeatmapGraphic article={article} />}
             </div>
           ))}
 

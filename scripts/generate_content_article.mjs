@@ -969,8 +969,9 @@ const editorialReviewResponseSchema = {
         highVolumeComparisonsOnly: { type: "boolean" },
         evidenceFaithfulness: { type: "boolean" },
         analyticalDepth: { type: "boolean" },
+        historicalContext: { type: "boolean" },
       },
-      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness", "analyticalDepth"],
+      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness", "analyticalDepth", "historicalContext"],
     },
     notes: { type: "array", items: { type: "string" }, maxItems: 6 },
   },
@@ -991,8 +992,9 @@ const qualityReviewResponseSchema = {
         highVolumeComparisonsOnly: { type: "boolean" },
         evidenceFaithfulness: { type: "boolean" },
         analyticalDepth: { type: "boolean" },
+        historicalContext: { type: "boolean" },
       },
-      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness", "analyticalDepth"],
+      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness", "analyticalDepth", "historicalContext"],
     },
     issues: { type: "array", items: { type: "string" }, maxItems: 12 },
   },
@@ -1021,15 +1023,15 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
         "לכל טענה מספרית צרף רק מזהי evidenceIds שמכילים את המספרים הללו. שמור על טון עיתונאי ולא שיווקי.",
         "כל מספר שמופיע בטקסט חייב להופיע כפי שהוא במערך values של אחת הראיות המצורפות. אל תחשב הפרשים, ממוצעים, אחוזים או יחסים חדשים בעצמך.",
         "כתוב כל כמות ומספר בספרות (למשל 6, לא שישה), כדי שמנוע האימות יוכל לבדוק אותם.",
-        "המונחים המקצועיים היחידים שמותר לכתוב באותיות לטיניות הם xG ו-xGOT. אם משתמשים ב-xGOT, כתוב בפעם הראשונה 'שערים צפויים לבעיטות למסגרת (xGOT)' ואל תשתמש בניסוח המעורפל 'שערים צפויים לאחר הבעיטה'.",
+        "המונחים המקצועיים היחידים שמותר לכתוב באותיות לטיניות הם xG ו-xGOT. אם משתמשים ב-xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)' ואל תשתמש בניסוח המעורפל 'שערים צפויים לאחר הבעיטה'.",
         "בנה לכתבה תזה אחת כבר בכותרת ובפתיח, והתקדם איתה מסעיף לסעיף. כל פסקה צריכה להוסיף שלב לסיפור, לא להתחיל ניתוח חדש.",
         "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומרשימות נתונים שאינן מקדמות את הטענה המרכזית.",
-        "השווה כל קבוצה לעד 5 משחקיה הקודמים בכל המסגרות. ציין במפורש את גודל המדגם, השתמש רק במדדים עם sampleSize, והצג את ההשוואה כהקשר ולא כהוכחה מוחלטת לשינוי טקטי.",
-        "השוואה היסטורית של שחקן מותרת רק מתוך notableChanges: אלה מדדי נפח עם לפחות 3 משחקי בסיס וחריגה מספקת. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה סטטיסטית.",
+        "השווה בפועל את שתי הקבוצות לעד 5 משחקיהן הקודמים בכל המסגרות, באמצעות history.team.home וגם history.team.away. ציין במפורש את גודל המדגם, השתמש רק במדדים עם sampleSize, והצג את ההשוואה כהקשר ולא כהוכחה מוחלטת לשינוי טקטי.",
+        "אם קיימת לפחות רשומת notableChanges אחת, שלב לפחות השוואת שחקן אחת שמקדמת את התזה. השוואה היסטורית של שחקן מותרת רק מתוך notableChanges: אלה מדדי נפח עם לפחות 3 משחקי בסיס וחריגה מספקת. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה סטטיסטית.",
         "הזכר בשם לפחות שחקן אחד שיש לו ראיות משמעותיות, כדי שהכתבה תוכל לקבל תגית שחקן שימושית.",
         "אל תבנה סעיף שלם סביב בעיטה אחת או אירוע אישי יחיד. דוגמת שחקן חייבת להסביר, להמחיש או לסייג את התזה המרכזית של הכתבה.",
         "הסבר את זרימת המשחק דרך חלונות הבעיטות ואירועי המשחק, והבדל בין מה שקרה לפני ואחרי חילופים או כרטיסים.",
-        "השתמש בפרופיל המרחבי ממפות החום כדי לזהות מבנה, רוחב, חצי־מרחבים ועומס מקומי. אל תכתוב הסבר מתודולוגי על מפות החום ואל תצטט לקורא קואורדינטות טכניות.",
+        "השתמש בפרופיל המרחבי ממפות החום כדי לזהות מבנה, רוחב, חצי־מרחבים ועומס מקומי. אל תכתוב לקורא הערה מתודולוגית על זמן, צבירה או מגבלות מפות החום, ואל תצטט קואורדינטות טכניות; פשוט הימנע מטענות על שינוי במהלך המשחק שאינן נתמכות.",
         "הכתבה חייבת לכלול לפחות טענה מרחבית אחת שמצטטת heatmap.spatial_profile ולפחות טענת matchup אחת שמצטטת מזהה שמתחיל ב-matchup. אל תציג נתונים אלה כרשימה; הסבר מה הם מלמדים על מבנה הקבוצות או המאבק בין החוליות.",
         "תאר שינוי טקטי רק כשהוא נתמך גם בחילוף בין תפקידים או באירוע מתוזמן; מפות החום לבדן מתארות את זמן ההופעה המצטבר.",
       ].join("\n"),
@@ -1078,17 +1080,18 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft, qu
         "ודא שכל רצף מספרי מובן מיד: כתוב מה נמדד, מהו הסכום, ומה קרה בפועל. אל תצמיד מספר ל-xG ולמספר שערים באותו חצי משפט אם הקשר ביניהם אינו מפורש.",
         "שמור על תזה אחת ורצף בין הפסקאות. הסר משפטים שנשמעים כמו סיכום אוטומטי או שאינם מוסיפים טענה חדשה.",
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
+        "הגרסה הסופית חייבת להשתמש גם ב-history.team.home וגם ב-history.team.away ולהשוות בפועל כל קבוצה למדגם המשחקים הקודמים שלה. אם קיימת לפחות רשומת notableChanges אחת, חייבת להישמר גם השוואת שחקן אחת שמקדמת את התזה.",
         "השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges. כל רשומה כזאת כבר עברה סף של לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
         "כל מספר חייב להופיע כפי שהוא ב-values של הראיות המצורפות לטענה. אל תחשב בעצמך הפרש, ממוצע, אחוז או יחס חדש, גם אם החישוב פשוט.",
         "שמור בנוסח לפחות אזכור אחד בשם של שחקן בעל ראיה משמעותית. אסור להסיר את כל שמות השחקנים, מפני שהפרסום דורש לפחות תגית שחקן אחת.",
-        "אם מופיע xGOT, כתוב בפעם הראשונה 'שערים צפויים לבעיטות למסגרת (xGOT)'. אל תכתוב 'שערים צפויים לאחר הבעיטה' ואל תבנה סעיף נפרד סביב בעיטה יחידה שאינה מקדמת את התזה.",
-        "הגרסה הסופית חייבת לשמר לפחות טענה אחת עם heatmap.spatial_profile ולפחות טענה אחת עם evidenceId שמתחיל ב-matchup. הטענות צריכות לפרש מבנה או מאבק בין חוליות, לא להסביר את שיטת המדידה.",
+        "אם מופיע xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)'. אל תכתוב 'שערים צפויים לאחר הבעיטה' ואל תבנה סעיף נפרד סביב בעיטה יחידה שאינה מקדמת את התזה.",
+        "הגרסה הסופית חייבת לשמר לפחות טענה אחת עם heatmap.spatial_profile ולפחות טענה אחת עם evidenceId שמתחיל ב-matchup. הטענות צריכות לפרש מבנה או מאבק בין חוליות, לא להסביר את שיטת המדידה. הסר מהנוסח הערות לקורא על כך שמפת החום מצטברת, אינה תלויה בזמן או אינה מוכיחה שינוי.",
         "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
         "נתוני משחק תצפיתיים מראים קשר ולא סיבתיות. בלי ראיה סיבתית מפורשת, אל תכתוב 'בזכות', 'הכריע', 'הוביל ל-', 'גרם' או 'הסביר את התוצאה'; כתוב מה היה הפער הבולט בנתונים.",
         "נתון מצטבר אחרי אירוע אינו מוכיח לבדו שקצב הפעולה עלה. כאשר context כולל השוואת לפני־ואחרי מפורשת, מותר לתאר את ההבדל בקצב; עדיין אסור לטעון שהאירוע גרם לו בלי ראיה סיבתית.",
         "כאשר qualityFeedback כולל ניסוח שנפסל ותיקון מוצע, ודא שהנוסח הפסול אינו נשאר בגרסה החדשה ושמשמעות התיקון יושמה במלואה. אל תחליף אותו במשפט שסותר את הראיה.",
-        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 6 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
+        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 7 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
         qualityFeedback.length
           ? "מבקר האיכות פסל גרסה קודמת. תקן במפורש כל סעיף ב-qualityFeedback ואל תסתפק בהחלפת מילה מקומית אם המשפט כולו אינו טבעי."
           : "זוהי עריכת הנוסח הראשונה; בצע עריכה מלאה ולא הגהה שטחית.",
@@ -1155,6 +1158,8 @@ async function reviewEditorialQualityWithAi(match, evidence, editorial, attempt)
         "highVolumeComparisonsOnly=true רק אם מגמות שחקנים נשענות על מדדי נפח ועל notableChanges, ולא על שער, בישול או אירוע יחיד.",
         "evidenceFaithfulness=true רק אם הפרשנות נובעת מהראיות. פסול סיבתיות, שינוי טקטי, צד מגרש או תזמון שאינם נתמכים במפורש.",
         "analyticalDepth=true רק אם הכתבה משתמשת בפועל גם ב-heatmap.spatial_profile וגם בראיית matchup, ומחברת אותן לתזה על מבנה הקבוצות או המאבק בין החוליות. אזכור טכני של הנתונים אינו מספיק.",
+        "historicalContext=true רק אם הכתבה משתמשת גם ב-history.team.home וגם ב-history.team.away כדי להשוות כל קבוצה למדגם הקודם שלה. אם קיימת בראיות רשומת notableChanges, נדרשת גם השוואת שחקן אחת המבוססת עליה.",
+        "אל תדרוש הערה מתודולוגית על מפות החום. להפך: פסול הסבר לקורא על כך שהמפה מצטברת, אינה תלויה בזמן או אינה מוכיחה שינוי. יש להציג רק תובנה מבנית בטוחה ולהימנע מטענת שינוי בזמן.",
         "issues חייב להכיל כל בעיה שמצאת, עם ציטוט קצר מהנוסח והסבר מעשי לעורך. אם issues אינו ריק, לפחות בדיקה אחת חייבת להיות false. אל תכתוב מחמאות ב-issues.",
         "אשר את הכתבה רק אם עורך אנושי דובר עברית לא היה צריך לשנות אף משפט לפני הפרסום.",
       ].join("\n"),
@@ -1208,6 +1213,7 @@ function curatedEditorialSeed(editorial) {
         highVolumeComparisonsOnly: true,
         evidenceFaithfulness: true,
         analyticalDepth: true,
+        historicalContext: true,
       },
       notes: ["נוסח הדוגמה נערך כחלק מהקוד; מעבר עריכת ה־AI אינו רץ במצב --no-ai."],
     },
@@ -1226,6 +1232,7 @@ function fixtureQualityReview() {
       highVolumeComparisonsOnly: true,
       evidenceFaithfulness: true,
       analyticalDepth: true,
+      historicalContext: true,
     },
     issues: [],
     attempt: 0,
@@ -1313,6 +1320,12 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const usedEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds));
   const hasSpatialInsight = usedEvidenceIds.has("heatmap.spatial_profile");
   const hasMatchupInsight = [...usedEvidenceIds].some((id) => id.startsWith("matchup."));
+  const notableHistoricalPlayerEvidenceIds = historicalContext.players
+    .filter((player) => player.notableChanges.length > 0)
+    .map((player) => `history.player.${player.playerId}`);
+  const hasTeamHistory = usedEvidenceIds.has("history.team.home") && usedEvidenceIds.has("history.team.away");
+  const hasRequiredPlayerHistory = notableHistoricalPlayerEvidenceIds.length === 0
+    || notableHistoricalPlayerEvidenceIds.some((id) => usedEvidenceIds.has(id));
   const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.after_red", "heatmap.spatial_profile"];
   const structuredEvidenceReady = structuredEvidenceIds.every((id) => evidence.find((item) => item.id === id)?.context);
   const awkwardPatterns = [
@@ -1327,6 +1340,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /ריבוי דו[־-]קרקעי/,
     /גלים של איומים/,
     /שימור איזון בנפח/,
+    /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
   ];
   const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
     && editorialReview.status === "passed"
@@ -1355,6 +1369,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
     ["independent-quality-review", "מבקר איכות בלתי־תלוי אישר את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
     ["analytical-coverage", "הכתבה כוללת ניתוח מרחבי ומאבק בין חוליות", !requiresAiReview || (hasSpatialInsight && hasMatchupInsight), `מרחב: ${hasSpatialInsight ? "כן" : "חסר"}; matchup: ${hasMatchupInsight ? "כן" : "חסר"}; נדרשים heatmap.spatial_profile ומזהה matchup.*`],
+    ["historical-coverage", "הכתבה משווה את הקבוצות והשחקנים להופעות קודמות", !requiresAiReview || (hasTeamHistory && hasRequiredPlayerHistory), `שתי קבוצות: ${hasTeamHistory ? "כן" : "חסר"}; חריגת שחקן: ${hasRequiredPlayerHistory ? "כן" : "חסר"}`],
     ["structured-evidence-context", "ראיות הניתוח כוללות שמות מדדים וקבוצות", structuredEvidenceReady, `${structuredEvidenceIds.length} חבילות ראיות מובנות נבדקו`],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
     ["evidence-links", "לכל טענה יש הפניה לראיות", claimEntries(editorial).every((claim) => claim.evidenceIds.length > 0), `${claimEntries(editorial).length} טענות מקושרות`],
@@ -1511,7 +1526,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v8",
+      pipelineVersion: "match-review-v9",
     },
     match: {
       matchId: match.match_id,
