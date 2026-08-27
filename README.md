@@ -109,8 +109,8 @@ The Hebrew-only `בלוג` tab reads fact-checked article packages from
 3. Derive time-window flow and spatial-team profiles, then convert current and historical data into a grounded evidence bundle.
 4. Ask the OpenAI Responses API for one cohesive Hebrew narrative whose claims cite evidence IDs.
 5. Run a separate senior-editor pass for idiomatic Hebrew, numerical clarity, narrative flow, and misuse of small samples.
-6. Run an independent adversarial Hebrew quality gate; if it finds a defect, accumulate its exact issues and send the full history back to the editor for up to two revision cycles.
-7. Reject the draft if the independent review, score, event total, xG cross-check, historical date, evidence link, tag set, or numeric claim fails.
+6. Run an independent adversarial Hebrew quality gate, then the deterministic evidence checks; accumulate issues from both and send the full history back to the editor for up to three revision cycles.
+7. Reject the draft if any independent review, score, event total, xG cross-check, historical date, evidence link, tag set, or numeric claim still fails.
 8. Publish the JSON package with Hebrew team, player, and `סיכום משחק` tags; Vite discovers it automatically and adds it to the filterable blog archive.
 
 Generate the latest eligible match with AI:

@@ -961,6 +961,7 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
         "אתה עורך ספורט נתונים בעברית. כתוב כתבת ניתוח מקורית, בהירה ומדויקת בעברית בלבד.",
         "השתמש אך ורק בחבילת הראיות שסופקה. אין להוסיף הקשר חיצוני, ציטוטים, סיבות טקטיות שלא נמדדו או עובדות שאינן בחבילה.",
         "לכל טענה מספרית צרף רק מזהי evidenceIds שמכילים את המספרים הללו. שמור על טון עיתונאי ולא שיווקי.",
+        "כל מספר שמופיע בטקסט חייב להופיע כפי שהוא במערך values של אחת הראיות המצורפות. אל תחשב הפרשים, ממוצעים, אחוזים או יחסים חדשים בעצמך.",
         "כתוב כל כמות ומספר בספרות (למשל 6, לא שישה), כדי שמנוע האימות יוכל לבדוק אותם.",
         "השתמש ב-xG כמונח המקצועי היחיד שמותר באותיות לטיניות.",
         "בנה לכתבה תזה אחת כבר בכותרת ובפתיח, והתקדם איתה מסעיף לסעיף. כל פסקה צריכה להוסיף שלב לסיפור, לא להתחיל ניתוח חדש.",
@@ -1019,6 +1020,8 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft, qu
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
         "השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges. כל רשומה כזאת כבר עברה סף של לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
+        "כל מספר חייב להופיע כפי שהוא ב-values של הראיות המצורפות לטענה. אל תחשב בעצמך הפרש, ממוצע, אחוז או יחס חדש, גם אם החישוב פשוט.",
+        "שמור בנוסח לפחות אזכור אחד בשם של שחקן בעל ראיה משמעותית. אסור להסיר את כל שמות השחקנים, מפני שהפרסום דורש לפחות תגית שחקן אחת.",
         "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
         "נתוני משחק תצפיתיים מראים קשר ולא סיבתיות. בלי ראיה סיבתית מפורשת, אל תכתוב 'בזכות', 'הכריע', 'הוביל ל-', 'גרם' או 'הסביר את התוצאה'; כתוב מה היה הפער הבולט בנתונים.",
         "נתון מצטבר אחרי אירוע אינו מוכיח שקצב הפעולה עלה לעומת לפניו. אל תסיק שינוי בקצב, לחץ או שינוי טקטי בלי השוואת לפני־ואחרי מפורשת בראיות.",
@@ -1383,26 +1386,38 @@ async function main() {
     : curatedEditorialSeed(draftEditorial);
   let { editorial, review: editorialReview } = reviewed;
   let qualityReview = fixtureQualityReview();
+  let tags = [];
+  let checks = [];
+  let failedChecks = [];
   if (usedAi) {
-    const accumulatedQualityFeedback = [];
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const accumulatedFeedback = [];
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
       qualityReview = await reviewEditorialQualityWithAi(match, evidence, editorial, attempt);
-      if (qualityReview.status === "passed" || attempt === 3) break;
-      accumulatedQualityFeedback.push(...qualityReview.issues);
-      const uniqueQualityFeedback = [...new Set(accumulatedQualityFeedback)];
-      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, uniqueQualityFeedback);
+      if (qualityReview.status === "passed") {
+        tags = buildArticleTags(home, away, players, editorial);
+        checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, true);
+        failedChecks = checks.filter((check) => check.status === "failed");
+        if (failedChecks.length === 0) break;
+        accumulatedFeedback.push(...failedChecks.map((check) => `בדיקה דטרמיניסטית נכשלה — ${check.label}: ${check.detail}`));
+      } else {
+        accumulatedFeedback.push(...qualityReview.issues);
+      }
+      if (attempt === 4) break;
+      const uniqueFeedback = [...new Set(accumulatedFeedback)];
+      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, uniqueFeedback);
       editorial = revised.editorial;
       editorialReview = revised.review;
     }
+    if (qualityReview.status === "failed") {
+      throw new Error(`Article rejected by independent Hebrew quality gate after 4 attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
+    }
+  } else {
+    tags = buildArticleTags(home, away, players, editorial);
+    checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, false);
+    failedChecks = checks.filter((check) => check.status === "failed");
   }
-  if (usedAi && qualityReview.status === "failed") {
-    throw new Error(`Article rejected by independent Hebrew quality gate after 3 attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
-  }
-  const tags = buildArticleTags(home, away, players, editorial);
-  const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, usedAi);
-  const failedChecks = checks.filter((check) => check.status === "failed");
   if (failedChecks.length) {
-    throw new Error(`Article rejected by fact checks:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
+    throw new Error(`Article rejected after 4 combined editorial and fact-check attempts:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
   }
 
   const generatedAt = new Date().toISOString();
