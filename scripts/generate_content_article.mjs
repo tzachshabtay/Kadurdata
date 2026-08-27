@@ -10,6 +10,7 @@ import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
 const HISTORICAL_WINDOW = 5;
+const MAX_QUALITY_ATTEMPTS = 5;
 const HISTORICAL_TEAM_METRICS = [
   "team_possession",
   "team_total_shots",
@@ -667,6 +668,7 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
   const homeShotsAfterRed = redCard
     ? shots.filter((shot) => shot.team_id === home.teamId && Number(shot.minute) > redCard.minute)
     : [];
+  const homeShotsThrough75 = shots.filter((shot) => shot.team_id === home.teamId && Number(shot.minute) <= 75);
   const historicalEvidence = [
     evidenceItem(
       "history.team.home",
@@ -764,7 +766,19 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       redCard?.minute,
       homeShotsAfterRed.length,
       round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
-    ], { redCard, shotsAfterRed: homeShotsAfterRed.length, expectedGoalsAfterRed: round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)), teamNameHe: home.nameHe }),
+      75,
+      homeShotsThrough75.length,
+    ], {
+      redCard,
+      teamNameHe: home.nameHe,
+      comparison: {
+        throughMinute: 75,
+        shotsThroughMinute: homeShotsThrough75.length,
+        shotsAfterRed: homeShotsAfterRed.length,
+        expectedGoalsAfterRed: round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
+        interpretationHe: "ההשוואה מתארת קצב בעיטות גבוה יותר אחרי הכרטיס האדום, אך אינה מוכיחה שהכרטיס הוא שגרם לעלייה",
+      },
+    }),
     evidenceItem("heatmap.spatial_profile", "מבנה מרחבי מצטבר של שחקני ההרכב", "api_match_player_heatmaps", heatmaps.length, spatialProfile ? [
       spatialProfile.starterHeatmaps,
       ...spatialTeamEvidenceValues(spatialProfile.home),
@@ -1072,8 +1086,9 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft, qu
         "הגרסה הסופית חייבת לשמר לפחות טענה אחת עם heatmap.spatial_profile ולפחות טענה אחת עם evidenceId שמתחיל ב-matchup. הטענות צריכות לפרש מבנה או מאבק בין חוליות, לא להסביר את שיטת המדידה.",
         "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
         "נתוני משחק תצפיתיים מראים קשר ולא סיבתיות. בלי ראיה סיבתית מפורשת, אל תכתוב 'בזכות', 'הכריע', 'הוביל ל-', 'גרם' או 'הסביר את התוצאה'; כתוב מה היה הפער הבולט בנתונים.",
-        "נתון מצטבר אחרי אירוע אינו מוכיח שקצב הפעולה עלה לעומת לפניו. אל תסיק שינוי בקצב, לחץ או שינוי טקטי בלי השוואת לפני־ואחרי מפורשת בראיות.",
-        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 5 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
+        "נתון מצטבר אחרי אירוע אינו מוכיח לבדו שקצב הפעולה עלה. כאשר context כולל השוואת לפני־ואחרי מפורשת, מותר לתאר את ההבדל בקצב; עדיין אסור לטעון שהאירוע גרם לו בלי ראיה סיבתית.",
+        "כאשר qualityFeedback כולל ניסוח שנפסל ותיקון מוצע, ודא שהנוסח הפסול אינו נשאר בגרסה החדשה ושמשמעות התיקון יושמה במלואה. אל תחליף אותו במשפט שסותר את הראיה.",
+        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 6 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
         qualityFeedback.length
           ? "מבקר האיכות פסל גרסה קודמת. תקן במפורש כל סעיף ב-qualityFeedback ואל תסתפק בהחלפת מילה מקומית אם המשפט כולו אינו טבעי."
           : "זוהי עריכת הנוסח הראשונה; בצע עריכה מלאה ולא הגהה שטחית.",
@@ -1298,7 +1313,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const usedEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds));
   const hasSpatialInsight = usedEvidenceIds.has("heatmap.spatial_profile");
   const hasMatchupInsight = [...usedEvidenceIds].some((id) => id.startsWith("matchup."));
-  const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "heatmap.spatial_profile"];
+  const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.after_red", "heatmap.spatial_profile"];
   const structuredEvidenceReady = structuredEvidenceIds.every((id) => evidence.find((item) => item.id === id)?.context);
   const awkwardPatterns = [
     /הפך מחריגה לסיפור/,
@@ -1448,26 +1463,30 @@ async function main() {
   let checks = [];
   let failedChecks = [];
   if (usedAi) {
-    const accumulatedFeedback = [];
-    for (let attempt = 1; attempt <= 4; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_QUALITY_ATTEMPTS; attempt += 1) {
       qualityReview = await reviewEditorialQualityWithAi(match, evidence, editorial, attempt);
+      console.log(JSON.stringify({
+        qualityAttempt: attempt,
+        status: qualityReview.status,
+        issues: qualityReview.issues,
+      }, null, 2));
+      let currentFeedback = [];
       if (qualityReview.status === "passed") {
         tags = buildArticleTags(home, away, players, editorial);
         checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, true);
         failedChecks = checks.filter((check) => check.status === "failed");
         if (failedChecks.length === 0) break;
-        accumulatedFeedback.push(...failedChecks.map((check) => `בדיקה דטרמיניסטית נכשלה — ${check.label}: ${check.detail}`));
+        currentFeedback = failedChecks.map((check) => `בדיקה דטרמיניסטית נכשלה — ${check.label}: ${check.detail}`);
       } else {
-        accumulatedFeedback.push(...qualityReview.issues);
+        currentFeedback = qualityReview.issues;
       }
-      if (attempt === 4) break;
-      const uniqueFeedback = [...new Set(accumulatedFeedback)];
-      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, uniqueFeedback);
+      if (attempt === MAX_QUALITY_ATTEMPTS) break;
+      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, [...new Set(currentFeedback)]);
       editorial = revised.editorial;
       editorialReview = revised.review;
     }
     if (qualityReview.status === "failed") {
-      throw new Error(`Article rejected by independent Hebrew quality gate after 4 attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
+      throw new Error(`Article rejected by independent Hebrew quality gate after ${MAX_QUALITY_ATTEMPTS} attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
     }
   } else {
     tags = buildArticleTags(home, away, players, editorial);
@@ -1475,7 +1494,7 @@ async function main() {
     failedChecks = checks.filter((check) => check.status === "failed");
   }
   if (failedChecks.length) {
-    throw new Error(`Article rejected after 4 combined editorial and fact-check attempts:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
+    throw new Error(`Article rejected after ${MAX_QUALITY_ATTEMPTS} combined editorial and fact-check attempts:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
   }
 
   const generatedAt = new Date().toISOString();
@@ -1492,7 +1511,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v7",
+      pipelineVersion: "match-review-v8",
     },
     match: {
       matchId: match.match_id,
