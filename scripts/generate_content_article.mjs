@@ -1020,6 +1020,8 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft, qu
         "השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges. כל רשומה כזאת כבר עברה סף של לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
         "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
+        "נתוני משחק תצפיתיים מראים קשר ולא סיבתיות. בלי ראיה סיבתית מפורשת, אל תכתוב 'בזכות', 'הכריע', 'הוביל ל-', 'גרם' או 'הסביר את התוצאה'; כתוב מה היה הפער הבולט בנתונים.",
+        "נתון מצטבר אחרי אירוע אינו מוכיח שקצב הפעולה עלה לעומת לפניו. אל תסיק שינוי בקצב, לחץ או שינוי טקטי בלי השוואת לפני־ואחרי מפורשת בראיות.",
         "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 5 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
         qualityFeedback.length
           ? "מבקר האיכות פסל גרסה קודמת. תקן במפורש כל סעיף ב-qualityFeedback ואל תסתפק בהחלפת מילה מקומית אם המשפט כולו אינו טבעי."
@@ -1083,6 +1085,7 @@ async function reviewEditorialQualityWithAi(match, evidence, editorial, attempt)
         "פסול תרגום מילולי, מליצות ריקות ופעלים שאינם מתאימים לנתון. דוגמאות לסוגי כשל: 'השערים פונו', 'קבוצה כיתרה 51%', 'המצביה היו', 'ריבוי דו־קרקעי', 'גלים של איומים' או 'שימור איזון בנפח'.",
         "numericClarity=true רק אם ברור לקורא מה כל מספר מודד, מהו בסיס ההשוואה, ומה ההבדל בין נתון של המשחק למדגם היסטורי.",
         "cohesiveNarrative=true רק אם לכתבה יש טענה מרכזית אחת, כל פסקה מקדמת אותה, ואין חזרות, סתירות או משפטי מילוי אוטומטיים.",
+        "שלוש נקודות הסיכום רשאיות לתמצת בקצרה טענות מהכתבה; אל תפסול אותן רק משום שהן מסכמות. פסול חזרה כמעט מילולית בתוך גוף הכתבה או מסקנה שאינה מוסיפה סינתזה.",
         "highVolumeComparisonsOnly=true רק אם מגמות שחקנים נשענות על מדדי נפח ועל notableChanges, ולא על שער, בישול או אירוע יחיד.",
         "evidenceFaithfulness=true רק אם הפרשנות נובעת מהראיות. פסול סיבתיות, שינוי טקטי, צד מגרש או תזמון שאינם נתמכים במפורש.",
         "issues חייב להכיל כל בעיה שמצאת, עם ציטוט קצר מהנוסח והסבר מעשי לעורך. אם issues אינו ריק, לפחות בדיקה אחת חייבת להיות false. אל תכתוב מחמאות ב-issues.",
@@ -1381,10 +1384,13 @@ async function main() {
   let { editorial, review: editorialReview } = reviewed;
   let qualityReview = fixtureQualityReview();
   if (usedAi) {
+    const accumulatedQualityFeedback = [];
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       qualityReview = await reviewEditorialQualityWithAi(match, evidence, editorial, attempt);
       if (qualityReview.status === "passed" || attempt === 3) break;
-      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, qualityReview.issues);
+      accumulatedQualityFeedback.push(...qualityReview.issues);
+      const uniqueQualityFeedback = [...new Set(accumulatedQualityFeedback)];
+      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, uniqueQualityFeedback);
       editorial = revised.editorial;
       editorialReview = revised.review;
     }
