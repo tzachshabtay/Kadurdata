@@ -106,7 +106,7 @@ The Hebrew-only `בלוג` tab reads fact-checked article packages from
 
 1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
 2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
-3. Derive time-window flow, spatial-team profiles, and unit matchups, then convert current and historical data into a grounded evidence bundle.
+3. Derive time-window flow, spatial-team profiles, and unit matchups, then convert current and historical data into a grounded evidence bundle with named teams, metrics, units, and players—not unlabeled number arrays.
 4. Ask the OpenAI Responses API for one cohesive Hebrew narrative whose claims cite evidence IDs.
 5. Run a separate senior-editor pass for idiomatic Hebrew, numerical clarity, narrative flow, and misuse of small samples.
 6. Run an independent adversarial Hebrew quality gate, then the deterministic evidence checks; accumulate issues from both and send the full history back to the editor for up to three revision cycles.

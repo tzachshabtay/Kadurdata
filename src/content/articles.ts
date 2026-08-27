@@ -10,7 +10,7 @@ export const articles = Object.values(generatedModules)
     article.language === "he"
     && article.status === "published"
     && article.generation.mode === "openai_writer_editor_and_qa"
-    && article.generation.pipelineVersion === "match-review-v6"
+    && article.generation.pipelineVersion === "match-review-v7"
     && article.editorialReview.mode === "openai_second_pass_editor"
     && article.editorialReview.status === "passed"
     && article.qualityReview?.mode === "openai_independent_quality_gate"

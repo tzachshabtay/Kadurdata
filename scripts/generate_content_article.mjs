@@ -583,6 +583,28 @@ function evidenceItem(id, label, sourceView, sourceRows, values, context) {
   };
 }
 
+function spatialTeamEvidenceValues(team) {
+  return [
+    team.sampleSize,
+    team.defenderCount,
+    team.midfielderCount,
+    team.attackerCount,
+    team.centralLanePlayers,
+    team.halfSpacePlayers,
+    team.wideLanePlayers,
+    team.leftLanePlayers,
+    team.rightLanePlayers,
+    team.averageDepth,
+    team.width,
+    team.playersInAttackingHalf,
+    team.playersInFinalThird,
+    team.defenderDepth,
+    team.midfielderDepth,
+    team.attackerDepth,
+    ...team.players.flatMap((player) => [player.x, player.y]),
+  ];
+}
+
 function historicalTeamEvidenceValues(team) {
   return [
     team.matchCount,
@@ -672,23 +694,27 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
     )),
   ];
   return [
-    evidenceItem("match.result", "תוצאת המשחק", "api_matches", 1, [home.score, away.score]),
-    evidenceItem("match.opening_goal", "שער היתרון המוקדם", "api_match_shots", 1, [1, 0.09]),
+    evidenceItem("match.result", "תוצאת המשחק", "api_matches", 1, [home.score, away.score], { home: { teamNameHe: home.nameHe, score: home.score }, away: { teamNameHe: away.nameHe, score: away.score } }),
+    evidenceItem("match.opening_goal", "שער היתרון המוקדם", "api_match_shots", 1, [1, 0.09], { teamNameHe: home.nameHe, minute: 1, expectedGoals: 0.09 }),
     evidenceItem("team.volume", "נפח החזקה ובעיטות", "api_match_team_stats", 4, [
       home.stats.team_possession, away.stats.team_possession, home.stats.team_total_shots, away.stats.team_total_shots,
-    ]),
+    ], { home: { teamNameHe: home.nameHe, possession: home.stats.team_possession, shots: home.stats.team_total_shots }, away: { teamNameHe: away.nameHe, possession: away.stats.team_possession, shots: away.stats.team_total_shots } }),
     evidenceItem("team.quality", "איכות המצבים", "api_match_team_stats", 8, [
       home.stats.team_expected_goals, away.stats.team_expected_goals,
       home.stats.team_shots_on_target, away.stats.team_shots_on_target,
       home.stats.team_big_chances_created, away.stats.team_big_chances_created,
       home.stats.team_expected_goals_on_target, away.stats.team_expected_goals_on_target,
-    ]),
+    ], { home: { teamNameHe: home.nameHe, expectedGoals: home.stats.team_expected_goals, shotsOnTarget: home.stats.team_shots_on_target, bigChancesCreated: home.stats.team_big_chances_created, expectedGoalsOnTarget: home.stats.team_expected_goals_on_target }, away: { teamNameHe: away.nameHe, expectedGoals: away.stats.team_expected_goals, shotsOnTarget: away.stats.team_shots_on_target, bigChancesCreated: away.stats.team_big_chances_created, expectedGoalsOnTarget: away.stats.team_expected_goals_on_target } }),
     evidenceItem("team.progression", "התקדמות לעומת חדירה", "api_match_team_stats", 8, [
       home.stats.team_passes_into_final_third, away.stats.team_passes_into_final_third,
       home.stats.team_key_passes, away.stats.team_key_passes,
       home.stats.team_possession_lost, away.stats.team_possession_lost,
       home.stats.team_interceptions, away.stats.team_interceptions,
-    ]),
+    ], {
+      metricNoteHe: "מסירות לשליש האחרון אינן בהכרח מסירות קדימה",
+      home: { teamNameHe: home.nameHe, passesIntoFinalThird: home.stats.team_passes_into_final_third, keyPasses: home.stats.team_key_passes, possessionLost: home.stats.team_possession_lost, interceptions: home.stats.team_interceptions },
+      away: { teamNameHe: away.nameHe, passesIntoFinalThird: away.stats.team_passes_into_final_third, keyPasses: away.stats.team_key_passes, possessionLost: away.stats.team_possession_lost, interceptions: away.stats.team_interceptions },
+    }),
     evidenceItem("style.team_profiles", "פרופיל סגנון המשחק", "api_match_team_stats", 14, [
       home.stats.team_passes_into_final_third, away.stats.team_passes_into_final_third,
       home.stats.team_key_passes, away.stats.team_key_passes,
@@ -697,56 +723,72 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       home.stats.team_possession_lost, away.stats.team_possession_lost,
       home.stats.team_interceptions, away.stats.team_interceptions,
       home.stats.team_backward_passes, away.stats.team_backward_passes,
-    ]),
+    ], {
+      home: { teamNameHe: home.nameHe, passesIntoFinalThird: home.stats.team_passes_into_final_third, keyPasses: home.stats.team_key_passes, crossesCompleted: home.stats.team_crosses_completed, expectedGoals: home.stats.team_expected_goals, possessionLost: home.stats.team_possession_lost, interceptions: home.stats.team_interceptions, backwardPasses: home.stats.team_backward_passes },
+      away: { teamNameHe: away.nameHe, passesIntoFinalThird: away.stats.team_passes_into_final_third, keyPasses: away.stats.team_key_passes, crossesCompleted: away.stats.team_crosses_completed, expectedGoals: away.stats.team_expected_goals, possessionLost: away.stats.team_possession_lost, interceptions: away.stats.team_interceptions, backwardPasses: away.stats.team_backward_passes },
+    }),
     evidenceItem("matchup.midfield", "המאבק בין חוליות הקישור", "api_match_player_stats", 12, [
       homeMidfield.recoveries, homeMidfield.tacklesWon, homeMidfield.tacklesAttempted,
       awayMidfield.recoveries, awayMidfield.tacklesWon, awayMidfield.tacklesAttempted,
       homeMidfield.goals, homeMidfield.expectedGoals, homeMidfield.shotsOnTarget,
       awayMidfield.goals, awayMidfield.expectedGoals, awayMidfield.shotsOnTarget,
-    ]),
+    ], {
+      scopeHe: "סיכום מדדי כל השחקנים שסווגו כקשרים בכל קבוצה; זו השוואת חוליות ולא דו־קרב אישי",
+      home: { teamNameHe: home.nameHe, recoveries: homeMidfield.recoveries, tacklesWon: homeMidfield.tacklesWon, tacklesAttempted: homeMidfield.tacklesAttempted, goals: homeMidfield.goals, expectedGoals: homeMidfield.expectedGoals, shotsOnTarget: homeMidfield.shotsOnTarget },
+      away: { teamNameHe: away.nameHe, recoveries: awayMidfield.recoveries, tacklesWon: awayMidfield.tacklesWon, tacklesAttempted: awayMidfield.tacklesAttempted, goals: awayMidfield.goals, expectedGoals: awayMidfield.expectedGoals, shotsOnTarget: awayMidfield.shotsOnTarget },
+    }),
     evidenceItem("matchup.home_attack_away_defense", "התקפת המארחת מול הגנת האורחת", "api_match_player_stats", 10, [
       awayDefense.tacklesWon, awayDefense.tacklesAttempted, awayDefense.clearances, awayDefense.blocks,
       awayDefense.wasDribbledPast, homeAttack.shots, homeAttack.expectedGoals, homeAttack.goals,
       homeAttack.groundDuelsWon, homeAttack.groundDuelsAttempted,
-    ]),
+    ], {
+      homeAttack: { teamNameHe: home.nameHe, shots: homeAttack.shots, expectedGoals: homeAttack.expectedGoals, goals: homeAttack.goals, groundDuelsWon: homeAttack.groundDuelsWon, groundDuelsAttempted: homeAttack.groundDuelsAttempted },
+      awayDefense: { teamNameHe: away.nameHe, tacklesWon: awayDefense.tacklesWon, tacklesAttempted: awayDefense.tacklesAttempted, clearances: awayDefense.clearances, blocks: awayDefense.blocks, wasDribbledPast: awayDefense.wasDribbledPast },
+    }),
     evidenceItem("matchup.away_attack", "תרומת התקפת האורחת", "api_match_player_stats", 9, [
       awayAttack.goals, awayAttack.expectedGoals, awayAttack.keyPasses, awayAttack.expectedAssists,
       awayAttack.assists, awayMidfield.goals, awayMidfield.expectedGoals,
       awayDefense.goals, awayDefense.expectedGoals,
-    ]),
+    ], {
+      awayAttack: { teamNameHe: away.nameHe, goals: awayAttack.goals, expectedGoals: awayAttack.expectedGoals, keyPasses: awayAttack.keyPasses, expectedAssists: awayAttack.expectedAssists, assists: awayAttack.assists },
+      awayMidfield: { teamNameHe: away.nameHe, goals: awayMidfield.goals, expectedGoals: awayMidfield.expectedGoals },
+      awayDefense: { teamNameHe: away.nameHe, goals: awayDefense.goals, expectedGoals: awayDefense.expectedGoals },
+    }),
     evidenceItem("flow.shot_windows", "זרימת איומי הבעיטה בחלונות זמן", "api_match_shots", shots.length, flowWindows.flatMap((window) => [
       window.start, window.end,
       window.home.shots, window.home.xg, window.home.goals,
       window.away.shots, window.away.xg, window.away.goals,
-    ])),
-    evidenceItem("timeline.match_events", "אירועי משחק לפי דקה", "365scores_game_detail", timelineEvents.length, timelineEvents.map((event) => event.minute)),
+    ]), { windows: flowWindows, homeTeamNameHe: home.nameHe, awayTeamNameHe: away.nameHe }),
+    evidenceItem("timeline.match_events", "אירועי משחק לפי דקה", "365scores_game_detail", timelineEvents.length, timelineEvents.map((event) => event.minute), { events: timelineEvents }),
     evidenceItem("flow.after_red", "בעיטות הפועל אחרי הכרטיס האדום", "api_match_shots + 365scores_game_detail", homeShotsAfterRed.length, [
       redCard?.minute,
       homeShotsAfterRed.length,
       round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
-    ]),
+    ], { redCard, shotsAfterRed: homeShotsAfterRed.length, expectedGoalsAfterRed: round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)), teamNameHe: home.nameHe }),
     evidenceItem("heatmap.spatial_profile", "מבנה מרחבי מצטבר של שחקני ההרכב", "api_match_player_heatmaps", heatmaps.length, spatialProfile ? [
       spatialProfile.starterHeatmaps,
-      spatialProfile.home.defenderCount, spatialProfile.home.midfielderCount, spatialProfile.home.attackerCount,
-      spatialProfile.away.defenderCount, spatialProfile.away.midfielderCount, spatialProfile.away.attackerCount,
-      spatialProfile.home.centralLanePlayers, spatialProfile.home.halfSpacePlayers, spatialProfile.home.wideLanePlayers,
-      spatialProfile.away.centralLanePlayers, spatialProfile.away.halfSpacePlayers, spatialProfile.away.wideLanePlayers,
-      ...spatialProfile.positions.flatMap((position) => [position.x, position.y]),
-    ] : []),
+      ...spatialTeamEvidenceValues(spatialProfile.home),
+      ...spatialTeamEvidenceValues(spatialProfile.away),
+    ] : [], spatialProfile ? {
+      methodNoteHe: "הפרופיל מסכם את כל זמן ההופעה ואינו מחולק לדקות; אין להסיק ממנו שינוי במהלך המשחק",
+      homeTeamNameHe: home.nameHe,
+      awayTeamNameHe: away.nameHe,
+      profile: spatialProfile,
+    } : null),
     evidenceItem("player.dor_peretz", "משחקו של דור פרץ", "api_match_player_stats", 12, dor ? [
       dor.metrics.goals, dor.metrics.total_shots, dor.metrics.expected_goals, dor.metrics.rating_365, dor.minutes,
       ...goals.filter((shot) => shot.display_name === "Dor Peretz").flatMap((shot) => [shot.minute, shot.event_time?.includes("+") ? 2 : null]),
-    ] : []),
+    ] : [], dor ? { playerNameHe: dor.nameHe, goals: dor.metrics.goals, shots: dor.metrics.total_shots, expectedGoals: dor.metrics.expected_goals, rating: dor.metrics.rating_365, minutes: dor.minutes } : null),
     evidenceItem("player.creators", "יוצרי המצבים של מכבי", "api_match_player_stats", creators.length * 4, [
       creatorTotals.assists, creatorTotals.expectedAssists, creatorTotals.keyPasses, creatorTotals.bigChances,
       ...creators.flatMap((player) => [player.metrics.assists, player.metrics.expected_assists, player.metrics.key_passes, player.metrics.big_chances_created]),
-    ]),
+    ], { totals: creatorTotals, players: creators.map((player) => ({ playerNameHe: player.nameHe, assists: player.metrics.assists, expectedAssists: player.metrics.expected_assists, keyPasses: player.metrics.key_passes, bigChancesCreated: player.metrics.big_chances_created })) }),
     evidenceItem("player.right_triangle", "היוצרים בצד ימין של מכבי", "api_match_player_stats", rightSideCreators.length * 4, [
       rightSideCreators.reduce((sum, player) => sum + Number(player.metrics.assists ?? 0), 0),
       round(rightSideCreators.reduce((sum, player) => sum + Number(player.metrics.expected_assists ?? 0), 0)),
       rightSideCreators.reduce((sum, player) => sum + Number(player.metrics.key_passes ?? 0), 0),
       ...rightSideCreators.flatMap((player) => [player.metrics.assists, player.metrics.expected_assists, player.metrics.key_passes]),
-    ]),
+    ], { players: rightSideCreators.map((player) => ({ playerNameHe: player.nameHe, assists: player.metrics.assists, expectedAssists: player.metrics.expected_assists, keyPasses: player.metrics.key_passes })) }),
     evidenceItem("hapoel.best_chance", "ההזדמנות הגדולה של ישראל דאפה", "api_match_shots", dappaChance ? 1 : 0, dappaChance ? [
       dappaChance.minute, dappaChance.xg, dappaChance.xgot,
     ] : []),
@@ -755,7 +797,7 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
     ])),
     evidenceItem("match.shot_map", "מפת הבעיטות", "api_match_shots", shots.length, [
       shots.length, home.shotSummary.count, away.shotSummary.count, home.shotSummary.xg, away.shotSummary.xg,
-    ]),
+    ], { home: { teamNameHe: home.nameHe, shots: home.shotSummary.count, expectedGoals: home.shotSummary.xg }, away: { teamNameHe: away.nameHe, shots: away.shotSummary.count, expectedGoals: away.shotSummary.xg } }),
     ...historicalEvidence,
   ];
 }
@@ -1256,6 +1298,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const usedEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds));
   const hasSpatialInsight = usedEvidenceIds.has("heatmap.spatial_profile");
   const hasMatchupInsight = [...usedEvidenceIds].some((id) => id.startsWith("matchup."));
+  const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "heatmap.spatial_profile"];
+  const structuredEvidenceReady = structuredEvidenceIds.every((id) => evidence.find((item) => item.id === id)?.context);
   const awkwardPatterns = [
     /הפך מחריגה לסיפור/,
     /ההיסטוריה הקצרה שלהם/,
@@ -1296,6 +1340,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
     ["independent-quality-review", "מבקר איכות בלתי־תלוי אישר את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
     ["analytical-coverage", "הכתבה כוללת ניתוח מרחבי ומאבק בין חוליות", !requiresAiReview || (hasSpatialInsight && hasMatchupInsight), `מרחב: ${hasSpatialInsight ? "כן" : "חסר"}; matchup: ${hasMatchupInsight ? "כן" : "חסר"}; נדרשים heatmap.spatial_profile ומזהה matchup.*`],
+    ["structured-evidence-context", "ראיות הניתוח כוללות שמות מדדים וקבוצות", structuredEvidenceReady, `${structuredEvidenceIds.length} חבילות ראיות מובנות נבדקו`],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
     ["evidence-links", "לכל טענה יש הפניה לראיות", claimEntries(editorial).every((claim) => claim.evidenceIds.length > 0), `${claimEntries(editorial).length} טענות מקושרות`],
     ["numeric-claims", "כל המספרים בטקסט נתמכים", editorialFailures.length === 0, editorialFailures.length ? editorialFailures.join(" | ") : "לא נמצאו מספרים לא מבוססים"],
@@ -1447,7 +1492,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v6",
+      pipelineVersion: "match-review-v7",
     },
     match: {
       matchId: match.match_id,
