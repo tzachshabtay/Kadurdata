@@ -8,7 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { articles } from "../content/articles";
-import type { ArticleShot, ContentArticle } from "../content/types";
+import type { ArticleShot, ArticleTag, ContentArticle } from "../content/types";
 import { renderSeasonHeatmap } from "../lib/seasonHeatmap";
 
 type BlogViewProps = {
@@ -111,31 +111,44 @@ function MatchFlowGraphic({ article }: { article: ContentArticle }) {
   );
 }
 
-function ComparisonGraphic({ article }: { article: ContentArticle }) {
-  const { home, away } = article.teams;
+function HistoricalComparisonGraphic({ article }: { article: ContentArticle }) {
+  const teams = [
+    { team: article.teams.home, history: article.historicalContext.teams.home },
+    { team: article.teams.away, history: article.historicalContext.teams.away },
+  ];
   const metrics = [
-    { label: "שערים צפויים", home: home.stats.team_expected_goals, away: away.stats.team_expected_goals, max: 4, digits: 2 },
-    { label: "בעיטות למסגרת", home: home.stats.team_shots_on_target, away: away.stats.team_shots_on_target, max: 10, digits: 0 },
-    { label: "מצבים גדולים", home: home.stats.team_big_chances_created, away: away.stats.team_big_chances_created, max: 8, digits: 0 },
-    { label: "xG למסגרת", home: home.stats.team_expected_goals_on_target, away: away.stats.team_expected_goals_on_target, max: 5, digits: 2 },
+    { code: "team_possession", label: "החזקה", suffix: "%", digits: 1 },
+    { code: "team_total_shots", label: "בעיטות", suffix: "", digits: 1 },
+    { code: "team_shots_on_target", label: "למסגרת", suffix: "", digits: 1 },
   ];
   return (
-    <figure className="story-graphic comparison-graphic">
+    <figure className="story-graphic history-comparison-graphic">
       <figcaption>
         <span>גרפיקה 02</span>
-        <div><strong>אותו סדר גודל של בעיטות, עולם אחר של סיכוי</strong><small>{home.nameHe} באדום · {away.nameHe} בצהוב</small></div>
+        <div><strong>מה השתנה לעומת 5 המשחקים הקודמים?</strong><small>בהיר: המשחק הנוכחי · כהה: הממוצע הקודם בכל המסגרות</small></div>
       </figcaption>
-      <div className="comparison-grid">
-        {metrics.map((metric) => (
-          <div className="comparison-row" key={metric.label}>
-            <strong className="comparison-home-value">{numeric(metric.home, metric.digits)}</strong>
-            <div className="comparison-bars">
-              <span className="comparison-track home"><i style={{ width: `${Math.min(100, (Number(metric.home) / metric.max) * 100)}%`, background: home.color }} /></span>
-              <small>{metric.label}</small>
-              <span className="comparison-track away"><i style={{ width: `${Math.min(100, (Number(metric.away) / metric.max) * 100)}%`, background: away.color }} /></span>
-            </div>
-            <strong className="comparison-away-value">{numeric(metric.away, metric.digits)}</strong>
-          </div>
+      <div className="history-comparison-grid">
+        {teams.map(({ team, history }) => (
+          <section key={team.teamId} style={{ "--history-color": team.color } as CSSProperties}>
+            <header>
+              {team.logoUrl && <img src={team.logoUrl} alt="" />}
+              <div><strong>{team.nameHe}</strong><small>ממוצע {history.matchCount} משחקים קודמים</small></div>
+            </header>
+            {metrics.map((metric) => {
+              const comparison = history.metrics[metric.code];
+              if (!comparison) return null;
+              const scale = Math.max(1, Number(comparison.current ?? 0), comparison.average);
+              return (
+                <div className="history-metric-row" key={metric.code}>
+                  <div><span>{metric.label}</span><small>כעת <b>{numeric(comparison.current, metric.digits)}{metric.suffix}</b></small><small>קודם <b>{numeric(comparison.average, metric.digits)}{metric.suffix}</b></small></div>
+                  <div className="history-metric-bars" dir="ltr">
+                    <i className="baseline" style={{ width: `${comparison.average / scale * 100}%` }} />
+                    <i className="current" style={{ width: `${Number(comparison.current ?? 0) / scale * 100}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </section>
         ))}
       </div>
     </figure>
@@ -145,6 +158,8 @@ function ComparisonGraphic({ article }: { article: ContentArticle }) {
 function DorSpotlight({ article }: { article: ContentArticle }) {
   const player = article.playerSpotlight.find((item) => item.name === "Dor Peretz");
   if (!player) return null;
+  const history = article.historicalContext.players.find((item) => item.playerId === player.playerId);
+  const previousGoals = history?.metrics.goals?.previousTotal ?? 0;
   const teamGoals = article.teams.away.score;
   const share = Math.round((Number(player.metrics.goals) / teamGoals) * 100);
   return (
@@ -155,12 +170,12 @@ function DorSpotlight({ article }: { article: ContentArticle }) {
       <div className="spotlight-copy">
         <span className="spotlight-kicker">שחקן המשחק</span>
         <h3>דור פרץ</h3>
-        <p>ארבע בעיטות הספיקו לשלושער. כל ארבע הבעיטות הלכו למסגרת.</p>
+        <p>לפני המשחק: {numeric(previousGoals)} שערים ב־{history?.totalMinutes ?? 0} דקות. הפעם: שלושער ב־{player.minutes} דקות, מתוך 4 בעיטות למסגרת.</p>
         <div className="spotlight-stats">
-          <span><strong>{player.metrics.goals}</strong><small>שערים</small></span>
-          <span><strong>{numeric(player.metrics.expected_goals, 2)}</strong><small>xG</small></span>
+          <span><strong>{player.metrics.goals}</strong><small>שערים במשחק</small></span>
+          <span><strong>{numeric(previousGoals)}</strong><small>ב־5 הקודמים</small></span>
+          <span><strong>{numeric(player.metrics.expected_goals, 2)}</strong><small>xG במשחק</small></span>
           <span><strong>{numeric(player.metrics.rating_365, 1)}</strong><small>ציון</small></span>
-          <span><strong>{player.minutes}</strong><small>דקות</small></span>
         </div>
       </div>
     </aside>
@@ -249,6 +264,10 @@ function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
 }
 
 function FactCheckPanel({ article }: { article: ContentArticle }) {
+  const visibleCheckIds = ["score-vs-events", "xg-home", "history-order", "article-tags", "evidence-links", "numeric-claims"];
+  const visibleChecks = visibleCheckIds
+    .map((id) => article.factCheck.checks.find((check) => check.id === id))
+    .filter((check): check is ContentArticle["factCheck"]["checks"][number] => Boolean(check));
   return (
     <section className="fact-check-panel">
       <div className="fact-check-heading">
@@ -256,7 +275,7 @@ function FactCheckPanel({ article }: { article: ContentArticle }) {
         <div><span>בדיקת כדורדאטה</span><h2>הכתבה עברה את כל {article.factCheck.checks.length} הבדיקות</h2><p>כל מספר בטקסט מקושר לשורת ראיות. סתירה אחת עוצרת את הפרסום.</p></div>
       </div>
       <div className="fact-check-list">
-        {article.factCheck.checks.slice(0, 6).map((check) => (
+        {visibleChecks.map((check) => (
           <span key={check.id}><CheckCircle2 size={16} aria-hidden="true" /><strong>{check.label}</strong><small>{check.detail}</small></span>
         ))}
       </div>
@@ -271,18 +290,47 @@ function FactCheckPanel({ article }: { article: ContentArticle }) {
 
 export function BlogView({ onOpenMatch }: BlogViewProps) {
   const [selectedSlug, setSelectedSlug] = useState(articles[0]?.slug ?? "");
-  const article = articles.find((item) => item.slug === selectedSlug) ?? articles[0];
+  const [activeTagId, setActiveTagId] = useState("");
+  const filteredArticles = activeTagId
+    ? articles.filter((item) => item.tags?.some((tag) => tag.id === activeTagId))
+    : articles;
+  const selectedArticle = articles.find((item) => item.slug === selectedSlug) ?? articles[0];
+  const article = activeTagId && !selectedArticle?.tags?.some((tag) => tag.id === activeTagId)
+    ? filteredArticles[0]
+    : selectedArticle;
   if (!article) return <div className="story-empty">אין עדיין כתבות שעמדו בבדיקות הפרסום.</div>;
   const { editorial, match, teams } = article;
+  const activeTag = articles.flatMap((item) => item.tags ?? []).find((tag) => tag.id === activeTagId);
+  const filterByTag = (tag: ArticleTag) => {
+    const nextTagId = activeTagId === tag.id ? "" : tag.id;
+    setActiveTagId(nextTagId);
+    if (nextTagId) {
+      const firstMatch = articles.find((item) => item.tags?.some((itemTag) => itemTag.id === nextTagId));
+      if (firstMatch) setSelectedSlug(firstMatch.slug);
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
-    <article className="story-page" dir="rtl">
+    <div className="story-blog" dir="rtl">
+      {activeTag && (
+        <div className="story-filter-status" role="status">
+          <span>מסנן לפי תגית: <strong>{activeTag.label}</strong> · {filteredArticles.length} כתבות</span>
+          <button type="button" onClick={() => setActiveTagId("")}>הצג הכל</button>
+        </div>
+      )}
+      <article className="story-page">
       <header className="story-hero">
         <div className="story-hero-copy">
           <div className="story-kicker"><Sparkles size={15} aria-hidden="true" /> הסיפור של המשחק</div>
           <p className="story-meta">{match.competitionNameHe} · מחזור {match.roundNumber} · {hebrewDate.format(new Date(match.scheduledAt))}</p>
           <h1>{editorial.headline}</h1>
           <p className="story-dek">{editorial.dek}</p>
+          <div className="story-tags" aria-label="תגיות הכתבה">
+            {article.tags.map((tag) => (
+              <button aria-pressed={activeTagId === tag.id} key={tag.id} onClick={() => filterByTag(tag)} type="button">{tag.label}</button>
+            ))}
+          </div>
           <div className="story-byline">
             <span className="story-author-mark">KD</span>
             <span><strong>מערכת כדורדאטה</strong><small>נוצר מנתוני המשחק · נבדק לפני פרסום</small></span>
@@ -317,7 +365,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
                 {section.paragraphs.map((paragraph) => <p key={paragraph.text}>{paragraph.text}</p>)}
               </section>
               {index === 0 && <MatchFlowGraphic article={article} />}
-              {index === 1 && <ComparisonGraphic article={article} />}
+              {index === 1 && <HistoricalComparisonGraphic article={article} />}
               {index === 2 && <DorSpotlight article={article} />}
               {index === 3 && <ShotMap article={article} />}
               {index === 4 && <TacticalHeatmapGraphic article={article} />}
@@ -332,11 +380,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
             <button type="button" onClick={() => onOpenMatch(article)}>פתחו את {teams.home.nameHe}–{teams.away.nameHe} <ArrowLeft size={17} aria-hidden="true" /></button>
           </footer>
 
-          {articles.length > 1 && (
+          {filteredArticles.length > 1 && (
             <section className="story-archive">
               <span>עוד בכדורדאטה</span>
-              <h2>כתבות אחרונות</h2>
-              <div>{articles.filter((item) => item.slug !== article.slug).map((item) => (
+              <h2>{activeTag ? `עוד תחת התגית ${activeTag.label}` : "כתבות אחרונות"}</h2>
+              <div>{filteredArticles.filter((item) => item.slug !== article.slug).map((item) => (
                 <button key={item.slug} type="button" onClick={() => { setSelectedSlug(item.slug); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
                   <small>{item.match.competitionNameHe} · {hebrewDate.format(new Date(item.match.scheduledAt))}</small>
                   <strong>{item.editorial.headline}</strong>
@@ -347,6 +395,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           )}
         </div>
       </div>
-    </article>
+      </article>
+    </div>
   );
 }

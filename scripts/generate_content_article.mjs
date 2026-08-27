@@ -9,6 +9,31 @@ import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
+const HISTORICAL_WINDOW = 5;
+const HISTORICAL_TEAM_METRICS = [
+  "team_possession",
+  "team_total_shots",
+  "team_shots_on_target",
+  "team_expected_goals",
+  "team_expected_goals_on_target",
+  "team_big_chances_created",
+  "team_key_passes",
+  "team_crosses_completed",
+  "team_passes_into_final_third",
+  "team_interceptions",
+  "team_possession_lost",
+  "team_backward_passes",
+];
+const HISTORICAL_PLAYER_METRICS = [
+  "goals",
+  "assists",
+  "expected_goals",
+  "expected_assists",
+  "total_shots",
+  "shots_on_target",
+  "key_passes",
+  "rating_365",
+];
 
 async function loadLocalEnv() {
   try {
@@ -100,6 +125,185 @@ async function fetchMatchDataset(client, match) {
     shots: queries[2].data ?? [],
     assets: queries[3].data ?? [],
     heatmaps: queries[4].data ?? [],
+  };
+}
+
+async function fetchHistoricalTeamDataset(client, match, teamId) {
+  const previous = await client
+    .from("api_matches")
+    .select([
+      "match_id", "scheduled_at", "competition_name", "competition_name_he",
+      "home_team_id", "home_team_name", "home_team_name_he", "home_score",
+      "away_team_id", "away_team_name", "away_team_name_he", "away_score",
+    ].join(","))
+    .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
+    .eq("status", "Ended")
+    .lt("scheduled_at", match.scheduled_at)
+    .order("scheduled_at", { ascending: false })
+    .limit(HISTORICAL_WINDOW);
+  if (previous.error) throw new Error(`Historical match list failed for ${teamId}: ${previous.error.message}`);
+
+  const matches = [];
+  for (const previousMatch of previous.data ?? []) {
+    const teamStats = await client.from("api_match_team_stats")
+      .select("metric_code,value_numeric")
+      .eq("match_id", previousMatch.match_id)
+      .eq("team_id", teamId)
+      .limit(500);
+    if (teamStats.error) throw new Error(`Historical team stats failed for ${teamId}/${previousMatch.match_id}: ${teamStats.error.message}`);
+    matches.push({
+      match: previousMatch,
+      teamRows: teamStats.data ?? [],
+    });
+  }
+  return { teamId, matches };
+}
+
+async function mapWithConcurrency(items, concurrency, work) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await work(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
+
+function historicalPlayerCandidates(players) {
+  const score = (player) => (
+    Number(player.metrics.goals ?? 0) * 10
+    + Number(player.metrics.assists ?? 0) * 7
+    + Number(player.metrics.expected_goals ?? 0) * 2
+    + Number(player.metrics.expected_assists ?? 0) * 2
+    + Number(player.metrics.key_passes ?? 0)
+    + Number(player.metrics.total_shots ?? 0) * 0.5
+    + Number(player.metrics.rating_365 ?? 0) * 0.2
+  );
+  const byTeam = new Map();
+  for (const player of players.filter((item) => item.roleGroup !== "Goalkeeper")) {
+    const teamPlayers = byTeam.get(player.teamId) ?? [];
+    teamPlayers.push(player);
+    byTeam.set(player.teamId, teamPlayers);
+  }
+  return [...byTeam.values()].flatMap((teamPlayers) => teamPlayers
+    .sort((left, right) => score(right) - score(left))
+    .slice(0, 6));
+}
+
+async function fetchHistoricalPlayerDataset(client, match, players) {
+  const candidates = historicalPlayerCandidates(players);
+  return mapWithConcurrency(candidates, 1, async (player) => {
+    const result = await client.from("api_player_history")
+      .select("match_id,scheduled_at,minutes_played,metric_code,value_numeric")
+      .eq("player_id", player.playerId)
+      .lt("scheduled_at", match.scheduled_at)
+      .in("metric_code", HISTORICAL_PLAYER_METRICS)
+      .order("scheduled_at", { ascending: false })
+      .limit(400);
+    if (result.error) throw new Error(`Historical player stats failed for ${player.name}/${player.playerId}: ${result.error.message}`);
+    return { playerId: player.playerId, rows: result.data ?? [] };
+  });
+}
+
+function historicalTeamSnapshot(team, dataset) {
+  const resultRows = dataset.matches.map(({ match, teamRows }) => {
+    const isHome = match.home_team_id === team.teamId;
+    return {
+      matchId: match.match_id,
+      scheduledAt: match.scheduled_at,
+      competitionNameHe: match.competition_name_he ?? match.competition_name,
+      opponentTeamId: isHome ? match.away_team_id : match.home_team_id,
+      opponentNameHe: isHome
+        ? (match.away_team_name_he ?? match.away_team_name)
+        : (match.home_team_name_he ?? match.home_team_name),
+      goalsFor: Number(isHome ? match.home_score : match.away_score),
+      goalsAgainst: Number(isHome ? match.away_score : match.home_score),
+      stats: Object.fromEntries(teamRows.map((row) => [row.metric_code, numberValue(row.value_numeric)])),
+    };
+  });
+  const average = (values) => round(values.reduce((sum, value) => sum + value, 0) / values.length);
+  const metrics = {};
+  for (const metricCode of HISTORICAL_TEAM_METRICS) {
+    const values = resultRows.map((row) => row.stats[metricCode]).filter((value) => value !== null && value !== undefined);
+    if (!values.length) continue;
+    const baseline = average(values);
+    const current = numberValue(team.stats[metricCode]);
+    metrics[metricCode] = {
+      current,
+      average: baseline,
+      sampleSize: values.length,
+      delta: current === null ? null : round(current - baseline),
+      changePercent: current === null || baseline === 0 ? null : round((current - baseline) * 100 / baseline),
+    };
+  }
+  return {
+    teamId: team.teamId,
+    nameHe: team.nameHe,
+    matchCount: resultRows.length,
+    averageGoalsFor: resultRows.length ? average(resultRows.map((row) => row.goalsFor)) : 0,
+    averageGoalsAgainst: resultRows.length ? average(resultRows.map((row) => row.goalsAgainst)) : 0,
+    matches: resultRows.map(({ stats, ...match }) => match),
+    metrics,
+  };
+}
+
+function historicalPlayerSnapshots(players, playerDataset) {
+  const appearancesByPlayer = new Map();
+  for (const playerHistory of playerDataset) {
+    const appearances = new Map();
+    for (const row of playerHistory.rows) {
+      if (!appearances.has(row.match_id) && appearances.size >= HISTORICAL_WINDOW) continue;
+      const appearance = appearances.get(row.match_id) ?? {
+          matchId: row.match_id,
+          minutes: numberValue(row.minutes_played) ?? 0,
+          metrics: {},
+      };
+      appearance.metrics[row.metric_code] = numberValue(row.value_numeric);
+      appearances.set(row.match_id, appearance);
+    }
+    appearancesByPlayer.set(playerHistory.playerId, appearances);
+  }
+
+  return players.map((player) => {
+    const appearances = [...(appearancesByPlayer.get(player.playerId)?.values() ?? [])];
+    const metrics = {};
+    for (const metricCode of HISTORICAL_PLAYER_METRICS) {
+      const withMetric = appearances.filter((appearance) => appearance.metrics[metricCode] !== undefined && appearance.metrics[metricCode] !== null);
+      if (!withMetric.length) continue;
+      const previousTotal = round(withMetric.reduce((sum, appearance) => sum + Number(appearance.metrics[metricCode]), 0));
+      const minutesWithMetric = withMetric.reduce((sum, appearance) => sum + Number(appearance.minutes ?? 0), 0);
+      metrics[metricCode] = {
+        current: numberValue(player.metrics[metricCode]),
+        previousTotal,
+        previousPer90: minutesWithMetric > 0 ? round(previousTotal * 90 / minutesWithMetric) : null,
+        sampleSize: withMetric.length,
+        minutesWithMetric,
+      };
+    }
+    return {
+      playerId: player.playerId,
+      nameHe: player.nameHe,
+      teamId: player.teamId,
+      appearanceCount: appearances.length,
+      totalMinutes: appearances.reduce((sum, appearance) => sum + Number(appearance.minutes ?? 0), 0),
+      metrics,
+    };
+  }).filter((player) => player.appearanceCount > 0);
+}
+
+function buildHistoricalContext(home, away, players, homeDataset, awayDataset, playerDataset) {
+  return {
+    windowSize: HISTORICAL_WINDOW,
+    scopeHe: `עד ${HISTORICAL_WINDOW} המשחקים הקודמים בכל המסגרות`,
+    teams: {
+      home: historicalTeamSnapshot(home, homeDataset),
+      away: historicalTeamSnapshot(away, awayDataset),
+    },
+    players: historicalPlayerSnapshots(players, playerDataset),
   };
 }
 
@@ -290,11 +494,40 @@ function teamSnapshot(match, side, stats, assets, shots) {
   };
 }
 
-function evidenceItem(id, label, sourceView, sourceRows, values) {
-  return { id, label, sourceView, sourceRows, values: values.filter((value) => value !== null && value !== undefined) };
+function evidenceItem(id, label, sourceView, sourceRows, values, context) {
+  return {
+    id,
+    label,
+    sourceView,
+    sourceRows,
+    values: values.filter((value) => value !== null && value !== undefined),
+    ...(context ? { context } : {}),
+  };
 }
 
-function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile) {
+function historicalTeamEvidenceValues(team) {
+  return [
+    team.matchCount,
+    team.averageGoalsFor,
+    team.averageGoalsAgainst,
+    ...team.matches.flatMap((match) => [match.goalsFor, match.goalsAgainst]),
+    ...Object.values(team.metrics).flatMap((metric) => [
+      metric.current, metric.average, metric.sampleSize, metric.delta, metric.changePercent,
+    ]),
+  ];
+}
+
+function historicalPlayerEvidenceValues(player) {
+  return [
+    player.appearanceCount,
+    player.totalMinutes,
+    ...Object.values(player.metrics).flatMap((metric) => [
+      metric.current, metric.previousTotal, metric.previousPer90, metric.sampleSize, metric.minutesWithMetric,
+    ]),
+  ];
+}
+
+function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile, historicalContext) {
   const dor = players.find((player) => player.name === "Dor Peretz");
   const creators = players.filter((player) => ["Hélio Varela", "Noam Ben Harush", "Osher Davida"].includes(player.name));
   const rightSideCreators = players.filter((player) => ["Noam Ben Harush", "Osher Davida"].includes(player.name));
@@ -311,6 +544,36 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
   const homeAttack = unitMatchups.home.attackers;
   const awayAttack = unitMatchups.away.attackers;
   const awayDefense = unitMatchups.away.defenders;
+  const redCard = timelineEvents.find((event) => event.type === "Red Card");
+  const homeShotsAfterRed = redCard
+    ? shots.filter((shot) => shot.team_id === home.teamId && Number(shot.minute) > redCard.minute)
+    : [];
+  const historicalEvidence = [
+    evidenceItem(
+      "history.team.home",
+      `${historicalContext.teams.home.nameHe} מול ${historicalContext.scopeHe}`,
+      "api_matches + api_match_team_stats",
+      historicalContext.teams.home.matchCount,
+      historicalTeamEvidenceValues(historicalContext.teams.home),
+      historicalContext.teams.home,
+    ),
+    evidenceItem(
+      "history.team.away",
+      `${historicalContext.teams.away.nameHe} מול ${historicalContext.scopeHe}`,
+      "api_matches + api_match_team_stats",
+      historicalContext.teams.away.matchCount,
+      historicalTeamEvidenceValues(historicalContext.teams.away),
+      historicalContext.teams.away,
+    ),
+    ...historicalContext.players.map((player) => evidenceItem(
+      `history.player.${player.playerId}`,
+      `${player.nameHe} מול הופעותיו הקודמות`,
+      "api_match_player_stats",
+      player.appearanceCount,
+      historicalPlayerEvidenceValues(player),
+      player,
+    )),
+  ];
   return [
     evidenceItem("match.result", "תוצאת המשחק", "api_matches", 1, [home.score, away.score]),
     evidenceItem("match.opening_goal", "שער היתרון המוקדם", "api_match_shots", 1, [1, 0.09]),
@@ -360,6 +623,11 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       window.away.shots, window.away.xg, window.away.goals,
     ])),
     evidenceItem("timeline.match_events", "אירועי משחק לפי דקה", "365scores_game_detail", timelineEvents.length, timelineEvents.map((event) => event.minute)),
+    evidenceItem("flow.after_red", "בעיטות הפועל אחרי הכרטיס האדום", "api_match_shots + 365scores_game_detail", homeShotsAfterRed.length, [
+      redCard?.minute,
+      homeShotsAfterRed.length,
+      round(homeShotsAfterRed.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
+    ]),
     evidenceItem("heatmap.spatial_profile", "מבנה מרחבי מצטבר של שחקני ההרכב", "api_match_player_heatmaps", heatmaps.length, spatialProfile ? [
       spatialProfile.starterHeatmaps,
       spatialProfile.home.defenderCount, spatialProfile.home.midfielderCount, spatialProfile.home.attackerCount,
@@ -391,89 +659,90 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
     evidenceItem("match.shot_map", "מפת הבעיטות", "api_match_shots", shots.length, [
       shots.length, home.shotSummary.count, away.shotSummary.count, home.shotSummary.xg, away.shotSummary.xg,
     ]),
+    ...historicalEvidence,
   ];
 }
 
 function fallbackEditorial(match, home, away) {
   return {
-    headline: "לא הכמות, אלא האיכות: כך מכבי תל אביב הפכה פיגור מוקדם ל־5:2",
-    headlineEvidenceIds: ["match.result"],
-    dek: "הפועל ירושלים בעטה כמעט באותה תדירות והחזיקה כמעט מחצית מהכדור. ההבדל היה במקום אחר: 6 מצבים גדולים, 3.56 שערים צפויים ו־3 שערים חדים של דור פרץ.",
-    dekEvidenceIds: ["team.volume", "team.quality", "player.dor_peretz"],
+    headline: "פחות כדור, יותר איום: מכבי מצאה את דור פרץ בדיוק בזמן",
+    headlineEvidenceIds: ["history.team.away", "player.dor_peretz", "heatmap.spatial_profile"],
+    dek: "מול הפועל ירושלים, מכבי תל אביב נראתה אחרת מ־5 משחקיה הקודמים: ההחזקה ירדה, הבעיטות זינקו, והצד הימני הוביל את דור פרץ לשלושער. ה־5:2 לא היה סיפור של שליטה רציפה, אלא של 2 גלי איום חדים.",
+    dekEvidenceIds: ["history.team.away", "match.result", "flow.shot_windows", "player.dor_peretz", "heatmap.spatial_profile"],
     sections: [
       {
-        heading: "הפתעה של דקה, תשובה של משחק שלם",
+        heading: "השער הראשון הסתיר את הכיוון האמיתי",
         paragraphs: [
           {
-            text: "הפועל ירושלים כבשה כבר בדקה הראשונה, אבל היתרון המוקדם לא שינה את הכיוון העמוק של המשחק. מכבי תל אביב חזרה, ירדה להפסקה ביתרון והמשיכה עד 5:2 — תוצאה רחבה שנבנתה בעיקר על איכות ההזדמנויות.",
-            evidenceIds: ["match.opening_goal", "match.result", "timeline.goals"],
+            text: "הפועל ירושלים כבשה בדקה 1 וכמעט כתבה מראש סיפור על מכבי שרודפת אחרי המשחק. בפועל, היתרון הזה רק דחה את הרגע שבו המשחק התהפך: מכבי לא השתלטה על כל דקה, אבל ידעה לזהות את החלונות שבהם ההגנה הירושלמית נפתחה.",
+            evidenceIds: ["match.opening_goal", "flow.shot_windows", "timeline.goals"],
           },
           {
-            text: "המהפך נבנה בשני גלים ברורים: בדקות 31–45 מכבי ייצרה 4 בעיטות ו־1.38 xG מול 0 בעיטות של הפועל; בדקות 61–75 היא הוסיפה 5 בעיטות, 1.58 xG ו־3 שערים. אלה היו פרקי הזמן שבהם המשחק הוכרע, לא לחץ רציף של 90 דקות.",
+            text: "הגל הראשון הגיע בדקות 31–45, עם 4 בעיטות ו־1.38 xG מול 0 בעיטות של הפועל. השני, בדקות 61–75, כבר סגר את הערב: 5 בעיטות, 1.58 xG ו־3 שערים. בין הגלים המשחק נשאר תחרותי; בתוכם, מכבי הייתה קטלנית.",
             evidenceIds: ["flow.shot_windows"],
           },
         ],
       },
       {
-        heading: "כמעט שוויון בכמות, פער חד באיכות",
+        heading: "מכבי החליפה החזקה באיום",
         paragraphs: [
           {
-            text: "51%–49% בהחזקה ו־17–16 בבעיטות לא נראים כמו משחק חד־צדדי. גם במסירות מפתח הפער היה זניח: 12 למכבי מול 13 להפועל. אלא שהמדדים שמקרבים אותנו לשער סיפרו סיפור אחר לגמרי.",
-            evidenceIds: ["team.volume", "team.progression"],
+            text: "ב־5 המשחקים הקודמים שלה בכל המסגרות מכבי החזיקה בממוצע 56% מהכדור, בעטה 10.6 פעמים ומצאה את המסגרת 3 פעמים למשחק. בירושלים ההחזקה ירדה ל־51%, אבל נפח האיום קפץ ל־17 בעיטות ול־8 למסגרת. פחות זמן עם הכדור, הרבה יותר סיומות.",
+            evidenceIds: ["history.team.away"],
           },
           {
-            text: "מכבי הגיעה ל־3.56 xG מול 1.27, ייצרה 6 מצבים גדולים מול 2 ושלחה 8 בעיטות למסגרת מול 5. כלומר, היא לא בעטה הרבה יותר — היא בעטה ממקומות ומצבים טובים בהרבה.",
-            evidenceIds: ["team.quality"],
+            text: "אצל הפועל השינוי היה קטן בהרבה: 49% החזקה מול ממוצע קודם של 47.4%, 16 בעיטות מול 13 ו־5 למסגרת מול 5.4. היא לא איבדה את המשחק מפני שנעלמה בהתקפה; מכבי פשוט הפכה נפח דומה למצבים טובים בהרבה — 3.56 xG מול 1.27.",
+            evidenceIds: ["history.team.home", "team.quality"],
           },
         ],
       },
       {
-        heading: "דור פרץ היה גם היעד וגם הפתרון",
+        heading: "דור פרץ הפך מחריגה לסיפור",
         paragraphs: [
           {
-            text: "3 שערים מ־4 בעיטות, 2.50 xG וציון 9.7 ב־75 דקות: דור פרץ ריכז אצלו את המצבים הכי יקרים של מכבי וגם סיים אותם. השלושער שלו לא היה רצף של ניסיונות מרחוק, אלא תוצר של הגעה עקבית לאזורים שבהם שער הוא התוצאה הסבירה.",
-            evidenceIds: ["player.dor_peretz"],
+            text: "ב־5 המשחקים הקודמים דור פרץ כבש שער אחד ב־450 דקות. מול הפועל הוא כבש 3 ב־75 דקות. זו קפיצה חריגה בתפוקה, אבל המשחק עצמו מסביר למה היא לא הייתה מקרית לגמרי: פרץ היה שחקן השדה הקדמי ביותר של מכבי במפה המרחבית.",
+            evidenceIds: ["history.player.b6a41010-aafc-4cdc-983e-8e64d0dd852c", "player.dor_peretz", "heatmap.spatial_profile"],
           },
           {
-            text: "האספקה הייתה מפוזרת: הליו וארלה, נועם בן הרוש ואושר דוידה רשמו יחד 7 מסירות מפתח, 1.49 xA, 2 מצבים גדולים ו־3 בישולים. זו הייתה מערכת יצירה, לא פעולה בודדת שחזרה במקרה.",
-            evidenceIds: ["player.creators"],
+            text: "4 הבעיטות שלו הלכו למסגרת והצטברו ל־2.50 xG; 3 מהן הסתיימו בשער. השלושער, אם כך, היה גם ערב סיום נהדר וגם תוצאה של תפקיד התקפי שהוביל שוב ושוב לאזור המסוכן ביותר.",
+            evidenceIds: ["player.dor_peretz", "heatmap.spatial_profile"],
           },
         ],
       },
       {
-        heading: "הפועל שינתה מבנה — והמשחק השתנה שוב באדום",
+        heading: "המספרים של הפועל קיבלו דחיפה מאוחרת",
         paragraphs: [
           {
-            text: "במחצית הפועל החליפה את זוברו שראני, שחקן הגנה, באוהד אלמגור, שחקן התקפה — מעבר ברור מפתיחה עם 5 שחקני הגנה למבנה התקפי יותר. הוא לא הפך מיד למצבים טובים: בדקות 46–60 הפועל בעטה 3 פעמים וצברה רק 0.14 xG.",
+            text: "במחצית הפועל החליפה את זוברו שראני, שחקן הגנה, באוהד אלמגור, שחקן התקפה. זה היה ניסיון ברור לפתוח את המבנה, אבל בדקות 46–60 הוא הניב 3 בעיטות בשווי 0.14 xG בלבד. הכמות עלתה לפני שהאיכות הגיעה.",
             evidenceIds: ["timeline.match_events", "flow.shot_windows", "heatmap.spatial_profile"],
           },
           {
-            text: "אחרי הכרטיס האדום לאופק מליקה בדקה ה־77, הזרימה התהפכה: בדקות 76–90 הפועל רשמה 9 בעיטות ו־0.68 xG מול בעיטה אחת ו־0.14 xG של מכבי, וכבשה בדקה ה־90. זו עדות ליתרון משחק מאוחר בחיסרון מספרי של מכבי — לא הוכחה שהפועל הייתה עדיפה לאורך הערב.",
-            evidenceIds: ["timeline.match_events", "flow.shot_windows"],
+            text: "רק אחרי הכרטיס האדום לאופק מליקה בדקה 77 נוצר לחץ רציף: בחלון 76–90 הפועל רשמה 9 בעיטות ו־0.68 xG, מול בעיטה אחת ו־0.14 xG של מכבי, וגם כבשה בדקה 90. כך נולדה אשליית השוויון בנפח הבעיטות — חלק גדול ממנו הגיע כשהמשחק כבר הוכרע ומכבי הייתה בחיסרון מספרי.",
+            evidenceIds: ["timeline.match_events", "flow.shot_windows", "flow.after_red"],
           },
         ],
       },
       {
-        heading: "המשולש הימני שפתח לדור פרץ את הדרך",
+        heading: "הצד הימני חיבר את כל החלקים",
         paragraphs: [
           {
-            text: "מפות החום של שחקני ההרכב מצביעות על דפוס ברור בצד ימין של מכבי: נועם בן הרוש סיפק את הרוחב מאחור, אושר דוידה נשאר גבוה ורחב, ודור פרץ מילא את חצי־המרחב ביניהם ונכנס עמוק יותר מכל שחקן שדה אחר של מכבי. זה לא היה עומס במרכז כולו, אלא יתרון מקומי בצד אחד.",
+            text: "מפות החום משלימות את הסיפור: נועם בן הרוש נתן רוחב מעמדה נמוכה יותר, אושר דוידה נשאר גבוה ורחב, ודור פרץ מילא את חצי־המרחב ונכנס מעבר לשניהם. לא עומס כללי במרכז, אלא מסלול התקפה ברור בצד אחד.",
             evidenceIds: ["heatmap.spatial_profile"],
           },
           {
-            text: "התפוקה מחזקת את הקריאה המרחבית: בן הרוש ודוידה סיפקו יחד 4 מסירות מפתח, 1.00 xA ו־2 בישולים; פרץ, שפעל בתוך המשולש ומעבר לו, הגיע ל־2.50 xG וכבש 3. מנגד, שלישיית ההתקפה של הפועל התכנסה יותר למרכז ולימין, והרוחב הגיע בעיקר משחקני הקו האחורי — דפוס שמתאים ל־7 הגבהות ול־95 מסירות לשליש האחרון, אבל לא יצר אותה איכות ברחבה.",
-            evidenceIds: ["heatmap.spatial_profile", "player.dor_peretz", "player.right_triangle", "style.team_profiles"],
+            text: "גם ההיסטוריה הקצרה שלהם מוסיפה הקשר: ב־5 המשחקים הקודמים דוידה סיפק 2 בישולים ובן הרוש 0; הפעם שניהם סיימו עם בישול אחד. יחד הם הוסיפו 4 מסירות מפתח ו־1.00 xA — בדיוק מעטפת היצירה שפרץ היה צריך כדי להפוך תנועה לעומק לשלושער.",
+            evidenceIds: ["history.player.d331b8fc-d76c-4f8c-8a13-19e329c9b67a", "history.player.ff574781-01f2-4586-86c8-e7c7620f2496", "player.right_triangle", "player.dor_peretz", "heatmap.spatial_profile"],
           },
         ],
       },
     ],
     takeaways: [
-      { text: "הפער האמיתי היה באיכות: 3.56 מול 1.27 xG.", evidenceIds: ["team.quality"] },
-      { text: "דור פרץ כבש 3 שערים מ־4 בעיטות ב־75 דקות.", evidenceIds: ["player.dor_peretz"] },
-      { text: "מכבי הכריעה את המשחק בשני גלים: 1.38 xG לפני ההפסקה ו־1.58 xG בדקות 61–75.", evidenceIds: ["flow.shot_windows"] },
+      { text: "מכבי עלתה מ־10.6 בעיטות בממוצע ל־17, אף שההחזקה ירדה ל־51%.", evidenceIds: ["history.team.away"] },
+      { text: "דור פרץ עבר משער אחד ב־450 דקות קודמות ל־3 שערים ב־75 דקות.", evidenceIds: ["history.player.b6a41010-aafc-4cdc-983e-8e64d0dd852c", "player.dor_peretz"] },
+      { text: "9 מבעיטות הפועל הגיעו אחרי האדום בדקה 77.", evidenceIds: ["flow.after_red"] },
     ],
-    conclusion: "זה היה 5:2 שנבנה ממבנה התקפי מדויק בצד ימין ומשני פרצי איכות קצרים, ואז קיבל אפילוג אחר לגמרי אחרי הכרטיס האדום. התוצאה מספרת מי ניצחה; רצף הבעיטות ומפות החום מסבירים איך.",
-    conclusionEvidenceIds: ["match.result", "flow.shot_windows", "timeline.match_events", "heatmap.spatial_profile", "player.dor_peretz"],
+    conclusion: "מכבי לא ניצחה מפני ששיחקה יותר מאותו הדבר. היא ניצחה מפני ששיחקה אחרת: פחות החזקה, יותר חדירה, צד ימין מתואם ודור פרץ בעמדה שבה כל תנועה שלו איימה להפוך לשער.",
+    conclusionEvidenceIds: ["history.team.away", "heatmap.spatial_profile", "player.right_triangle", "player.dor_peretz"],
   };
 }
 
@@ -532,7 +801,7 @@ const editorialSchema = {
   required: ["headline", "headlineEvidenceIds", "dek", "dekEvidenceIds", "sections", "takeaways", "conclusion", "conclusionEvidenceIds"],
 };
 
-async function generateEditorialWithAi(match, evidence) {
+async function generateEditorialWithAi(match, evidence, historicalContext) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -548,6 +817,11 @@ async function generateEditorialWithAi(match, evidence) {
         "לכל טענה מספרית צרף רק מזהי evidenceIds שמכילים את המספרים הללו. שמור על טון עיתונאי ולא שיווקי.",
         "כתוב כל כמות ומספר בספרות (למשל 6, לא שישה), כדי שמנוע האימות יוכל לבדוק אותם.",
         "השתמש ב-xG כמונח המקצועי היחיד שמותר באותיות לטיניות.",
+        "בנה לכתבה תזה אחת כבר בכותרת ובפתיח, והתקדם איתה מסעיף לסעיף. כל פסקה צריכה להוסיף שלב לסיפור, לא להתחיל ניתוח חדש.",
+        "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומרשימות נתונים שאינן מקדמות את הטענה המרכזית.",
+        "השווה כל קבוצה לעד 5 משחקיה הקודמים בכל המסגרות. ציין במפורש את גודל המדגם, השתמש רק במדדים עם sampleSize, והצג את ההשוואה כהקשר ולא כהוכחה מוחלטת לשינוי טקטי.",
+        "חפש אצל שחקנים חריגה בעלת משמעות לעומת הופעותיהם הקודמות: תפוקה, נפח, איכות או תפקיד. קשר אותה למבנה הקבוצתי רק אם נתוני המשחק ומפות החום תומכים בכך.",
+        "הזכר בשם לפחות שחקן אחד שיש לו ראיות משמעותיות, כדי שהכתבה תוכל לקבל תגית שחקן שימושית.",
         "הסבר את זרימת המשחק דרך חלונות הבעיטות ואירועי המשחק, והבדל בין מה שקרה לפני ואחרי חילופים או כרטיסים.",
         "השתמש בפרופיל המרחבי ממפות החום כדי לזהות מבנה, רוחב, חצי־מרחבים ועומס מקומי. אל תכתוב הסבר מתודולוגי על מפות החום ואל תצטט לקורא קואורדינטות טכניות.",
         "תאר שינוי טקטי רק כשהוא נתמך גם בחילוף בין תפקידים או באירוע מתוזמן; מפות החום לבדן מתארות את זמן ההופעה המצטבר.",
@@ -559,6 +833,7 @@ async function generateEditorialWithAi(match, evidence) {
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
         },
+        historicalContext,
         evidence,
       }),
       text: {
@@ -590,6 +865,23 @@ function claimEntries(editorial) {
   ];
 }
 
+function editorialText(editorial) {
+  return claimEntries(editorial).map((claim) => claim.text).join(" ");
+}
+
+function buildArticleTags(home, away, players, editorial) {
+  const text = editorialText(editorial);
+  const playerTags = players
+    .filter((player) => player.nameHe && player.nameHe.length > 2 && text.includes(player.nameHe))
+    .map((player) => ({ id: `player:${player.playerId}`, label: player.nameHe, kind: "player" }));
+  return [
+    { id: `team:${home.teamId}`, label: home.nameHe, kind: "team" },
+    { id: `team:${away.teamId}`, label: away.nameHe, kind: "team" },
+    ...playerTags,
+    { id: "topic:match-summary", label: "סיכום משחק", kind: "topic" },
+  ];
+}
+
 function extractNumbers(text) {
   return [...text.matchAll(/\d+(?:[.,]\d+)?/g)].map((match) => Number(match[0].replace(",", ".")));
 }
@@ -614,7 +906,7 @@ function validateEditorial(editorial, evidence) {
   return failures;
 }
 
-function buildChecks(match, home, away, players, shots, evidence, editorial, flowWindows, timelineEvents, spatialProfile) {
+function buildChecks(match, home, away, players, shots, evidence, editorial, flowWindows, timelineEvents, spatialProfile, historicalContext, tags) {
   const homeGoals = shots.filter((shot) => shot.team_id === home.teamId && shot.outcome === "Goal").length;
   const awayGoals = shots.filter((shot) => shot.team_id === away.teamId && shot.outcome === "Goal").length;
   const playerGoals = players.reduce((sum, player) => sum + Number(player.metrics.goals ?? 0), 0);
@@ -625,6 +917,13 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, flo
     Number(player.metrics.goals ?? 0)
     === shots.filter((shot) => shot.player_id === player.playerId && shot.outcome === "Goal").length
   ));
+  const historicalMatches = [
+    ...historicalContext.teams.home.matches,
+    ...historicalContext.teams.away.matches,
+  ];
+  const historyPrecedesMatch = historicalMatches.every((previous) => Date.parse(previous.scheduledAt) < Date.parse(match.scheduled_at));
+  const teamTagIds = new Set(tags.filter((tag) => tag.kind === "team").map((tag) => tag.id));
+  const requiredTeamTags = [`team:${home.teamId}`, `team:${away.teamId}`];
   const checks = [
     ["match-ended", "המשחק הסתיים", match.status === "Ended", `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
@@ -639,6 +938,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, flo
     ["flow-shot-total", "חלונות הזמן מכסים את כל הבעיטות", windowShotTotal === shots.length, `${windowShotTotal} בעיטות בחלונות הזמן`],
     ["timeline-goals", "אירועי המשחק תואמים לשערים", timelineGoalTotal === home.score + away.score, `${timelineGoalTotal} שערים בציר האירועים`],
     ["heatmap-coverage", "כיסוי מפות החום מספיק לניתוח מבני", Number(spatialProfile?.starterHeatmaps ?? 0) >= 18, `${spatialProfile?.starterHeatmaps ?? 0} שחקני הרכב עם מפה`],
+    ["history-order", "כל משחקי ההשוואה קדמו למשחק", historyPrecedesMatch, `${historicalMatches.length} משחקים קודמים נבדקו`],
+    ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
     ["evidence-links", "לכל טענה יש הפניה לראיות", claimEntries(editorial).every((claim) => claim.evidenceIds.length > 0), `${claimEntries(editorial).length} טענות מקושרות`],
     ["numeric-claims", "כל המספרים בטקסט נתמכים", editorialFailures.length === 0, editorialFailures.length ? editorialFailures.join(" | ") : "לא נמצאו מספרים לא מבוססים"],
   ].map(([id, label, passed, detail]) => ({ id, label, status: passed ? "passed" : "failed", detail }));
@@ -707,8 +1008,12 @@ async function main() {
     fetchProviderGameDetail(dataset.shots),
     analyzeContentHeatmaps(dataset.heatmaps, players, home.teamId, away.teamId),
   ]);
+  const homeHistoryDataset = await fetchHistoricalTeamDataset(client, match, home.teamId);
+  const awayHistoryDataset = await fetchHistoricalTeamDataset(client, match, away.teamId);
+  const playerHistoryDataset = await fetchHistoricalPlayerDataset(client, match, players);
   const timelineEvents = normalizeTimelineEvents(providerGame, players, home, away);
   const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId);
+  const historicalContext = buildHistoricalContext(home, away, players, homeHistoryDataset, awayHistoryDataset, playerHistoryDataset);
   const evidence = buildEvidence(
     match,
     home,
@@ -720,15 +1025,17 @@ async function main() {
     flowWindows,
     timelineEvents,
     spatialProfile,
+    historicalContext,
   );
   const usedAi = Boolean(process.env.OPENAI_API_KEY) && !args.noAi;
   if (!usedAi && match.match_id !== "5b2957d1-6f48-4269-baf6-2f53753eb160") {
     throw new Error("OPENAI_API_KEY is required for matches without a reviewed editorial seed.");
   }
   const editorial = usedAi
-    ? await generateEditorialWithAi(match, evidence)
+    ? await generateEditorialWithAi(match, evidence, historicalContext)
     : fallbackEditorial(match, home, away);
-  const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, flowWindows, timelineEvents, spatialProfile);
+  const tags = buildArticleTags(home, away, players, editorial);
+  const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, flowWindows, timelineEvents, spatialProfile, historicalContext, tags);
   const failedChecks = checks.filter((check) => check.status === "failed");
   if (failedChecks.length) {
     throw new Error(`Article rejected by fact checks:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
@@ -746,7 +1053,7 @@ async function main() {
     generation: {
       mode: usedAi ? "openai_responses_api" : "deterministic_editorial_fallback",
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5-mini") : null,
-      pipelineVersion: "match-review-v2",
+      pipelineVersion: "match-review-v3",
     },
     match: {
       matchId: match.match_id,
@@ -760,6 +1067,7 @@ async function main() {
       status: match.status,
     },
     teams: { home, away },
+    tags,
     aiDisclosure: "גילוי נאות: הכתבה נוצרה בעזרת בינה מלאכותית על בסיס נתוני כדורדאטה. הנתונים והטענות המספריות עברו בדיקות אוטומטיות לפני הפרסום.",
     players,
     playerSpotlight: players
@@ -775,6 +1083,7 @@ async function main() {
       actual: providerGame.actualPlayTime.actualTime?.name ?? null,
       total: providerGame.actualPlayTime.totalTime?.name ?? null,
     } : null,
+    historicalContext,
     shots: dataset.shots.map(normalizeShot),
     editorial,
     evidence,

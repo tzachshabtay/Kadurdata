@@ -34,6 +34,10 @@ function validateArticle(article, filename) {
   if (article.status !== "published") fail("generated article is not published");
   if (article.factCheck?.status !== "passed") fail("fact-check status is not passed");
   if (article.factCheck?.checks?.some((check) => check.status !== "passed")) fail("one or more stored fact checks failed");
+  if (!article.historicalContext) fail("historical comparison context is missing");
+  if (!article.tags?.some((tag) => tag.id === "topic:match-summary")) fail("match-summary tag is missing");
+  if ((article.tags ?? []).filter((tag) => tag.kind === "team").length !== 2) fail("article must include both team tags");
+  if (!(article.tags ?? []).some((tag) => tag.kind === "player")) fail("article must include at least one player tag");
 
   const { home, away } = article.teams;
   const homeShots = article.shots.filter((shot) => shot.teamId === home.teamId);
@@ -42,6 +46,13 @@ function validateArticle(article, filename) {
   if (awayShots.length !== away.stats.team_total_shots) fail("away shot total does not match the shot map");
   if (homeShots.filter((shot) => shot.outcome === "Goal").length !== home.score) fail("home goals do not match shot events");
   if (awayShots.filter((shot) => shot.outcome === "Goal").length !== away.score) fail("away goals do not match shot events");
+
+  const historicalMatches = article.historicalContext
+    ? [...article.historicalContext.teams.home.matches, ...article.historicalContext.teams.away.matches]
+    : [];
+  if (historicalMatches.some((match) => Date.parse(match.scheduledAt) >= Date.parse(article.match.scheduledAt))) {
+    fail("historical comparison contains a match that did not precede the article match");
+  }
 
   const evidenceById = new Map(article.evidence.map((item) => [item.id, item]));
   for (const claim of claims(article)) {

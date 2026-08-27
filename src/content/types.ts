@@ -4,6 +4,13 @@ export type ArticleEvidence = {
   sourceView: string;
   sourceRows: number;
   values: number[];
+  context?: Record<string, unknown>;
+};
+
+export type ArticleTag = {
+  id: string;
+  label: string;
+  kind: "team" | "player" | "topic";
 };
 
 export type ArticleClaim = {
@@ -159,6 +166,58 @@ export type ArticleSpatialProfile = {
   }>;
 };
 
+export type ArticleHistoricalMetric = {
+  current: number | null;
+  average: number;
+  sampleSize: number;
+  delta: number | null;
+  changePercent: number | null;
+};
+
+export type ArticleHistoricalMatch = {
+  matchId: string;
+  scheduledAt: string;
+  competitionNameHe: string;
+  opponentTeamId: string;
+  opponentNameHe: string;
+  goalsFor: number;
+  goalsAgainst: number;
+};
+
+export type ArticleHistoricalTeam = {
+  teamId: string;
+  nameHe: string;
+  matchCount: number;
+  averageGoalsFor: number;
+  averageGoalsAgainst: number;
+  matches: ArticleHistoricalMatch[];
+  metrics: Record<string, ArticleHistoricalMetric>;
+};
+
+export type ArticleHistoricalPlayerMetric = {
+  current: number | null;
+  previousTotal: number;
+  previousPer90: number | null;
+  sampleSize: number;
+  minutesWithMetric: number;
+};
+
+export type ArticleHistoricalPlayer = {
+  playerId: string;
+  nameHe: string;
+  teamId: string;
+  appearanceCount: number;
+  totalMinutes: number;
+  metrics: Record<string, ArticleHistoricalPlayerMetric>;
+};
+
+export type ArticleHistoricalContext = {
+  windowSize: number;
+  scopeHe: string;
+  teams: { home: ArticleHistoricalTeam; away: ArticleHistoricalTeam };
+  players: ArticleHistoricalPlayer[];
+};
+
 export type ContentArticle = {
   schemaVersion: number;
   slug: string;
@@ -180,6 +239,7 @@ export type ContentArticle = {
     status: string;
   };
   teams: { home: ArticleTeam; away: ArticleTeam };
+  tags: ArticleTag[];
   aiDisclosure: string;
   players: ArticlePlayer[];
   playerSpotlight: ArticlePlayer[];
@@ -189,6 +249,7 @@ export type ContentArticle = {
   timelineEvents: ArticleTimelineEvent[];
   flowWindows: ArticleFlowWindow[];
   actualPlayTime: { actual: string | null; total: string | null } | null;
+  historicalContext: ArticleHistoricalContext;
   shots: ArticleShot[];
   editorial: {
     headline: string;
