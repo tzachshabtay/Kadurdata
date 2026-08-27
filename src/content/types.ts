@@ -238,8 +238,18 @@ export type ArticleEditorialReview = {
     numericClarity: boolean;
     cohesiveNarrative: boolean;
     highVolumeComparisonsOnly: boolean;
+    evidenceFaithfulness: boolean;
   };
   notes: string[];
+};
+
+export type ArticleQualityReview = {
+  mode: string;
+  model: string | null;
+  status: "passed" | "failed";
+  checks: ArticleEditorialReview["checks"];
+  issues: string[];
+  attempt: number;
 };
 
 export type ArticleHistoricalContext = {
@@ -257,7 +267,13 @@ export type ContentArticle = {
   status: "published" | "draft";
   publishedAt: string;
   generatedAt: string;
-  generation: { mode: string; model: string | null; pipelineVersion: string };
+  generation: {
+    mode: string;
+    model: string | null;
+    editorModel: string | null;
+    qualityModel: string | null;
+    pipelineVersion: string;
+  };
   match: {
     matchId: string;
     competitionId: string;
@@ -283,6 +299,7 @@ export type ContentArticle = {
   historicalContext: ArticleHistoricalContext;
   shots: ArticleShot[];
   editorialReview: ArticleEditorialReview;
+  qualityReview: ArticleQualityReview;
   editorial: {
     headline: string;
     headlineEvidenceIds: string[];

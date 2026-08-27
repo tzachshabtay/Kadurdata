@@ -9,9 +9,12 @@ export const articles = Object.values(generatedModules)
   .filter((article) => (
     article.language === "he"
     && article.status === "published"
-    && article.generation.mode === "openai_writer_and_editor"
+    && article.generation.mode === "openai_writer_editor_and_qa"
     && article.editorialReview.mode === "openai_second_pass_editor"
     && article.editorialReview.status === "passed"
+    && article.qualityReview?.mode === "openai_independent_quality_gate"
+    && article.qualityReview.status === "passed"
+    && article.qualityReview.issues.length === 0
     && article.factCheck.status === "passed"
   ))
   .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt));

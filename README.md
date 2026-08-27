@@ -102,15 +102,16 @@ Without `VITE_SUPABASE_ANON_KEY`, the local frontend renders a demo data state s
 ## Hebrew Content Pipeline
 
 The Hebrew-only `בלוג` tab reads fact-checked article packages from
-`src/content/generated/`. Each match review is built in seven stages:
+`src/content/generated/`. Each match review is built in eight stages:
 
 1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
 2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
 3. Derive time-window flow and spatial-team profiles, then convert current and historical data into a grounded evidence bundle.
 4. Ask the OpenAI Responses API for one cohesive Hebrew narrative whose claims cite evidence IDs.
 5. Run a separate senior-editor pass for idiomatic Hebrew, numerical clarity, narrative flow, and misuse of small samples.
-6. Reject the draft if the editorial review, score, event total, xG cross-check, historical date, evidence link, tag set, or numeric claim fails.
-7. Publish the JSON package with Hebrew team, player, and `סיכום משחק` tags; Vite discovers it automatically and adds it to the filterable blog archive.
+6. Run an independent adversarial Hebrew quality gate; if it finds a defect, send its exact issues back to the editor and review the revision once more.
+7. Reject the draft if the independent review, score, event total, xG cross-check, historical date, evidence link, tag set, or numeric claim fails.
+8. Publish the JSON package with Hebrew team, player, and `סיכום משחק` tags; Vite discovers it automatically and adds it to the filterable blog archive.
 
 Generate the latest eligible match with AI:
 
@@ -120,7 +121,7 @@ npm run content:validate
 npm run build
 ```
 
-Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` and `OPENAI_EDITOR_MODEL` in `.env`. Rebuild the sample
+Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL`, `OPENAI_EDITOR_MODEL`, and `OPENAI_QA_MODEL` in `.env`. Rebuild the sample
 through the same real writer-and-editor pipeline with `npm run content:generate:sample`. Publishing without
 both AI passes is rejected. `npm run content:check:fixture` is available only as a dry-run mechanical fixture;
 it never writes or publishes an article.

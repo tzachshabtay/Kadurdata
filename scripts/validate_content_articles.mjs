@@ -32,8 +32,8 @@ function validateArticle(article, filename) {
   if (article.schemaVersion !== 1) fail("unsupported schemaVersion");
   if (article.language !== "he") fail("content must be Hebrew-only");
   if (article.status !== "published") fail("generated article is not published");
-  if (article.generation?.mode !== "openai_writer_and_editor") {
-    fail("published article did not run the AI writer-and-editor pipeline");
+  if (article.generation?.mode !== "openai_writer_editor_and_qa") {
+    fail("published article did not run the AI writer-editor-and-QA pipeline");
   }
   if (article.factCheck?.status !== "passed") fail("fact-check status is not passed");
   if (article.factCheck?.checks?.some((check) => check.status !== "passed")) fail("one or more stored fact checks failed");
@@ -42,6 +42,14 @@ function validateArticle(article, filename) {
   }
   if (article.editorialReview?.mode !== "openai_second_pass_editor") {
     fail("published article did not run the independent AI editorial pass");
+  }
+  if (
+    article.qualityReview?.mode !== "openai_independent_quality_gate"
+    || article.qualityReview?.status !== "passed"
+    || !Object.values(article.qualityReview?.checks ?? {}).every(Boolean)
+    || article.qualityReview?.issues?.length !== 0
+  ) {
+    fail("published article did not pass the independent Hebrew quality gate");
   }
   if (!article.historicalContext) fail("historical comparison context is missing");
   if (!article.tags?.some((tag) => tag.id === "topic:match-summary")) fail("match-summary tag is missing");
@@ -82,7 +90,7 @@ function validateArticle(article, filename) {
     }
   }
   const editorialCopy = claims(article).map((claim) => claim.text).join(" ");
-  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /צבר(?:ה|ו)? את רוב האיום/, /xG\s*;/]) {
+  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /צבר(?:ה|ו)? את רוב האיום/, /xG\s*;/, /השערים פונו/, /כיתרה\s+\d/, /המצביה/, /ריבוי דו[־-]קרקעי/, /גלים של איומים/, /שימור איזון בנפח/]) {
     if (pattern.test(editorialCopy)) fail(`editorial copy contains a blocked phrasing pattern: ${pattern}`);
   }
   return failures;

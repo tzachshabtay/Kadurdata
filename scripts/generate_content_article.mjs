@@ -911,12 +911,34 @@ const editorialReviewResponseSchema = {
         numericClarity: { type: "boolean" },
         cohesiveNarrative: { type: "boolean" },
         highVolumeComparisonsOnly: { type: "boolean" },
+        evidenceFaithfulness: { type: "boolean" },
       },
-      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly"],
+      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness"],
     },
     notes: { type: "array", items: { type: "string" }, maxItems: 6 },
   },
   required: ["editorial", "checks", "notes"],
+};
+
+const qualityReviewResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    checks: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        naturalHebrew: { type: "boolean" },
+        numericClarity: { type: "boolean" },
+        cohesiveNarrative: { type: "boolean" },
+        highVolumeComparisonsOnly: { type: "boolean" },
+        evidenceFaithfulness: { type: "boolean" },
+      },
+      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly", "evidenceFaithfulness"],
+    },
+    issues: { type: "array", items: { type: "string" }, maxItems: 12 },
+  },
+  required: ["checks", "issues"],
 };
 
 function responseOutputText(payload) {
@@ -977,8 +999,8 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
   return JSON.parse(outputText);
 }
 
-async function editEditorialWithAi(match, evidence, historicalContext, draft) {
-  const model = process.env.OPENAI_EDITOR_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5-mini";
+async function editEditorialWithAi(match, evidence, historicalContext, draft, qualityFeedback = []) {
+  const model = process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -997,7 +1019,11 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft) {
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
         "השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges. כל רשומה כזאת כבר עברה סף של לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
-        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 4 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
+        "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
+        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 5 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
+        qualityFeedback.length
+          ? "מבקר האיכות פסל גרסה קודמת. תקן במפורש כל סעיף ב-qualityFeedback ואל תסתפק בהחלפת מילה מקומית אם המשפט כולו אינו טבעי."
+          : "זוהי עריכת הנוסח הראשונה; בצע עריכה מלאה ולא הגהה שטחית.",
       ].join("\n"),
       input: JSON.stringify({
         match: {
@@ -1009,6 +1035,7 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft) {
         historicalContext,
         evidence,
         draft,
+        qualityFeedback,
       }),
       text: {
         format: {
@@ -1039,6 +1066,64 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft) {
   };
 }
 
+async function reviewEditorialQualityWithAi(match, evidence, editorial, attempt) {
+  const model = process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      store: false,
+      instructions: [
+        "אתה מבקר האיכות האחרון והבלתי־תלוי של מדור ספורט עברי. אינך עורך את הכתבה ואינך מתבקש להיות מנומס; תפקידך למנוע פרסום של נוסח שאינו ראוי.",
+        "קרא כל משפט כאילו הוא עומד להתפרסם עכשיו באתר ספורט ישראלי. אפילו שגיאת התאמה אחת, מילה מומצאת אחת או צירוף שאינו קיים בעברית מחייבים naturalHebrew=false.",
+        "פסול תרגום מילולי, מליצות ריקות ופעלים שאינם מתאימים לנתון. דוגמאות לסוגי כשל: 'השערים פונו', 'קבוצה כיתרה 51%', 'המצביה היו', 'ריבוי דו־קרקעי', 'גלים של איומים' או 'שימור איזון בנפח'.",
+        "numericClarity=true רק אם ברור לקורא מה כל מספר מודד, מהו בסיס ההשוואה, ומה ההבדל בין נתון של המשחק למדגם היסטורי.",
+        "cohesiveNarrative=true רק אם לכתבה יש טענה מרכזית אחת, כל פסקה מקדמת אותה, ואין חזרות, סתירות או משפטי מילוי אוטומטיים.",
+        "highVolumeComparisonsOnly=true רק אם מגמות שחקנים נשענות על מדדי נפח ועל notableChanges, ולא על שער, בישול או אירוע יחיד.",
+        "evidenceFaithfulness=true רק אם הפרשנות נובעת מהראיות. פסול סיבתיות, שינוי טקטי, צד מגרש או תזמון שאינם נתמכים במפורש.",
+        "issues חייב להכיל כל בעיה שמצאת, עם ציטוט קצר מהנוסח והסבר מעשי לעורך. אם issues אינו ריק, לפחות בדיקה אחת חייבת להיות false. אל תכתוב מחמאות ב-issues.",
+        "אשר את הכתבה רק אם עורך אנושי דובר עברית לא היה צריך לשנות אף משפט לפני הפרסום.",
+      ].join("\n"),
+      input: JSON.stringify({
+        match: {
+          competition: match.competition_name_he ?? match.competition_name,
+          scheduledAt: match.scheduled_at,
+          home: match.home_team_name_he ?? match.home_team_name,
+          away: match.away_team_name_he ?? match.away_team_name,
+        },
+        evidence,
+        editorial,
+      }),
+      text: {
+        format: {
+          type: "json_schema",
+          name: "hebrew_independent_quality_review",
+          strict: true,
+          schema: qualityReviewResponseSchema,
+        },
+      },
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenAI independent quality review failed (${response.status}): ${await response.text()}`);
+  const payload = await response.json();
+  const outputText = responseOutputText(payload);
+  if (!outputText) throw new Error("The independent quality review returned no structured output.");
+  const reviewed = JSON.parse(outputText);
+  const passed = Object.values(reviewed.checks).every(Boolean) && reviewed.issues.length === 0;
+  return {
+    mode: "openai_independent_quality_gate",
+    model,
+    status: passed ? "passed" : "failed",
+    checks: reviewed.checks,
+    issues: reviewed.issues,
+    attempt,
+  };
+}
+
 function curatedEditorialSeed(editorial) {
   return {
     editorial,
@@ -1051,9 +1136,27 @@ function curatedEditorialSeed(editorial) {
         numericClarity: true,
         cohesiveNarrative: true,
         highVolumeComparisonsOnly: true,
+        evidenceFaithfulness: true,
       },
       notes: ["נוסח הדוגמה נערך כחלק מהקוד; מעבר עריכת ה־AI אינו רץ במצב --no-ai."],
     },
+  };
+}
+
+function fixtureQualityReview() {
+  return {
+    mode: "mechanical_fixture_without_ai_quality_gate",
+    model: null,
+    status: "passed",
+    checks: {
+      naturalHebrew: true,
+      numericClarity: true,
+      cohesiveNarrative: true,
+      highVolumeComparisonsOnly: true,
+      evidenceFaithfulness: true,
+    },
+    issues: [],
+    attempt: 0,
   };
 }
 
@@ -1108,7 +1211,7 @@ function validateEditorial(editorial, evidence) {
   return failures;
 }
 
-function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags) {
+function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, requiresAiReview) {
   const homeGoals = shots.filter((shot) => shot.team_id === home.teamId && shot.outcome === "Goal").length;
   const awayGoals = shots.filter((shot) => shot.team_id === away.teamId && shot.outcome === "Goal").length;
   const playerGoals = players.reduce((sum, player) => sum + Number(player.metrics.goals ?? 0), 0);
@@ -1141,8 +1244,20 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /המספרים מספרים/,
     /צבר(?:ה|ו)? את רוב האיום/,
     /xG\s*;/,
+    /השערים פונו/,
+    /כיתרה\s+\d/,
+    /המצביה/,
+    /ריבוי דו[־-]קרקעי/,
+    /גלים של איומים/,
+    /שימור איזון בנפח/,
   ];
-  const editorialReviewPassed = editorialReview.status === "passed" && Object.values(editorialReview.checks).every(Boolean);
+  const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
+    && editorialReview.status === "passed"
+    && Object.values(editorialReview.checks).every(Boolean));
+  const qualityReviewPassed = !requiresAiReview || (qualityReview.mode === "openai_independent_quality_gate"
+    && qualityReview.status === "passed"
+    && Object.values(qualityReview.checks).every(Boolean)
+    && qualityReview.issues.length === 0);
   const checks = [
     ["match-ended", "המשחק הסתיים", match.status === "Ended", `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
@@ -1161,6 +1276,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["historical-player-volume", "השוואות שחקנים נשענות על מדדי נפח", weakHistoricalPlayerClaims.length === 0, weakHistoricalPlayerClaims.length ? `${weakHistoricalPlayerClaims.length} השוואות נשענו על מדגם חלש` : "לא נמצאו מגמות אישיות ממדגם קטן"],
     ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", awkwardPatterns.every((pattern) => !pattern.test(copy)), "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
     ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
+    ["independent-quality-review", "מבקר איכות בלתי־תלוי אישר את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
     ["evidence-links", "לכל טענה יש הפניה לראיות", claimEntries(editorial).every((claim) => claim.evidenceIds.length > 0), `${claimEntries(editorial).length} טענות מקושרות`],
     ["numeric-claims", "כל המספרים בטקסט נתמכים", editorialFailures.length === 0, editorialFailures.length ? editorialFailures.join(" | ") : "לא נמצאו מספרים לא מבוססים"],
@@ -1262,9 +1378,21 @@ async function main() {
   const reviewed = usedAi
     ? await editEditorialWithAi(match, evidence, historicalContext, draftEditorial)
     : curatedEditorialSeed(draftEditorial);
-  const { editorial, review: editorialReview } = reviewed;
+  let { editorial, review: editorialReview } = reviewed;
+  let qualityReview = usedAi
+    ? await reviewEditorialQualityWithAi(match, evidence, editorial, 1)
+    : fixtureQualityReview();
+  if (usedAi && qualityReview.status === "failed") {
+    const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, qualityReview.issues);
+    editorial = revised.editorial;
+    editorialReview = revised.review;
+    qualityReview = await reviewEditorialQualityWithAi(match, evidence, editorial, 2);
+  }
+  if (usedAi && qualityReview.status === "failed") {
+    throw new Error(`Article rejected by independent Hebrew quality gate after 2 attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
+  }
   const tags = buildArticleTags(home, away, players, editorial);
-  const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags);
+  const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, usedAi);
   const failedChecks = checks.filter((check) => check.status === "failed");
   if (failedChecks.length) {
     throw new Error(`Article rejected by fact checks:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
@@ -1280,9 +1408,11 @@ async function main() {
     publishedAt: generatedAt,
     generatedAt,
     generation: {
-      mode: usedAi ? "openai_writer_and_editor" : "mechanical_fixture_dry_run",
+      mode: usedAi ? "openai_writer_editor_and_qa" : "mechanical_fixture_dry_run",
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5-mini") : null,
-      pipelineVersion: "match-review-v4",
+      editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
+      qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
+      pipelineVersion: "match-review-v5",
     },
     match: {
       matchId: match.match_id,
@@ -1315,6 +1445,7 @@ async function main() {
     historicalContext,
     shots: dataset.shots.map(normalizeShot),
     editorialReview,
+    qualityReview,
     editorial,
     evidence,
     factCheck: {
