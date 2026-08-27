@@ -93,6 +93,7 @@ function validateArticle(article, filename) {
     if (!graphic.evidenceIds.some((id) => plannedInsightById.get(graphic.placementInsightId)?.evidenceIds.includes(id))) fail(`graphic does not share evidence with its insight: ${graphic.titleHe}`);
     if (graphic.type === "player_focus" && !article.players.some((player) => player.playerId === graphic.focusPlayerId)) fail("player graphic references an unknown player");
     if (graphic.type === "team_history" && (!graphic.metricCodes.length || graphic.metricCodes.some((code) => !article.historicalContext.teams.home.metrics[code] && !article.historicalContext.teams.away.metrics[code]))) fail("history graphic references an unavailable metric");
+    if (extractNumbers(`${graphic.titleHe} ${graphic.subtitleHe}`).length) fail("graphic titles and subtitles must not contain numbers");
   }
   if (article.gameStateContext?.rawShotTotalsNeedGameStateContext) {
     const earlyGameStateSection = article.editorial.sections.slice(0, 2).some((section) => (
@@ -121,8 +122,10 @@ function validateArticle(article, filename) {
   const paragraphNumberCounts = article.editorial.sections.flatMap((section) => section.paragraphs.map((paragraph) => extractNumbers(paragraph.text).length));
   if (paragraphNumberCounts.some((count) => count > 6)) fail(`a paragraph contains too many numbers: ${paragraphNumberCounts.join(", ")}`);
   if (paragraphNumberCounts.reduce((sum, count) => sum + count, 0) / Math.max(paragraphNumberCounts.length, 1) > 4) fail("the article has excessive average numeric density");
+  const bodyNumbers = article.editorial.sections.flatMap((section) => section.paragraphs.flatMap((paragraph) => extractNumbers(paragraph.text)));
+  if (article.editorial.takeaways.some((takeaway) => extractNumbers(takeaway.text).some((value) => !bodyNumbers.some((candidate) => numbersMatch(candidate, value))))) fail("a takeaway introduces a number that was not explained in the article body");
   const editorialCopy = claims(article).map((claim) => claim.text).join(" ");
-  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /צבר(?:ה|ו)? את רוב האיום/, /xG\s*;/, /השערים פונו/, /כיתרה\s+\d/, /המצביה/, /ריבוי דו[־-]קרקעי/, /גלים של איומים/, /שימור איזון בנפח/, /נתיב(?:ים|י|י־|ה)?/, /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/]) {
+  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /צבר(?:ה|ו)? את רוב האיום/, /xG\s*;/, /השערים פונו/, /כיתרה\s+\d/, /המצביה/, /ריבוי דו[־-]קרקעי/, /גלים של איומים/, /שימור איזון בנפח/, /נתיב(?:ים|י|י־|ה)?/, /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/, /מצב של המשחק/, /מאזני בעיטות/]) {
     if (pattern.test(editorialCopy)) fail(`editorial copy contains a blocked phrasing pattern: ${pattern}`);
   }
   return failures;

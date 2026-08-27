@@ -12,6 +12,8 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
 const HISTORICAL_WINDOW = 5;
 const MAX_QUALITY_ATTEMPTS = 5;
+const MAX_ANALYSIS_ATTEMPTS = 3;
+const MAX_OPENAI_REQUEST_ATTEMPTS = 2;
 const HISTORICAL_TEAM_METRICS = [
   "team_possession",
   "team_total_shots",
@@ -108,6 +110,35 @@ function round(value, digits = 2) {
 
 function numberValue(value) {
   return value === null || value === undefined ? null : Number(value);
+}
+
+async function postOpenAi(body, label) {
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_OPENAI_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(270_000),
+      });
+      if (response.ok) return response;
+      const detail = await response.text();
+      lastError = new Error(`${label} failed (${response.status}): ${detail}`);
+      if (response.status < 500 && response.status !== 429) lastError.nonRetryable = true;
+    } catch (error) {
+      lastError = error;
+    }
+    if (lastError?.nonRetryable) throw lastError;
+    if (attempt < MAX_OPENAI_REQUEST_ATTEMPTS) {
+      console.log(JSON.stringify({ openAiRetry: label, attempt, reason: String(lastError) }, null, 2));
+      await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+    }
+  }
+  throw lastError ?? new Error(`${label} failed without a response`);
 }
 
 async function selectMatch(client, requestedMatchId) {
@@ -823,8 +854,12 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       shot.minute, shot.event_time?.includes("+") ? Number(shot.event_time.match(/\+\s*(\d+)/)?.[1] ?? 0) : null,
     ])),
     evidenceItem("match.shot_map", "מפת הבעיטות", "api_match_shots", shots.length, [
-      shots.length, home.shotSummary.count, away.shotSummary.count, home.shotSummary.xg, away.shotSummary.xg,
-    ], { home: { teamNameHe: home.nameHe, shots: home.shotSummary.count, expectedGoals: home.shotSummary.xg }, away: { teamNameHe: away.nameHe, shots: away.shotSummary.count, expectedGoals: away.shotSummary.xg } }),
+      shots.length, home.shotSummary.count, away.shotSummary.count, home.stats.team_expected_goals, away.stats.team_expected_goals,
+    ], {
+      metricNoteHe: "סיכום xG משתמש בנתון הקבוצתי הרשמי; מיקומי הבעיטות עצמם מגיעים מאירועי הבעיטה",
+      home: { teamNameHe: home.nameHe, shots: home.shotSummary.count, expectedGoals: home.stats.team_expected_goals },
+      away: { teamNameHe: away.nameHe, shots: away.shotSummary.count, expectedGoals: away.stats.team_expected_goals },
+    }),
     ...historicalEvidence,
   ];
 }
@@ -1138,15 +1173,9 @@ function responseOutputText(payload) {
     .find((item) => item.type === "output_text")?.text;
 }
 
-async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext) {
+async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext, analysisFeedback = []) {
   const model = process.env.OPENAI_ANALYST_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5.6";
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  const response = await postOpenAi({
       model,
       store: false,
       instructions: [
@@ -1157,9 +1186,11 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
         "היסטוריה, מפות חום, מאבקים בין חוליות ושחקנים הם חומרי גלם לבחירה, לא סעיפי חובה. סמן use רק אם הם מסבירים את התזה; סמן omit כאשר הם רק מוסיפים מספרים.",
         "העדף דפוסי נפח ממדגם סביר על פני שער או בישול בודד. אל תסיק סיבתיות מנתון תצפיתי, ואל תמציא שינוי בזמן ממפת חום מצטברת.",
         "תכנן 2–4 גרפיקות בלבד. כל גרפיקה חייבת לתמוך בתובנה שנבחרה ולהציג משהו שקל יותר להבין חזותית מאשר בטקסט. אל תבחר גרפיקה כדי למלא מקום.",
+        "כותרת וכותרת המשנה של גרפיקה חייבות להסביר מה היא מראה בלי לכלול מספרים. הערכים עצמם יוצגו מתוך הנתונים בקומפוננטה, וכך לא ייווצרו פערי מקור או עיגול בין הטקסט לגרפיקה.",
         "לגרפיקת team_history בחר metricCodes מתוך מדדי ההיסטוריה שבחבילת הראיות. לגרפיקת player_focus בחר focusPlayerId קיים. בסוגים אחרים החזר מערכים או מזהים ריקים כאשר אינם נדרשים.",
         "coverageDecisions חייב להכיל פעם אחת בדיוק כל אחת מ-8 הקטגוריות. סמן use רק לקטגוריות שמהן בחרת rankedInsight, ו-omit לכל היתר. rankedInsights ו-narrativeArc חייבים להשתמש רק במזהי המועמדים שסופקו.",
         "בחר בדיוק תובנת primary אחת. בחר סוג גרפיקה שונה לכל גרפיקה, כדי שכל המחשה תוסיף זווית אחרת ולא תחזור על אותה תבנית.",
+        analysisFeedback.length ? "תוכנית קודמת נכשלה באימות. תקן כל סעיף ב-analysisFeedback ואל תחזיר את אותה תוכנית." : "זוהי תוכנית הניתוח הראשונה.",
         FOOTBALL_HEBREW_GUIDE,
       ].join("\n"),
       input: JSON.stringify({
@@ -1172,6 +1203,7 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
         gameStateContext,
         insightCandidates,
         evidence,
+        analysisFeedback,
       }),
       text: {
         format: {
@@ -1181,9 +1213,7 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
           schema: analysisPlanSchema,
         },
       },
-    }),
-  });
-  if (!response.ok) throw new Error(`OpenAI analyst failed (${response.status}): ${await response.text()}`);
+    }, "OpenAI analyst");
   const payload = await response.json();
   const outputText = responseOutputText(payload);
   if (!outputText) throw new Error("The analyst returned no structured plan.");
@@ -1191,13 +1221,7 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
 }
 
 async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  const response = await postOpenAi({
       model: process.env.OPENAI_MODEL ?? "gpt-5.6",
       store: false,
       instructions: [
@@ -1210,6 +1234,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
         "הכותרת והפתיח צריכים להציג את התזה, וכל סעיף צריך לקדם את הקשת הסיפורית שנבחרה. השתמש רק בתובנות שסומנו use וב-rankedInsights; אל תכניס בכוח קטגוריה שסומנה omit.",
         "כל סעיף חייב לקבל insightIds מתוך analysisPlan. סדר הסעיפים חייב לעקוב אחר narrativeArc, ותובנת primary חייבת להופיע באחד מ-2 הסעיפים הראשונים.",
         "כל פסקה צריכה לעבוד כך: טענה אחת, הסבר למה היא חשובה, ורק אז 1–3 מספרים חיוניים כתמיכה. אל תכתוב רשימת מדדים ואל תנסה להכניס את כל הנתונים הזמינים.",
+        "נקודות הסיכום רשאיות רק לתמצת טענות שכבר הוסברו בגוף הכתבה. אל תציג בהן מספר או עובדה שלא הופיעו קודם בגוף.",
         "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומפסקאות שנשמעות כמו טבלת נתונים.",
         "השתמש בהשוואה היסטורית רק אם analysisPlan בחר בה. ציין את גודל המדגם והצג אותה כהקשר, לא כהוכחה מוחלטת לשינוי טקטי.",
         "אם נבחרה השוואת שחקן היסטורית, היא מותרת רק מתוך notableChanges: מדדי נפח עם לפחות 3 משחקי בסיס. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה.",
@@ -1239,9 +1264,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
           schema: editorialSchema,
         },
       },
-    }),
-  });
-  if (!response.ok) throw new Error(`OpenAI Responses API failed (${response.status}): ${await response.text()}`);
+    }, "OpenAI writer");
   const payload = await response.json();
   const outputText = responseOutputText(payload);
   if (!outputText) throw new Error("The model returned no structured editorial output.");
@@ -1250,13 +1273,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
 
 async function editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
   const model = process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  const response = await postOpenAi({
       model,
       store: false,
       instructions: [
@@ -1267,6 +1284,8 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         "ודא שכל רצף מספרי מובן מיד: כתוב מה נמדד, מהו הסכום, ומה קרה בפועל. אל תצמיד מספר ל-xG ולמספר שערים באותו חצי משפט אם הקשר ביניהם אינו מפורש.",
         "שמור על התזה, התובנות והקשת הסיפורית שב-analysisPlan. הסר משפטים שנשמעים כמו סיכום אוטומטי, רשימת מדדים או ניתוח צדדי שלא נבחר בתוכנית.",
         "בכל פסקה שמור על טענה אחת, הסבר של המשמעות, ורק המספרים החיוניים. אם יש 4 מספרים או יותר, פצל או הסר את אלה שאינם נדרשים להבנת הטענה.",
+        "ודא שנקודות הסיכום אינן מכניסות מספר או עובדה חדשים שלא הופיעו בגוף הכתבה.",
+        "בדוק התאמה דקדוקית כאשר נושא המשפט הוא טווח או צמד מספרים. אם ההתאמה אינה טבעית, כתוב 'מאזן של...' במקום לפתוח את המשפט במספרים.",
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
         "השוואה היסטורית נדרשת רק אם analysisPlan בחר בה. השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges עם לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
@@ -1306,9 +1325,7 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
           schema: editorialReviewResponseSchema,
         },
       },
-    }),
-  });
-  if (!response.ok) throw new Error(`OpenAI editorial review failed (${response.status}): ${await response.text()}`);
+    }, "OpenAI football editor");
   const payload = await response.json();
   const outputText = responseOutputText(payload);
   if (!outputText) throw new Error("The editorial review returned no structured output.");
@@ -1329,13 +1346,7 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
 
 async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameStateContext, editorial, attempt) {
   const model = process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  const response = await postOpenAi({
       model,
       store: false,
       instructions: [
@@ -1377,9 +1388,7 @@ async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameS
           schema: qualityReviewResponseSchema,
         },
       },
-    }),
-  });
-  if (!response.ok) throw new Error(`OpenAI independent quality review failed (${response.status}): ${await response.text()}`);
+    }, "OpenAI independent quality review");
   const payload = await response.json();
   const outputText = responseOutputText(payload);
   if (!outputText) throw new Error("The independent quality review returned no structured output.");
@@ -1492,7 +1501,7 @@ function validateEditorial(editorial, evidence) {
   return failures;
 }
 
-function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameStateContext) {
+function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameStateContext, players = [], historicalContext = null) {
   const failures = [];
   const evidenceIds = new Set(evidence.map((item) => item.id));
   const candidateIds = new Set(insightCandidates.map((candidate) => candidate.id));
@@ -1521,6 +1530,13 @@ function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameSta
   if (analysisPlan.narrativeArc.some((step) => step.insightIds.some((id) => !plannedInsightIds.has(id)))) failures.push("narrativeArc references an unselected insight");
   if (analysisPlan.graphics.some((graphic) => !plannedInsightIds.has(graphic.placementInsightId))) failures.push("a graphic is not attached to a selected insight");
   if (new Set(analysisPlan.graphics.map((graphic) => graphic.type)).size !== analysisPlan.graphics.length) failures.push("graphic types must be distinct within one article");
+  if (analysisPlan.graphics.some((graphic) => extractNumbers(`${graphic.titleHe} ${graphic.subtitleHe}`).length > 0)) failures.push("graphic titles and subtitles must not contain numbers");
+  const knownPlayerIds = new Set(players.map((player) => player.playerId));
+  if (analysisPlan.graphics.some((graphic) => graphic.type === "player_focus" && (!graphic.focusPlayerId || !knownPlayerIds.has(graphic.focusPlayerId)))) failures.push("a player graphic references an unknown player");
+  if (historicalContext && analysisPlan.graphics.some((graphic) => graphic.type === "team_history" && (
+    !graphic.metricCodes.length
+    || graphic.metricCodes.some((code) => !historicalContext.teams.home.metrics[code] && !historicalContext.teams.away.metrics[code])
+  ))) failures.push("a history graphic references an unavailable metric");
   if (!Object.values(analysisPlan.quality).every(Boolean)) failures.push("the analyst did not pass its own planning checks");
   if (analysisPlan.rankedInsights.filter((insight) => insight.importance === "primary").length !== 1) failures.push("the plan must have exactly one primary insight");
   if (gameStateContext.rawShotTotalsNeedGameStateContext) {
@@ -1565,7 +1581,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const usedEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds));
   const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.game_state_context", "heatmap.spatial_profile"];
   const structuredEvidenceReady = structuredEvidenceIds.every((id) => evidence.find((item) => item.id === id)?.context);
-  const planFailures = requiresAiReview ? validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameStateContext) : [];
+  const planFailures = requiresAiReview ? validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameStateContext, players, historicalContext) : [];
   const plannedInsightIds = new Set(analysisPlan.rankedInsights.map((insight) => insight.id));
   const sectionInsightIds = editorial.sections.flatMap((section) => section.insightIds ?? []);
   const primaryInsightIds = analysisPlan.rankedInsights.filter((insight) => insight.importance === "primary").map((insight) => insight.id);
@@ -1582,6 +1598,10 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const paragraphNumbers = editorial.sections.flatMap((section) => section.paragraphs.map((paragraph) => extractNumbers(paragraph.text).length));
   const disciplinedNumbers = !requiresAiReview || (paragraphNumbers.every((count) => count <= 6)
     && (paragraphNumbers.reduce((sum, count) => sum + count, 0) / Math.max(paragraphNumbers.length, 1)) <= 4);
+  const bodyNumbers = editorial.sections.flatMap((section) => section.paragraphs.flatMap((paragraph) => extractNumbers(paragraph.text)));
+  const takeawaysOnlySummarize = !requiresAiReview || editorial.takeaways.every((takeaway) => (
+    extractNumbers(takeaway.text).every((value) => bodyNumbers.some((candidate) => numbersMatch(candidate, value)))
+  ));
   const knownPlayerIds = new Set(players.map((player) => player.playerId));
   const plannedInsightById = new Map(analysisPlan.rankedInsights.map((insight) => [insight.id, insight]));
   const graphicPlanReady = !requiresAiReview || analysisPlan.graphics.every((graphic) => (
@@ -1608,6 +1628,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /קיבל(?:ה|ו)?[^.]{0,80}יותר\s+איומים/,
     /נתיב(?:ים|י|י־|ה)?/,
     /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/,
+    /מצב של המשחק/,
+    /מאזני בעיטות/,
     /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
   ];
   const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
@@ -1640,6 +1662,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["plan-followed", "הכתבה עוקבת אחר התזה והקשת הסיפורית", planFollowed, `${sectionInsightIds.length} שיוכי תובנה נבדקו`],
     ["game-state-story", "מצב המשחק מקבל משקל לפני המספרים המצטברים", gameStateStoryPassed, gameStateContext.rawShotTotalsNeedGameStateContext ? "נתוני הבעיטות דורשים הקשר באחד מ-2 הסעיפים הראשונים" : "לא זוהה עיוות מהותי בסכומי הבעיטות"],
     ["number-discipline", "המספרים תומכים בסיפור ואינם מחליפים אותו", disciplinedNumbers, `מספרים בפסקאות: ${paragraphNumbers.join(", ")}`],
+    ["takeaways-summarize", "התקציר אינו מציג מספרים חדשים", takeawaysOnlySummarize, "כל מספר בתקציר הופיע קודם בגוף הכתבה"],
     ["graphic-plan", "הגרפיקות נבחרו עבור תובנות ושחקנים קיימים", graphicPlanReady, `${analysisPlan.graphics.length} גרפיקות מתוכננות`],
     ["structured-evidence-context", "ראיות הניתוח כוללות שמות מדדים וקבוצות", structuredEvidenceReady, `${structuredEvidenceIds.length} חבילות ראיות מובנות נבדקו`],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
@@ -1780,9 +1803,19 @@ async function main() {
     gameStateContext,
   );
   const usedAi = !args.noAi;
-  const analysisResult = usedAi
-    ? await generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext)
-    : { plan: fixtureAnalysisPlan(insightCandidates), model: null };
+  let analysisResult = { plan: fixtureAnalysisPlan(insightCandidates), model: null };
+  if (usedAi) {
+    let analysisFeedback = [];
+    for (let attempt = 1; attempt <= MAX_ANALYSIS_ATTEMPTS; attempt += 1) {
+      analysisResult = await generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext, analysisFeedback);
+      analysisFeedback = validateAnalysisPlan(analysisResult.plan, evidence, insightCandidates, gameStateContext, players, historicalContext);
+      console.log(JSON.stringify({ analysisAttempt: attempt, status: analysisFeedback.length ? "failed" : "passed", issues: analysisFeedback }, null, 2));
+      if (!analysisFeedback.length) break;
+    }
+    if (analysisFeedback.length) {
+      throw new Error(`Analysis plan rejected after ${MAX_ANALYSIS_ATTEMPTS} attempts:\n${analysisFeedback.map((issue) => `- ${issue}`).join("\n")}`);
+    }
+  }
   const analysisPlan = analysisResult.plan;
   const draftEditorial = usedAi
     ? await generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext)
@@ -1809,6 +1842,7 @@ async function main() {
         checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, true, analysisPlan, insightCandidates, gameStateContext);
         failedChecks = checks.filter((check) => check.status === "failed");
         if (failedChecks.length === 0) break;
+        console.log(JSON.stringify({ deterministicAttempt: attempt, failedChecks }, null, 2));
         currentFeedback = failedChecks.map((check) => `בדיקה דטרמיניסטית נכשלה — ${check.label}: ${check.detail}`);
       } else {
         currentFeedback = qualityReview.issues;

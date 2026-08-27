@@ -23,6 +23,8 @@ function scoreAtMinute(timelineEvents, homeTeamId, awayTeamId, minute) {
 export function buildGameStateContext(shots, timelineEvents, home, away) {
   const homeTotal = shotSummary(shots, home.teamId);
   const awayTotal = shotSummary(shots, away.teamId);
+  homeTotal.expectedGoals = round(home.stats?.team_expected_goals ?? homeTotal.expectedGoals);
+  awayTotal.expectedGoals = round(away.stats?.team_expected_goals ?? awayTotal.expectedGoals);
   const materialEvents = timelineEvents
     .filter((event) => event.type === "Red Card")
     .sort((left, right) => left.minute - right.minute)
