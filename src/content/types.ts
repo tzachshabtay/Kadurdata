@@ -196,10 +196,27 @@ export type ArticleHistoricalTeam = {
 
 export type ArticleHistoricalPlayerMetric = {
   current: number | null;
+  currentPer90: number | null;
   previousTotal: number;
   previousPer90: number | null;
+  previousStdDevPer90: number | null;
+  deltaPer90: number | null;
+  changePercent: number | null;
   sampleSize: number;
   minutesWithMetric: number;
+};
+
+export type ArticleHistoricalPlayerChange = {
+  metricCode: string;
+  labelHe: string;
+  current: number;
+  currentPer90: number;
+  previousPer90: number;
+  previousStdDevPer90: number;
+  deltaPer90: number;
+  changePercent: number;
+  zScore: number | null;
+  sampleSize: number;
 };
 
 export type ArticleHistoricalPlayer = {
@@ -209,6 +226,20 @@ export type ArticleHistoricalPlayer = {
   appearanceCount: number;
   totalMinutes: number;
   metrics: Record<string, ArticleHistoricalPlayerMetric>;
+  notableChanges: ArticleHistoricalPlayerChange[];
+};
+
+export type ArticleEditorialReview = {
+  mode: string;
+  model: string | null;
+  status: "passed" | "failed";
+  checks: {
+    naturalHebrew: boolean;
+    numericClarity: boolean;
+    cohesiveNarrative: boolean;
+    highVolumeComparisonsOnly: boolean;
+  };
+  notes: string[];
 };
 
 export type ArticleHistoricalContext = {
@@ -251,6 +282,7 @@ export type ContentArticle = {
   actualPlayTime: { actual: string | null; total: string | null } | null;
   historicalContext: ArticleHistoricalContext;
   shots: ArticleShot[];
+  editorialReview: ArticleEditorialReview;
   editorial: {
     headline: string;
     headlineEvidenceIds: string[];

@@ -26,6 +26,7 @@ jobs:
       VITE_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ vars.CONTENT_OPENAI_MODEL || 'gpt-5-mini' }}
+      OPENAI_EDITOR_MODEL: ${{ vars.CONTENT_OPENAI_EDITOR_MODEL || vars.CONTENT_OPENAI_MODEL || 'gpt-5-mini' }}
       MATCH_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.match_id || '' }}
 
     steps:

@@ -105,11 +105,12 @@ The Hebrew-only `בלוג` tab reads fact-checked article packages from
 `src/content/generated/`. Each match review is built in five stages:
 
 1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
-2. Compare both teams and notable players with up to five preceding matches across competitions.
+2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
 3. Derive time-window flow and spatial-team profiles, then convert current and historical data into a grounded evidence bundle.
 4. Ask the OpenAI Responses API for one cohesive Hebrew narrative whose claims cite evidence IDs.
-5. Reject the draft if a score, event total, xG cross-check, historical date, evidence link, tag set, or numeric claim fails.
-6. Publish the JSON package with Hebrew team, player, and `סיכום משחק` tags; Vite discovers it automatically and adds it to the filterable blog archive.
+5. Run a separate senior-editor pass for idiomatic Hebrew, numerical clarity, narrative flow, and misuse of small samples.
+6. Reject the draft if the editorial review, score, event total, xG cross-check, historical date, evidence link, tag set, or numeric claim fails.
+7. Publish the JSON package with Hebrew team, player, and `סיכום משחק` tags; Vite discovers it automatically and adds it to the filterable blog archive.
 
 Generate the latest eligible match with AI:
 
@@ -119,7 +120,7 @@ npm run content:validate
 npm run build
 ```
 
-Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in `.env`. The checked-in sample
+Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` and `OPENAI_EDITOR_MODEL` in `.env`. The checked-in sample
 can be rebuilt without an API request with `npm run content:generate:sample`.
 
 `.github/workflows/generate-content.yml` runs on Monday and Thursday, skips a match

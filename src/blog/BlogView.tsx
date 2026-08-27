@@ -72,7 +72,6 @@ function MatchFlowGraphic({ article }: { article: ContentArticle }) {
   return (
     <figure className="story-graphic match-flow-graphic">
       <figcaption>
-        <span>גרפיקה 01</span>
         <div><strong>זרימת המשחק: האיום הגיע בגלים</strong><small>xG ובעיטות בכל חלון של 15 דקות · אירועי המפתח מתחת</small></div>
       </figcaption>
       <div className="flow-legend">
@@ -124,7 +123,6 @@ function HistoricalComparisonGraphic({ article }: { article: ContentArticle }) {
   return (
     <figure className="story-graphic history-comparison-graphic">
       <figcaption>
-        <span>גרפיקה 02</span>
         <div><strong>מה השתנה לעומת 5 המשחקים הקודמים?</strong><small>בהיר: המשחק הנוכחי · כהה: הממוצע הקודם בכל המסגרות</small></div>
       </figcaption>
       <div className="history-comparison-grid">
@@ -158,8 +156,6 @@ function HistoricalComparisonGraphic({ article }: { article: ContentArticle }) {
 function DorSpotlight({ article }: { article: ContentArticle }) {
   const player = article.playerSpotlight.find((item) => item.name === "Dor Peretz");
   if (!player) return null;
-  const history = article.historicalContext.players.find((item) => item.playerId === player.playerId);
-  const previousGoals = history?.metrics.goals?.previousTotal ?? 0;
   const teamGoals = article.teams.away.score;
   const share = Math.round((Number(player.metrics.goals) / teamGoals) * 100);
   return (
@@ -170,10 +166,10 @@ function DorSpotlight({ article }: { article: ContentArticle }) {
       <div className="spotlight-copy">
         <span className="spotlight-kicker">שחקן המשחק</span>
         <h3>דור פרץ</h3>
-        <p>לפני המשחק: {numeric(previousGoals)} שערים ב־{history?.totalMinutes ?? 0} דקות. הפעם: שלושער ב־{player.minutes} דקות, מתוך 4 בעיטות למסגרת.</p>
+        <p>פרץ בעט 4 פעמים, כולן למסגרת. המצבים שמהם בעט היו שווים יחד {numeric(player.metrics.expected_goals, 2)} xG, והוא כבש 3 שערים.</p>
         <div className="spotlight-stats">
           <span><strong>{player.metrics.goals}</strong><small>שערים במשחק</small></span>
-          <span><strong>{numeric(previousGoals)}</strong><small>ב־5 הקודמים</small></span>
+          <span><strong>{player.metrics.total_shots}</strong><small>בעיטות</small></span>
           <span><strong>{numeric(player.metrics.expected_goals, 2)}</strong><small>xG במשחק</small></span>
           <span><strong>{numeric(player.metrics.rating_365, 1)}</strong><small>ציון</small></span>
         </div>
@@ -187,7 +183,6 @@ function ShotMap({ article }: { article: ContentArticle }) {
   return (
     <figure className="story-graphic shot-map-graphic">
       <figcaption>
-        <span>גרפיקה 03</span>
         <div><strong>מפת הבעיטות: הגודל הוא הסיכוי</strong><small>{article.shots.length} בעיטות · כל הנקודות מכוונות לאותו שער להשוואה</small></div>
       </figcaption>
       <div className="article-shot-layout">
@@ -252,7 +247,6 @@ function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
   return (
     <figure className="story-graphic tactical-heatmap-graphic">
       <figcaption>
-        <span>גרפיקה 04</span>
         <div><strong>איפה נוצרה הצפיפות</strong><small>מפות החום המאוחדות של שחקני ההרכב · שתי הקבוצות תוקפות לאותו כיוון</small></div>
       </figcaption>
       <div className={`tactical-heatmap-grid${loaded ? " loaded" : ""}`} dir="ltr">
@@ -264,7 +258,7 @@ function TacticalHeatmapGraphic({ article }: { article: ContentArticle }) {
 }
 
 function FactCheckPanel({ article }: { article: ContentArticle }) {
-  const visibleCheckIds = ["score-vs-events", "xg-home", "history-order", "article-tags", "evidence-links", "numeric-claims"];
+  const visibleCheckIds = ["score-vs-events", "history-order", "historical-player-volume", "editorial-review", "evidence-links", "numeric-claims"];
   const visibleChecks = visibleCheckIds
     .map((id) => article.factCheck.checks.find((check) => check.id === id))
     .filter((check): check is ContentArticle["factCheck"]["checks"][number] => Boolean(check));
@@ -360,7 +354,6 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           {editorial.sections.map((section, index) => (
             <div className="story-section-group" key={section.heading}>
               <section className="story-copy-section">
-                <span className="section-number">0{index + 1}</span>
                 <h2>{section.heading}</h2>
                 {section.paragraphs.map((paragraph) => <p key={paragraph.text}>{paragraph.text}</p>)}
               </section>

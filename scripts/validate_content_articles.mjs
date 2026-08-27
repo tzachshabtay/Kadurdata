@@ -34,6 +34,9 @@ function validateArticle(article, filename) {
   if (article.status !== "published") fail("generated article is not published");
   if (article.factCheck?.status !== "passed") fail("fact-check status is not passed");
   if (article.factCheck?.checks?.some((check) => check.status !== "passed")) fail("one or more stored fact checks failed");
+  if (article.editorialReview?.status !== "passed" || !Object.values(article.editorialReview?.checks ?? {}).every(Boolean)) {
+    fail("Hebrew editorial review is missing or failed");
+  }
   if (!article.historicalContext) fail("historical comparison context is missing");
   if (!article.tags?.some((tag) => tag.id === "topic:match-summary")) fail("match-summary tag is missing");
   if ((article.tags ?? []).filter((tag) => tag.kind === "team").length !== 2) fail("article must include both team tags");
@@ -55,13 +58,26 @@ function validateArticle(article, filename) {
   }
 
   const evidenceById = new Map(article.evidence.map((item) => [item.id, item]));
+  const historicalPlayerByEvidenceId = new Map((article.historicalContext?.players ?? []).map((player) => [
+    `history.player.${player.playerId}`,
+    player,
+  ]));
   for (const claim of claims(article)) {
     if (!claim.evidenceIds?.length) fail(`claim has no evidence: ${claim.text}`);
     const allowed = claim.evidenceIds.flatMap((id) => evidenceById.get(id)?.values ?? []);
     for (const id of claim.evidenceIds) if (!evidenceById.has(id)) fail(`unknown evidence ID ${id}`);
+    for (const id of claim.evidenceIds) {
+      if (id.startsWith("history.player.") && !(historicalPlayerByEvidenceId.get(id)?.notableChanges?.length > 0)) {
+        fail(`weak historical player comparison: ${claim.text}`);
+      }
+    }
     for (const value of extractNumbers(claim.text)) {
       if (!allowed.some((candidate) => numbersMatch(candidate, value))) fail(`unsupported number ${value}: ${claim.text}`);
     }
+  }
+  const editorialCopy = claims(article).map((claim) => claim.text).join(" ");
+  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /xG\s*;/]) {
+    if (pattern.test(editorialCopy)) fail(`editorial copy contains a blocked phrasing pattern: ${pattern}`);
   }
   return failures;
 }

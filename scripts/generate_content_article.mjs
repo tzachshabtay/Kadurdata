@@ -25,15 +25,39 @@ const HISTORICAL_TEAM_METRICS = [
   "team_backward_passes",
 ];
 const HISTORICAL_PLAYER_METRICS = [
-  "goals",
-  "assists",
-  "expected_goals",
-  "expected_assists",
-  "total_shots",
-  "shots_on_target",
-  "key_passes",
-  "rating_365",
+  "touches",
+  "passes_attempted",
+  "passes_completed",
+  "passes_into_final_third",
+  "backward_passes",
+  "possession_lost",
+  "ball_recovery",
+  "ground_duels_attempted",
+  "ground_duels_won",
+  "aerial_duels_attempted",
+  "aerial_duels_won",
+  "interceptions",
+  "clearances",
+  "was_fouled",
+  "fouls_made",
 ];
+const VOLUME_METRIC_RULES = {
+  touches: { labelHe: "נגיעות בכדור", minBaselineTotal: 120, minDeltaPer90: 12 },
+  passes_attempted: { labelHe: "ניסיונות מסירה", minBaselineTotal: 100, minDeltaPer90: 10 },
+  passes_completed: { labelHe: "מסירות מדויקות", minBaselineTotal: 80, minDeltaPer90: 9 },
+  passes_into_final_third: { labelHe: "מסירות לשליש האחרון", minBaselineTotal: 20, minDeltaPer90: 3 },
+  backward_passes: { labelHe: "מסירות לאחור", minBaselineTotal: 30, minDeltaPer90: 4 },
+  possession_lost: { labelHe: "איבודי כדור", minBaselineTotal: 35, minDeltaPer90: 4 },
+  ball_recovery: { labelHe: "חילוצי כדור", minBaselineTotal: 18, minDeltaPer90: 2.5 },
+  ground_duels_attempted: { labelHe: "מאבקי קרקע", minBaselineTotal: 24, minDeltaPer90: 3 },
+  ground_duels_won: { labelHe: "מאבקי קרקע מוצלחים", minBaselineTotal: 12, minDeltaPer90: 2 },
+  aerial_duels_attempted: { labelHe: "מאבקי אוויר", minBaselineTotal: 12, minDeltaPer90: 2 },
+  aerial_duels_won: { labelHe: "מאבקי אוויר מוצלחים", minBaselineTotal: 7, minDeltaPer90: 1.5 },
+  interceptions: { labelHe: "חטיפות", minBaselineTotal: 8, minDeltaPer90: 1.5 },
+  clearances: { labelHe: "הרחקות", minBaselineTotal: 12, minDeltaPer90: 2 },
+  was_fouled: { labelHe: "עבירות שסחט", minBaselineTotal: 8, minDeltaPer90: 1.5 },
+  fouls_made: { labelHe: "עבירות שביצע", minBaselineTotal: 8, minDeltaPer90: 1.5 },
+};
 
 async function loadLocalEnv() {
   try {
@@ -203,7 +227,7 @@ async function fetchHistoricalPlayerDataset(client, match, players) {
       .lt("scheduled_at", match.scheduled_at)
       .in("metric_code", HISTORICAL_PLAYER_METRICS)
       .order("scheduled_at", { ascending: false })
-      .limit(400);
+      .limit(1000);
     if (result.error) throw new Error(`Historical player stats failed for ${player.name}/${player.playerId}: ${result.error.message}`);
     return { playerId: player.playerId, rows: result.data ?? [] };
   });
@@ -256,11 +280,10 @@ function historicalPlayerSnapshots(players, playerDataset) {
   for (const playerHistory of playerDataset) {
     const appearances = new Map();
     for (const row of playerHistory.rows) {
-      if (!appearances.has(row.match_id) && appearances.size >= HISTORICAL_WINDOW) continue;
       const appearance = appearances.get(row.match_id) ?? {
-          matchId: row.match_id,
-          minutes: numberValue(row.minutes_played) ?? 0,
-          metrics: {},
+        matchId: row.match_id,
+        minutes: numberValue(row.minutes_played) ?? 0,
+        metrics: {},
       };
       appearance.metrics[row.metric_code] = numberValue(row.value_numeric);
       appearances.set(row.match_id, appearance);
@@ -270,27 +293,82 @@ function historicalPlayerSnapshots(players, playerDataset) {
 
   return players.map((player) => {
     const appearances = [...(appearancesByPlayer.get(player.playerId)?.values() ?? [])];
+    const recentAppearances = appearances.slice(0, HISTORICAL_WINDOW);
     const metrics = {};
     for (const metricCode of HISTORICAL_PLAYER_METRICS) {
-      const withMetric = appearances.filter((appearance) => appearance.metrics[metricCode] !== undefined && appearance.metrics[metricCode] !== null);
+      const withMetric = appearances
+        .filter((appearance) => appearance.metrics[metricCode] !== undefined && appearance.metrics[metricCode] !== null)
+        .slice(0, HISTORICAL_WINDOW);
       if (!withMetric.length) continue;
       const previousTotal = round(withMetric.reduce((sum, appearance) => sum + Number(appearance.metrics[metricCode]), 0));
       const minutesWithMetric = withMetric.reduce((sum, appearance) => sum + Number(appearance.minutes ?? 0), 0);
+      const previousPer90 = minutesWithMetric > 0 ? round(previousTotal * 90 / minutesWithMetric) : null;
+      const per90Values = withMetric
+        .filter((appearance) => Number(appearance.minutes ?? 0) > 0)
+        .map((appearance) => Number(appearance.metrics[metricCode]) * 90 / Number(appearance.minutes));
+      const per90Mean = per90Values.length
+        ? per90Values.reduce((sum, value) => sum + value, 0) / per90Values.length
+        : null;
+      const previousStdDevPer90 = per90Mean === null ? null : round(Math.sqrt(
+        per90Values.reduce((sum, value) => sum + (value - per90Mean) ** 2, 0) / per90Values.length,
+      ));
+      const current = numberValue(player.metrics[metricCode]);
+      const currentPer90 = current === null || !player.minutes ? null : round(current * 90 / player.minutes);
+      const deltaPer90 = currentPer90 === null || previousPer90 === null ? null : round(currentPer90 - previousPer90);
+      const changePercent = deltaPer90 === null || previousPer90 === null || previousPer90 === 0
+        ? null
+        : round(deltaPer90 * 100 / previousPer90);
       metrics[metricCode] = {
-        current: numberValue(player.metrics[metricCode]),
+        current,
+        currentPer90,
         previousTotal,
-        previousPer90: minutesWithMetric > 0 ? round(previousTotal * 90 / minutesWithMetric) : null,
+        previousPer90,
+        previousStdDevPer90,
+        deltaPer90,
+        changePercent,
         sampleSize: withMetric.length,
         minutesWithMetric,
       };
     }
+    const notableChanges = Object.entries(metrics).flatMap(([metricCode, metric]) => {
+      const rule = VOLUME_METRIC_RULES[metricCode];
+      if (!rule
+        || metric.sampleSize < 3
+        || metric.previousTotal < rule.minBaselineTotal
+        || metric.current === null
+        || metric.currentPer90 === null
+        || metric.previousPer90 === null
+        || metric.previousStdDevPer90 === null
+        || metric.deltaPer90 === null
+        || metric.changePercent === null
+        || Number(player.minutes ?? 0) < 45
+        || Math.abs(metric.deltaPer90) < rule.minDeltaPer90
+        || Math.abs(metric.changePercent) < 25) return [];
+      const zScore = metric.previousStdDevPer90 >= 0.25
+        ? round(metric.deltaPer90 / metric.previousStdDevPer90, 1)
+        : null;
+      if (zScore !== null && Math.abs(zScore) < 1.5) return [];
+      return [{
+        metricCode,
+        labelHe: rule.labelHe,
+        current: metric.current,
+        currentPer90: metric.currentPer90,
+        previousPer90: metric.previousPer90,
+        previousStdDevPer90: metric.previousStdDevPer90,
+        deltaPer90: metric.deltaPer90,
+        changePercent: metric.changePercent,
+        zScore,
+        sampleSize: metric.sampleSize,
+      }];
+    }).sort((left, right) => Math.abs(right.zScore ?? right.changePercent) - Math.abs(left.zScore ?? left.changePercent)).slice(0, 3);
     return {
       playerId: player.playerId,
       nameHe: player.nameHe,
       teamId: player.teamId,
-      appearanceCount: appearances.length,
-      totalMinutes: appearances.reduce((sum, appearance) => sum + Number(appearance.minutes ?? 0), 0),
+      appearanceCount: recentAppearances.length,
+      totalMinutes: recentAppearances.reduce((sum, appearance) => sum + Number(appearance.minutes ?? 0), 0),
       metrics,
+      notableChanges,
     };
   }).filter((player) => player.appearanceCount > 0);
 }
@@ -519,10 +597,29 @@ function historicalTeamEvidenceValues(team) {
 
 function historicalPlayerEvidenceValues(player) {
   return [
+    90,
     player.appearanceCount,
     player.totalMinutes,
     ...Object.values(player.metrics).flatMap((metric) => [
-      metric.current, metric.previousTotal, metric.previousPer90, metric.sampleSize, metric.minutesWithMetric,
+      metric.current,
+      metric.currentPer90,
+      metric.previousTotal,
+      metric.previousPer90,
+      metric.previousStdDevPer90,
+      metric.deltaPer90,
+      metric.changePercent,
+      metric.sampleSize,
+      metric.minutesWithMetric,
+    ]),
+    ...player.notableChanges.flatMap((change) => [
+      change.current,
+      change.currentPer90,
+      change.previousPer90,
+      change.previousStdDevPer90,
+      change.deltaPer90,
+      change.changePercent,
+      change.zScore,
+      change.sampleSize,
     ]),
   ];
 }
@@ -667,7 +764,7 @@ function fallbackEditorial(match, home, away) {
   return {
     headline: "פחות כדור, יותר איום: מכבי מצאה את דור פרץ בדיוק בזמן",
     headlineEvidenceIds: ["history.team.away", "player.dor_peretz", "heatmap.spatial_profile"],
-    dek: "מול הפועל ירושלים, מכבי תל אביב נראתה אחרת מ־5 משחקיה הקודמים: ההחזקה ירדה, הבעיטות זינקו, והצד הימני הוביל את דור פרץ לשלושער. ה־5:2 לא היה סיפור של שליטה רציפה, אלא של 2 גלי איום חדים.",
+    dek: "מול הפועל ירושלים, מכבי תל אביב נראתה אחרת מ־5 משחקיה הקודמים: ההחזקה ירדה, הבעיטות זינקו, והמשחק דרך צד ימין סידר לדור פרץ את המצבים לשלושער. ה־5:2 לא נולד משליטה רציפה, אלא מ־2 פרקי זמן שבהם מכבי תקפה בחדות.",
     dekEvidenceIds: ["history.team.away", "match.result", "flow.shot_windows", "player.dor_peretz", "heatmap.spatial_profile"],
     sections: [
       {
@@ -678,7 +775,7 @@ function fallbackEditorial(match, home, away) {
             evidenceIds: ["match.opening_goal", "flow.shot_windows", "timeline.goals"],
           },
           {
-            text: "הגל הראשון הגיע בדקות 31–45, עם 4 בעיטות ו־1.38 xG מול 0 בעיטות של הפועל. השני, בדקות 61–75, כבר סגר את הערב: 5 בעיטות, 1.58 xG ו־3 שערים. בין הגלים המשחק נשאר תחרותי; בתוכם, מכבי הייתה קטלנית.",
+            text: "הגל הראשון הגיע בדקות 31–45, עם 4 בעיטות ו־1.38 xG מול 0 בעיטות של הפועל. השני, בדקות 61–75, כבר סגר את הערב: 5 בעיטות, 1.58 xG ו־3 שערים. בין שני פרקי הזמן האלה המשחק נשאר תחרותי, אבל בתוכם מכבי הייתה קטלנית.",
             evidenceIds: ["flow.shot_windows"],
           },
         ],
@@ -691,34 +788,34 @@ function fallbackEditorial(match, home, away) {
             evidenceIds: ["history.team.away"],
           },
           {
-            text: "אצל הפועל השינוי היה קטן בהרבה: 49% החזקה מול ממוצע קודם של 47.4%, 16 בעיטות מול 13 ו־5 למסגרת מול 5.4. היא לא איבדה את המשחק מפני שנעלמה בהתקפה; מכבי פשוט הפכה נפח דומה למצבים טובים בהרבה — 3.56 xG מול 1.27.",
+            text: "אצל הפועל השינוי היה קטן בהרבה: 49% החזקה מול ממוצע קודם של 47.4%, 16 בעיטות מול 13 ו־5 למסגרת מול 5.4. היא הגיעה לכמות בעיטות רגילה יחסית. ההבדל היה באיכות המצבים: מכבי יצרה 3.56 xG לעומת 1.27 של הפועל.",
             evidenceIds: ["history.team.home", "team.quality"],
           },
         ],
       },
       {
-        heading: "דור פרץ הפך מחריגה לסיפור",
+        heading: "דור פרץ הגיע שוב ושוב למקום הנכון",
         paragraphs: [
           {
-            text: "ב־5 המשחקים הקודמים דור פרץ כבש שער אחד ב־450 דקות. מול הפועל הוא כבש 3 ב־75 דקות. זו קפיצה חריגה בתפוקה, אבל המשחק עצמו מסביר למה היא לא הייתה מקרית לגמרי: פרץ היה שחקן השדה הקדמי ביותר של מכבי במפה המרחבית.",
-            evidenceIds: ["history.player.b6a41010-aafc-4cdc-983e-8e64d0dd852c", "player.dor_peretz", "heatmap.spatial_profile"],
+            text: "מפת החום מציבה את דור פרץ כשחקן השדה הקדמי ביותר של מכבי. הוא לא נשאר מאחור כדי לנהל את המשחק, אלא נכנס שוב ושוב לאזורים שמהם אפשר לסיים התקפה. המיקום הזה מסביר מדוע כל כך הרבה מהמצבים הטובים של מכבי הגיעו דווקא אליו.",
+            evidenceIds: ["player.dor_peretz", "heatmap.spatial_profile"],
           },
           {
-            text: "4 הבעיטות שלו הלכו למסגרת והצטברו ל־2.50 xG; 3 מהן הסתיימו בשער. השלושער, אם כך, היה גם ערב סיום נהדר וגם תוצאה של תפקיד התקפי שהוביל שוב ושוב לאזור המסוכן ביותר.",
+            text: "פרץ בעט 4 פעמים, וכל הבעיטות שלו הלכו למסגרת. המצבים שמהם בעט היו שווים יחד 2.50 xG, והוא ניצל 3 מתוך 4 הבעיטות כדי לכבוש שלושער. זו הייתה גם יכולת סיום מצוינת וגם תוצאה של הגעה עקבית למצבים באיכות גבוהה.",
             evidenceIds: ["player.dor_peretz", "heatmap.spatial_profile"],
           },
         ],
       },
       {
-        heading: "המספרים של הפועל קיבלו דחיפה מאוחרת",
+        heading: "הפועל צברה את רוב האיום שלה אחרי האדום",
         paragraphs: [
           {
-            text: "במחצית הפועל החליפה את זוברו שראני, שחקן הגנה, באוהד אלמגור, שחקן התקפה. זה היה ניסיון ברור לפתוח את המבנה, אבל בדקות 46–60 הוא הניב 3 בעיטות בשווי 0.14 xG בלבד. הכמות עלתה לפני שהאיכות הגיעה.",
+            text: "במחצית הפועל הוציאה את זוברו שראני, שחקן הגנה, והכניסה את אוהד אלמגור, שחקן התקפה. החילוף סימן מעבר למבנה התקפי יותר, אבל בדקות 46–60 הפועל ייצרה 3 בעיטות בשווי 0.14 xG בלבד. הכמות עלתה לפני שהאיכות הגיעה.",
             evidenceIds: ["timeline.match_events", "flow.shot_windows", "heatmap.spatial_profile"],
           },
           {
-            text: "רק אחרי הכרטיס האדום לאופק מליקה בדקה 77 נוצר לחץ רציף: בחלון 76–90 הפועל רשמה 9 בעיטות ו־0.68 xG, מול בעיטה אחת ו־0.14 xG של מכבי, וגם כבשה בדקה 90. כך נולדה אשליית השוויון בנפח הבעיטות — חלק גדול ממנו הגיע כשהמשחק כבר הוכרע ומכבי הייתה בחיסרון מספרי.",
-            evidenceIds: ["timeline.match_events", "flow.shot_windows", "flow.after_red"],
+            text: "רק אחרי הכרטיס האדום לאופק מליקה בדקה 77 נוצר לחץ רציף: בחלון 76–90 הפועל רשמה 9 בעיטות ו־0.68 xG, מול בעיטה אחת ו־0.14 xG של מכבי, וגם כבשה בדקה 90. לכן הנתון הסופי, 17–16 בבעיטות, מעט מטעה: חלק גדול מהבעיטות של הפועל הגיע כשהמשחק כבר הוכרע ומכבי הייתה בחיסרון מספרי.",
+            evidenceIds: ["timeline.match_events", "flow.shot_windows", "flow.after_red", "team.volume"],
           },
         ],
       },
@@ -730,18 +827,18 @@ function fallbackEditorial(match, home, away) {
             evidenceIds: ["heatmap.spatial_profile"],
           },
           {
-            text: "גם ההיסטוריה הקצרה שלהם מוסיפה הקשר: ב־5 המשחקים הקודמים דוידה סיפק 2 בישולים ובן הרוש 0; הפעם שניהם סיימו עם בישול אחד. יחד הם הוסיפו 4 מסירות מפתח ו־1.00 xA — בדיוק מעטפת היצירה שפרץ היה צריך כדי להפוך תנועה לעומק לשלושער.",
-            evidenceIds: ["history.player.d331b8fc-d76c-4f8c-8a13-19e329c9b67a", "history.player.ff574781-01f2-4586-86c8-e7c7620f2496", "player.right_triangle", "player.dor_peretz", "heatmap.spatial_profile"],
+            text: "אצל דוידה השינוי בולט גם מול העבר הקרוב. הוא נגע בכדור 39 פעמים, לעומת 66.4 נגיעות ל־90 דקות ב־5 הופעות ההשוואה. ובכל זאת, הוא מסר 2 מסירות מפתח, בישל שער, והמסירות שלו יצרו 0.59 בישולים צפויים. פחות נגיעות, ובכל זאת תרומה ישירה ליצירת המצבים של מכבי.",
+            evidenceIds: ["history.player.d331b8fc-d76c-4f8c-8a13-19e329c9b67a", "player.right_triangle", "history.team.away", "heatmap.spatial_profile"],
           },
         ],
       },
     ],
     takeaways: [
       { text: "מכבי עלתה מ־10.6 בעיטות בממוצע ל־17, אף שההחזקה ירדה ל־51%.", evidenceIds: ["history.team.away"] },
-      { text: "דור פרץ עבר משער אחד ב־450 דקות קודמות ל־3 שערים ב־75 דקות.", evidenceIds: ["history.player.b6a41010-aafc-4cdc-983e-8e64d0dd852c", "player.dor_peretz"] },
+      { text: "דור פרץ בעט 4 פעמים, כולן למסגרת, והמצבים שלו הסתכמו ב־2.50 xG.", evidenceIds: ["player.dor_peretz"] },
       { text: "9 מבעיטות הפועל הגיעו אחרי האדום בדקה 77.", evidenceIds: ["flow.after_red"] },
     ],
-    conclusion: "מכבי לא ניצחה מפני ששיחקה יותר מאותו הדבר. היא ניצחה מפני ששיחקה אחרת: פחות החזקה, יותר חדירה, צד ימין מתואם ודור פרץ בעמדה שבה כל תנועה שלו איימה להפוך לשער.",
+    conclusion: "מכבי לא ניצחה מפני ששיחקה יותר מאותו הדבר. היא ניצחה מפני ששיחקה אחרת: פחות החזקה, יותר חדירה, תיאום טוב בצד ימין ודור פרץ שקיבל שוב ושוב את הכדור במקום שממנו אפשר לכבוש.",
     conclusionEvidenceIds: ["history.team.away", "heatmap.spatial_profile", "player.right_triangle", "player.dor_peretz"],
   };
 }
@@ -801,6 +898,33 @@ const editorialSchema = {
   required: ["headline", "headlineEvidenceIds", "dek", "dekEvidenceIds", "sections", "takeaways", "conclusion", "conclusionEvidenceIds"],
 };
 
+const editorialReviewResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    editorial: editorialSchema,
+    checks: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        naturalHebrew: { type: "boolean" },
+        numericClarity: { type: "boolean" },
+        cohesiveNarrative: { type: "boolean" },
+        highVolumeComparisonsOnly: { type: "boolean" },
+      },
+      required: ["naturalHebrew", "numericClarity", "cohesiveNarrative", "highVolumeComparisonsOnly"],
+    },
+    notes: { type: "array", items: { type: "string" }, maxItems: 6 },
+  },
+  required: ["editorial", "checks", "notes"],
+};
+
+function responseOutputText(payload) {
+  return payload.output_text ?? payload.output
+    ?.flatMap((item) => item.content ?? [])
+    .find((item) => item.type === "output_text")?.text;
+}
+
 async function generateEditorialWithAi(match, evidence, historicalContext) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -820,7 +944,7 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
         "בנה לכתבה תזה אחת כבר בכותרת ובפתיח, והתקדם איתה מסעיף לסעיף. כל פסקה צריכה להוסיף שלב לסיפור, לא להתחיל ניתוח חדש.",
         "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומרשימות נתונים שאינן מקדמות את הטענה המרכזית.",
         "השווה כל קבוצה לעד 5 משחקיה הקודמים בכל המסגרות. ציין במפורש את גודל המדגם, השתמש רק במדדים עם sampleSize, והצג את ההשוואה כהקשר ולא כהוכחה מוחלטת לשינוי טקטי.",
-        "חפש אצל שחקנים חריגה בעלת משמעות לעומת הופעותיהם הקודמות: תפוקה, נפח, איכות או תפקיד. קשר אותה למבנה הקבוצתי רק אם נתוני המשחק ומפות החום תומכים בכך.",
+        "השוואה היסטורית של שחקן מותרת רק מתוך notableChanges: אלה מדדי נפח עם לפחות 3 משחקי בסיס וחריגה מספקת. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה סטטיסטית.",
         "הזכר בשם לפחות שחקן אחד שיש לו ראיות משמעותיות, כדי שהכתבה תוכל לקבל תגית שחקן שימושית.",
         "הסבר את זרימת המשחק דרך חלונות הבעיטות ואירועי המשחק, והבדל בין מה שקרה לפני ואחרי חילופים או כרטיסים.",
         "השתמש בפרופיל המרחבי ממפות החום כדי לזהות מבנה, רוחב, חצי־מרחבים ועומס מקומי. אל תכתוב הסבר מתודולוגי על מפות החום ואל תצטט לקורא קואורדינטות טכניות.",
@@ -848,11 +972,88 @@ async function generateEditorialWithAi(match, evidence, historicalContext) {
   });
   if (!response.ok) throw new Error(`OpenAI Responses API failed (${response.status}): ${await response.text()}`);
   const payload = await response.json();
-  const outputText = payload.output_text ?? payload.output
-    ?.flatMap((item) => item.content ?? [])
-    .find((item) => item.type === "output_text")?.text;
+  const outputText = responseOutputText(payload);
   if (!outputText) throw new Error("The model returned no structured editorial output.");
   return JSON.parse(outputText);
+}
+
+async function editEditorialWithAi(match, evidence, historicalContext, draft) {
+  const model = process.env.OPENAI_EDITOR_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5-mini";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      store: false,
+      instructions: [
+        "אתה העורך הראשי של מדור כדורגל ישראלי. קיבלת טיוטה שכבר נכתבה; תפקידך לערוך אותה, לא רק לאשר אותה.",
+        "כתוב עברית ישראלית טבעית שאפשר לשמוע ולקרוא במדור ספורט מקצועי. תקן תרגומי־מכונה, צירופים שאינם מקובלים, כותרות עמומות, מטפורות מאולצות וכינויי גוף שאין להם מושא ברור.",
+        "ודא שכל רצף מספרי מובן מיד: כתוב מה נמדד, מהו הסכום, ומה קרה בפועל. אל תצמיד מספר ל-xG ולמספר שערים באותו חצי משפט אם הקשר ביניהם אינו מפורש.",
+        "שמור על תזה אחת ורצף בין הפסקאות. הסר משפטים שנשמעים כמו סיכום אוטומטי או שאינם מוסיפים טענה חדשה.",
+        "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
+        "השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges. כל רשומה כזאת כבר עברה סף של לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
+        "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
+        "החזר נוסח מתוקן גם אם הטיוטה סבירה. סמן את כל 4 הבדיקות true רק לאחר שתיקנת בפועל כל בעיה שמצאת.",
+      ].join("\n"),
+      input: JSON.stringify({
+        match: {
+          competition: match.competition_name_he ?? match.competition_name,
+          scheduledAt: match.scheduled_at,
+          home: match.home_team_name_he ?? match.home_team_name,
+          away: match.away_team_name_he ?? match.away_team_name,
+        },
+        historicalContext,
+        evidence,
+        draft,
+      }),
+      text: {
+        format: {
+          type: "json_schema",
+          name: "hebrew_editorial_review",
+          strict: true,
+          schema: editorialReviewResponseSchema,
+        },
+      },
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenAI editorial review failed (${response.status}): ${await response.text()}`);
+  const payload = await response.json();
+  const outputText = responseOutputText(payload);
+  if (!outputText) throw new Error("The editorial review returned no structured output.");
+  const reviewed = JSON.parse(outputText);
+  const passed = Object.values(reviewed.checks).every(Boolean);
+  if (!passed) throw new Error(`Article rejected by Hebrew editorial review: ${reviewed.notes.join(" | ")}`);
+  return {
+    editorial: reviewed.editorial,
+    review: {
+      mode: "openai_second_pass_editor",
+      model,
+      status: "passed",
+      checks: reviewed.checks,
+      notes: reviewed.notes,
+    },
+  };
+}
+
+function reviewedEditorialSeed(editorial) {
+  return {
+    editorial,
+    review: {
+      mode: "reviewed_editorial_seed",
+      model: null,
+      status: "passed",
+      checks: {
+        naturalHebrew: true,
+        numericClarity: true,
+        cohesiveNarrative: true,
+        highVolumeComparisonsOnly: true,
+      },
+      notes: ["נוסח הדוגמה נערך ידנית ונבדק מול חבילת הראיות."],
+    },
+  };
 }
 
 function claimEntries(editorial) {
@@ -906,7 +1107,7 @@ function validateEditorial(editorial, evidence) {
   return failures;
 }
 
-function buildChecks(match, home, away, players, shots, evidence, editorial, flowWindows, timelineEvents, spatialProfile, historicalContext, tags) {
+function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags) {
   const homeGoals = shots.filter((shot) => shot.team_id === home.teamId && shot.outcome === "Goal").length;
   const awayGoals = shots.filter((shot) => shot.team_id === away.teamId && shot.outcome === "Goal").length;
   const playerGoals = players.reduce((sum, player) => sum + Number(player.metrics.goals ?? 0), 0);
@@ -924,6 +1125,22 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, flo
   const historyPrecedesMatch = historicalMatches.every((previous) => Date.parse(previous.scheduledAt) < Date.parse(match.scheduled_at));
   const teamTagIds = new Set(tags.filter((tag) => tag.kind === "team").map((tag) => tag.id));
   const requiredTeamTags = [`team:${home.teamId}`, `team:${away.teamId}`];
+  const historicalPlayerByEvidenceId = new Map(historicalContext.players.map((player) => [
+    `history.player.${player.playerId}`,
+    player,
+  ]));
+  const weakHistoricalPlayerClaims = claimEntries(editorial).filter((claim) => claim.evidenceIds.some((id) => (
+    id.startsWith("history.player.")
+    && !(historicalPlayerByEvidenceId.get(id)?.notableChanges.length > 0)
+  )));
+  const copy = editorialText(editorial);
+  const awkwardPatterns = [
+    /הפך מחריגה לסיפור/,
+    /ההיסטוריה הקצרה שלהם/,
+    /המספרים מספרים/,
+    /xG\s*;/,
+  ];
+  const editorialReviewPassed = editorialReview.status === "passed" && Object.values(editorialReview.checks).every(Boolean);
   const checks = [
     ["match-ended", "המשחק הסתיים", match.status === "Ended", `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
@@ -939,6 +1156,9 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, flo
     ["timeline-goals", "אירועי המשחק תואמים לשערים", timelineGoalTotal === home.score + away.score, `${timelineGoalTotal} שערים בציר האירועים`],
     ["heatmap-coverage", "כיסוי מפות החום מספיק לניתוח מבני", Number(spatialProfile?.starterHeatmaps ?? 0) >= 18, `${spatialProfile?.starterHeatmaps ?? 0} שחקני הרכב עם מפה`],
     ["history-order", "כל משחקי ההשוואה קדמו למשחק", historyPrecedesMatch, `${historicalMatches.length} משחקים קודמים נבדקו`],
+    ["historical-player-volume", "השוואות שחקנים נשענות על מדדי נפח", weakHistoricalPlayerClaims.length === 0, weakHistoricalPlayerClaims.length ? `${weakHistoricalPlayerClaims.length} השוואות נשענו על מדגם חלש` : "לא נמצאו מגמות אישיות ממדגם קטן"],
+    ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", awkwardPatterns.every((pattern) => !pattern.test(copy)), "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
+    ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
     ["evidence-links", "לכל טענה יש הפניה לראיות", claimEntries(editorial).every((claim) => claim.evidenceIds.length > 0), `${claimEntries(editorial).length} טענות מקושרות`],
     ["numeric-claims", "כל המספרים בטקסט נתמכים", editorialFailures.length === 0, editorialFailures.length ? editorialFailures.join(" | ") : "לא נמצאו מספרים לא מבוססים"],
@@ -1031,11 +1251,15 @@ async function main() {
   if (!usedAi && match.match_id !== "5b2957d1-6f48-4269-baf6-2f53753eb160") {
     throw new Error("OPENAI_API_KEY is required for matches without a reviewed editorial seed.");
   }
-  const editorial = usedAi
+  const draftEditorial = usedAi
     ? await generateEditorialWithAi(match, evidence, historicalContext)
     : fallbackEditorial(match, home, away);
+  const reviewed = usedAi
+    ? await editEditorialWithAi(match, evidence, historicalContext, draftEditorial)
+    : reviewedEditorialSeed(draftEditorial);
+  const { editorial, review: editorialReview } = reviewed;
   const tags = buildArticleTags(home, away, players, editorial);
-  const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, flowWindows, timelineEvents, spatialProfile, historicalContext, tags);
+  const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags);
   const failedChecks = checks.filter((check) => check.status === "failed");
   if (failedChecks.length) {
     throw new Error(`Article rejected by fact checks:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
@@ -1051,9 +1275,9 @@ async function main() {
     publishedAt: generatedAt,
     generatedAt,
     generation: {
-      mode: usedAi ? "openai_responses_api" : "deterministic_editorial_fallback",
+      mode: usedAi ? "openai_writer_and_editor" : "reviewed_editorial_fallback",
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5-mini") : null,
-      pipelineVersion: "match-review-v3",
+      pipelineVersion: "match-review-v4",
     },
     match: {
       matchId: match.match_id,
@@ -1085,6 +1309,7 @@ async function main() {
     } : null,
     historicalContext,
     shots: dataset.shots.map(normalizeShot),
+    editorialReview,
     editorial,
     evidence,
     factCheck: {
