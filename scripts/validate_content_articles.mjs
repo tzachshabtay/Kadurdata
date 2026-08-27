@@ -32,10 +32,16 @@ function validateArticle(article, filename) {
   if (article.schemaVersion !== 1) fail("unsupported schemaVersion");
   if (article.language !== "he") fail("content must be Hebrew-only");
   if (article.status !== "published") fail("generated article is not published");
+  if (article.generation?.mode !== "openai_writer_and_editor") {
+    fail("published article did not run the AI writer-and-editor pipeline");
+  }
   if (article.factCheck?.status !== "passed") fail("fact-check status is not passed");
   if (article.factCheck?.checks?.some((check) => check.status !== "passed")) fail("one or more stored fact checks failed");
   if (article.editorialReview?.status !== "passed" || !Object.values(article.editorialReview?.checks ?? {}).every(Boolean)) {
     fail("Hebrew editorial review is missing or failed");
+  }
+  if (article.editorialReview?.mode !== "openai_second_pass_editor") {
+    fail("published article did not run the independent AI editorial pass");
   }
   if (!article.historicalContext) fail("historical comparison context is missing");
   if (!article.tags?.some((tag) => tag.id === "topic:match-summary")) fail("match-summary tag is missing");

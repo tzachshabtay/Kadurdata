@@ -1189,6 +1189,12 @@ function normalizeShot(shot) {
 async function main() {
   await loadLocalEnv();
   const args = readArguments();
+  if (args.noAi && !args.dryRun) {
+    throw new Error("--no-ai is only available with --dry-run for mechanical fixture checks; it cannot publish an article.");
+  }
+  if (!args.noAi && !process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is required: published articles must run both the AI writer and the independent AI editor.");
+  }
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseKey) throw new Error("VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required.");
@@ -1249,10 +1255,7 @@ async function main() {
     spatialProfile,
     historicalContext,
   );
-  const usedAi = Boolean(process.env.OPENAI_API_KEY) && !args.noAi;
-  if (!usedAi && match.match_id !== "5b2957d1-6f48-4269-baf6-2f53753eb160") {
-    throw new Error("OPENAI_API_KEY is required for matches without a reviewed editorial seed.");
-  }
+  const usedAi = !args.noAi;
   const draftEditorial = usedAi
     ? await generateEditorialWithAi(match, evidence, historicalContext)
     : fallbackEditorial(match, home, away);
@@ -1273,11 +1276,11 @@ async function main() {
     slug,
     language: "he",
     kind: "match_review",
-    status: "published",
+    status: usedAi ? "published" : "draft",
     publishedAt: generatedAt,
     generatedAt,
     generation: {
-      mode: usedAi ? "openai_writer_and_editor" : "reviewed_editorial_fallback",
+      mode: usedAi ? "openai_writer_and_editor" : "mechanical_fixture_dry_run",
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5-mini") : null,
       pipelineVersion: "match-review-v4",
     },

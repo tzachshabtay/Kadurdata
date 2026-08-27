@@ -102,7 +102,7 @@ Without `VITE_SUPABASE_ANON_KEY`, the local frontend renders a demo data state s
 ## Hebrew Content Pipeline
 
 The Hebrew-only `בלוג` tab reads fact-checked article packages from
-`src/content/generated/`. Each match review is built in five stages:
+`src/content/generated/`. Each match review is built in seven stages:
 
 1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
 2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
@@ -120,9 +120,10 @@ npm run content:validate
 npm run build
 ```
 
-Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` and `OPENAI_EDITOR_MODEL` in `.env`. The checked-in sample
-can be rebuilt without an API request with `npm run content:generate:sample`. That command uses the curated
-sample copy plus mechanical checks; it does not claim to have run the separate AI editorial pass.
+Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` and `OPENAI_EDITOR_MODEL` in `.env`. Rebuild the sample
+through the same real writer-and-editor pipeline with `npm run content:generate:sample`. Publishing without
+both AI passes is rejected. `npm run content:check:fixture` is available only as a dry-run mechanical fixture;
+it never writes or publishes an article.
 
 `.github/workflows/generate-content.yml` runs on Monday and Thursday, skips a match
 that is already published, validates the evidence package, builds the site, and only
