@@ -106,11 +106,11 @@ The Hebrew-only `בלוג` tab reads fact-checked article packages from
 
 1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
 2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
-3. Derive time-window flow and spatial-team profiles, then convert current and historical data into a grounded evidence bundle.
+3. Derive time-window flow, spatial-team profiles, and unit matchups, then convert current and historical data into a grounded evidence bundle.
 4. Ask the OpenAI Responses API for one cohesive Hebrew narrative whose claims cite evidence IDs.
 5. Run a separate senior-editor pass for idiomatic Hebrew, numerical clarity, narrative flow, and misuse of small samples.
 6. Run an independent adversarial Hebrew quality gate, then the deterministic evidence checks; accumulate issues from both and send the full history back to the editor for up to three revision cycles.
-7. Reject the draft if any independent review, score, event total, xG cross-check, historical date, evidence link, tag set, or numeric claim still fails.
+7. Reject the draft if any independent review, score, event total, xG cross-check, historical date, evidence link, tag set, numeric claim, spatial insight, or unit-matchup insight still fails.
 8. Publish the JSON package with Hebrew team, player, and `סיכום משחק` tags; Vite discovers it automatically and adds it to the filterable blog archive.
 
 Generate the latest eligible match with AI:

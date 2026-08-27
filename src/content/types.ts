@@ -239,6 +239,7 @@ export type ArticleEditorialReview = {
     cohesiveNarrative: boolean;
     highVolumeComparisonsOnly: boolean;
     evidenceFaithfulness: boolean;
+    analyticalDepth: boolean;
   };
   notes: string[];
 };
