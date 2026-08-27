@@ -1379,17 +1379,18 @@ async function main() {
     ? await editEditorialWithAi(match, evidence, historicalContext, draftEditorial)
     : curatedEditorialSeed(draftEditorial);
   let { editorial, review: editorialReview } = reviewed;
-  let qualityReview = usedAi
-    ? await reviewEditorialQualityWithAi(match, evidence, editorial, 1)
-    : fixtureQualityReview();
-  if (usedAi && qualityReview.status === "failed") {
-    const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, qualityReview.issues);
-    editorial = revised.editorial;
-    editorialReview = revised.review;
-    qualityReview = await reviewEditorialQualityWithAi(match, evidence, editorial, 2);
+  let qualityReview = fixtureQualityReview();
+  if (usedAi) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      qualityReview = await reviewEditorialQualityWithAi(match, evidence, editorial, attempt);
+      if (qualityReview.status === "passed" || attempt === 3) break;
+      const revised = await editEditorialWithAi(match, evidence, historicalContext, editorial, qualityReview.issues);
+      editorial = revised.editorial;
+      editorialReview = revised.review;
+    }
   }
   if (usedAi && qualityReview.status === "failed") {
-    throw new Error(`Article rejected by independent Hebrew quality gate after 2 attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
+    throw new Error(`Article rejected by independent Hebrew quality gate after 3 attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
   }
   const tags = buildArticleTags(home, away, players, editorial);
   const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, usedAi);
