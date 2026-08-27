@@ -807,7 +807,7 @@ function fallbackEditorial(match, home, away) {
         ],
       },
       {
-        heading: "הפועל צברה את רוב האיום שלה אחרי האדום",
+        heading: "רוב המצבים של הפועל הגיעו אחרי האדום",
         paragraphs: [
           {
             text: "במחצית הפועל הוציאה את זוברו שראני, שחקן הגנה, והכניסה את אוהד אלמגור, שחקן התקפה. החילוף סימן מעבר למבנה התקפי יותר, אבל בדקות 46–60 הפועל ייצרה 3 בעיטות בשווי 0.14 xG בלבד. הכמות עלתה לפני שהאיכות הגיעה.",
@@ -991,6 +991,7 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft) {
       instructions: [
         "אתה העורך הראשי של מדור כדורגל ישראלי. קיבלת טיוטה שכבר נכתבה; תפקידך לערוך אותה, לא רק לאשר אותה.",
         "כתוב עברית ישראלית טבעית שאפשר לשמוע ולקרוא במדור ספורט מקצועי. תקן תרגומי־מכונה, צירופים שאינם מקובלים, כותרות עמומות, מטפורות מאולצות וכינויי גוף שאין להם מושא ברור.",
+        "אל תשתמש בצירופים מופשטים כמו 'לצבור איום'. כתוב במונחי כדורגל טבעיים ומוחשיים: להגיע למצבים, לבעוט, להחזיק בכדור, ללחוץ או לייצר הזדמנויות.",
         "ודא שכל רצף מספרי מובן מיד: כתוב מה נמדד, מהו הסכום, ומה קרה בפועל. אל תצמיד מספר ל-xG ולמספר שערים באותו חצי משפט אם הקשר ביניהם אינו מפורש.",
         "שמור על תזה אחת ורצף בין הפסקאות. הסר משפטים שנשמעים כמו סיכום אוטומטי או שאינם מוסיפים טענה חדשה.",
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
@@ -1038,11 +1039,11 @@ async function editEditorialWithAi(match, evidence, historicalContext, draft) {
   };
 }
 
-function reviewedEditorialSeed(editorial) {
+function curatedEditorialSeed(editorial) {
   return {
     editorial,
     review: {
-      mode: "reviewed_editorial_seed",
+      mode: "curated_editorial_seed_without_ai_review",
       model: null,
       status: "passed",
       checks: {
@@ -1051,7 +1052,7 @@ function reviewedEditorialSeed(editorial) {
         cohesiveNarrative: true,
         highVolumeComparisonsOnly: true,
       },
-      notes: ["נוסח הדוגמה נערך ידנית ונבדק מול חבילת הראיות."],
+      notes: ["נוסח הדוגמה נערך כחלק מהקוד; מעבר עריכת ה־AI אינו רץ במצב --no-ai."],
     },
   };
 }
@@ -1138,6 +1139,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /הפך מחריגה לסיפור/,
     /ההיסטוריה הקצרה שלהם/,
     /המספרים מספרים/,
+    /צבר(?:ה|ו)? את רוב האיום/,
     /xG\s*;/,
   ];
   const editorialReviewPassed = editorialReview.status === "passed" && Object.values(editorialReview.checks).every(Boolean);
@@ -1256,7 +1258,7 @@ async function main() {
     : fallbackEditorial(match, home, away);
   const reviewed = usedAi
     ? await editEditorialWithAi(match, evidence, historicalContext, draftEditorial)
-    : reviewedEditorialSeed(draftEditorial);
+    : curatedEditorialSeed(draftEditorial);
   const { editorial, review: editorialReview } = reviewed;
   const tags = buildArticleTags(home, away, players, editorial);
   const checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags);

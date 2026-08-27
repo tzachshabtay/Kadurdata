@@ -121,7 +121,8 @@ npm run build
 ```
 
 Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` and `OPENAI_EDITOR_MODEL` in `.env`. The checked-in sample
-can be rebuilt without an API request with `npm run content:generate:sample`.
+can be rebuilt without an API request with `npm run content:generate:sample`. That command uses the curated
+sample copy plus mechanical checks; it does not claim to have run the separate AI editorial pass.
 
 `.github/workflows/generate-content.yml` runs on Monday and Thursday, skips a match
 that is already published, validates the evidence package, builds the site, and only

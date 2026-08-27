@@ -76,7 +76,7 @@ function validateArticle(article, filename) {
     }
   }
   const editorialCopy = claims(article).map((claim) => claim.text).join(" ");
-  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /xG\s*;/]) {
+  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /צבר(?:ה|ו)? את רוב האיום/, /xG\s*;/]) {
     if (pattern.test(editorialCopy)) fail(`editorial copy contains a blocked phrasing pattern: ${pattern}`);
   }
   return failures;
