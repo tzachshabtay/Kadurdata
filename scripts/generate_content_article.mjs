@@ -6,7 +6,15 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
-import { buildGameStateContext, buildInsightCandidates, gameStateEvidenceValues } from "./content_analysis.mjs";
+import {
+  buildGameStateContext,
+  buildHistoricalAuditContext,
+  buildInsightCandidates,
+  buildMechanismContext,
+  gameStateEvidenceValues,
+  historicalAuditEvidenceValues,
+  mechanismEvidenceValues,
+} from "./content_analysis.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -679,7 +687,7 @@ function historicalPlayerEvidenceValues(player) {
   ];
 }
 
-function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile, historicalContext, gameStateContext) {
+function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile, historicalContext, historicalAuditContext, gameStateContext, mechanismContext) {
   const goals = shots.filter((shot) => shot.outcome === "Goal");
   const firstGoal = [...goals].sort((left, right) => Number(left.minute) - Number(right.minute))[0];
   const standoutPlayers = [...players]
@@ -804,6 +812,19 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
     ]), { windows: flowWindows, homeTeamNameHe: home.nameHe, awayTeamNameHe: away.nameHe }),
     evidenceItem("timeline.match_events", "אירועי משחק לפי דקה", "365scores_game_detail", timelineEvents.length, timelineEvents.map((event) => event.minute), { events: timelineEvents }),
     evidenceItem("flow.game_state_context", "המספרים המצטברים לפי מצב המשחק", "api_match_shots + 365scores_game_detail", shots.length + timelineEvents.length, gameStateEvidenceValues(gameStateContext), gameStateContext),
+    evidenceItem("mechanism.chance_creation", "כיצד נוצר פער איכות המצבים", "api_match_shots + api_match_player_stats + api_match_player_heatmaps", shots.length + players.length + heatmaps.length, mechanismEvidenceValues(mechanismContext), {
+      methodNoteHe: mechanismContext.methodHe,
+      distortionCutoffMinute: mechanismContext.distortionCutoffMinute,
+      centralPenaltyAreaRule: mechanismContext.centralPenaltyAreaRule,
+      highQualityShotThreshold: mechanismContext.highQualityShotThreshold,
+      betterQualitySide: mechanismContext.betterQualitySide,
+      qualityPerShotGap: mechanismContext.qualityPerShotGap,
+      teams: mechanismContext.teams,
+    }),
+    evidenceItem("mechanism.decisive_window", "מה התרחש בחלון הדומיננטי", "api_match_shots + api_match_player_stats + 365scores_game_detail", shots.length + timelineEvents.length, mechanismEvidenceValues(mechanismContext), {
+      methodNoteHe: "האירועים המתוזמנים מאפשרים לתאר את סדר ההתרחשויות ואת השחקנים והחוליות שהיו מעורבים; סמיכות לחילוף אינה מוכיחה שהחילוף גרם לשינוי.",
+      decisiveWindow: mechanismContext.decisiveWindow,
+    }),
     evidenceItem("heatmap.spatial_profile", "מבנה מרחבי מצטבר של שחקני ההרכב", "api_match_player_heatmaps", heatmaps.length, spatialProfile ? [
       spatialProfile.starterHeatmaps,
       ...spatialTeamEvidenceValues(spatialProfile.home),
@@ -860,6 +881,7 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       home: { teamNameHe: home.nameHe, shots: home.shotSummary.count, expectedGoals: home.stats.team_expected_goals },
       away: { teamNameHe: away.nameHe, shots: away.shotSummary.count, expectedGoals: away.stats.team_expected_goals },
     }),
+    evidenceItem("history.audit", "בדיקת שינויים לעומת משחקים קודמים", "api_matches + api_match_team_stats + api_match_player_stats", historicalAuditContext.teamMetricSeriesReviewed + historicalAuditContext.playerProfilesReviewed, historicalAuditEvidenceValues(historicalAuditContext), historicalAuditContext),
     ...historicalEvidence,
   ];
 }
@@ -992,6 +1014,46 @@ const analysisPlanSchema = {
         required: ["id", "titleHe", "findingHe", "whyItMattersHe", "evidenceIds", "importance", "narrativeRole"],
       },
     },
+    explanatoryModel: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        questionHe: { type: "string" },
+        answerHe: { type: "string" },
+        supportLevel: { type: "string", enum: ["triangulated", "descriptive"] },
+        evidenceIds: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 8 },
+        components: {
+          type: "array",
+          minItems: 2,
+          maxItems: 4,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              findingHe: { type: "string" },
+              whyItExplainsHe: { type: "string" },
+              confidence: { type: "string", enum: ["high", "medium", "low"] },
+              limitationHe: { type: "string" },
+              evidenceIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
+            },
+            required: ["findingHe", "whyItExplainsHe", "confidence", "limitationHe", "evidenceIds"],
+          },
+        },
+      },
+      required: ["questionHe", "answerHe", "supportLevel", "evidenceIds", "components"],
+    },
+    historicalAudit: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        decision: { type: "string", enum: ["use", "omit"] },
+        teamSignalsReviewed: { type: "boolean" },
+        playerSignalsReviewed: { type: "boolean" },
+        findingHe: { type: "string" },
+        evidenceIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 },
+      },
+      required: ["decision", "teamSignalsReviewed", "playerSignalsReviewed", "findingHe", "evidenceIds"],
+    },
     narrativeArc: {
       type: "array",
       minItems: 3,
@@ -1051,11 +1113,13 @@ const analysisPlanSchema = {
         gameStateAdjusted: { type: "boolean" },
         selectiveEvidence: { type: "boolean" },
         graphicsServeStory: { type: "boolean" },
+        explanatoryDepth: { type: "boolean" },
+        historicalAuditComplete: { type: "boolean" },
       },
-      required: ["singleThesis", "explainsRatherThanLists", "gameStateAdjusted", "selectiveEvidence", "graphicsServeStory"],
+      required: ["singleThesis", "explainsRatherThanLists", "gameStateAdjusted", "selectiveEvidence", "graphicsServeStory", "explanatoryDepth", "historicalAuditComplete"],
     },
   },
-  required: ["thesis", "rankedInsights", "narrativeArc", "graphics", "coverageDecisions", "quality"],
+  required: ["thesis", "rankedInsights", "explanatoryModel", "historicalAudit", "narrativeArc", "graphics", "coverageDecisions", "quality"],
 };
 
 const editorialSchema = {
@@ -1133,8 +1197,10 @@ const editorialReviewResponseSchema = {
         evidenceFaithfulness: { type: "boolean" },
         gameStateContext: { type: "boolean" },
         graphicRelevance: { type: "boolean" },
+        explanatoryDepth: { type: "boolean" },
+        historicalAuditComplete: { type: "boolean" },
       },
-      required: ["naturalHebrew", "footballHebrew", "numericClarity", "cohesiveNarrative", "storyValue", "numberDiscipline", "highVolumeComparisonsOnly", "evidenceFaithfulness", "gameStateContext", "graphicRelevance"],
+      required: ["naturalHebrew", "footballHebrew", "numericClarity", "cohesiveNarrative", "storyValue", "numberDiscipline", "highVolumeComparisonsOnly", "evidenceFaithfulness", "gameStateContext", "graphicRelevance", "explanatoryDepth", "historicalAuditComplete"],
     },
     notes: { type: "array", items: { type: "string" }, maxItems: 6 },
   },
@@ -1159,8 +1225,10 @@ const qualityReviewResponseSchema = {
         evidenceFaithfulness: { type: "boolean" },
         gameStateContext: { type: "boolean" },
         graphicRelevance: { type: "boolean" },
+        explanatoryDepth: { type: "boolean" },
+        historicalAuditComplete: { type: "boolean" },
       },
-      required: ["naturalHebrew", "footballHebrew", "numericClarity", "cohesiveNarrative", "storyValue", "numberDiscipline", "highVolumeComparisonsOnly", "evidenceFaithfulness", "gameStateContext", "graphicRelevance"],
+      required: ["naturalHebrew", "footballHebrew", "numericClarity", "cohesiveNarrative", "storyValue", "numberDiscipline", "highVolumeComparisonsOnly", "evidenceFaithfulness", "gameStateContext", "graphicRelevance", "explanatoryDepth", "historicalAuditComplete"],
     },
     issues: { type: "array", items: { type: "string" }, maxItems: 12 },
   },
@@ -1181,9 +1249,13 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
       instructions: [
         "אתה האנליסט הראשי של מדור כדורגל מבוסס נתונים. לפני שנכתבת כתבה, עליך לבחור מהו הסיפור האמיתי של המשחק ומה לא ראוי להיכנס אליה.",
         "בחר תזה מרכזית אחת ועד 5 תובנות שמסבירות אותה. דירוג אלגוריתמי של מועמדים הוא נקודת פתיחה בלבד; בדוק את ההקשר והראיות בעצמך.",
+        "אל תסתפק בתיאור מי בעטה יותר או באילו דקות נוצר פער. בנה explanatoryModel שעונה על שאלת ה'למה' באמצעות הצלבה של לפחות 2 משפחות נתונים: מיקום ואיכות בעיטות, זהות או חוליית המסיימים, תרומת חוליות ליצירה, המבנה המרחבי ואירועים מתוזמנים.",
+        "ב-explanatoryModel הפרד בין ממצא, הסבר ומגבלה. נתונים תצפיתיים יכולים לתמוך במנגנון סביר אך אינם מוכיחים סיבתיות; supportLevel יהיה triangulated רק כש-2 מקורות בלתי תלויים מצביעים לאותו כיוון, ואחרת descriptive.",
+        "כאשר chance_creation_mechanism קיבל ציון 75 ומעלה, בחר אותו כתובנת primary או supporting והסבר מה במבנה המצבים או בחלוקת התפקידים תרם לפער האיכות. כאשר decisive_window_mechanism קיבל ציון 75 ומעלה, בחר גם אותו והסבר מי ובאיזה תפקיד היה מעורב בחלון, ומה השתנה בסדר האירועים — בלי לייחס לחילוף סיבה שלא הוכחה.",
+        "אל תבחר גם את תובנת המנגנון וגם את הגרסה התיאורית שהיא מחליפה: chance_creation_mechanism מחליפה את chance_quality_gap, ו-decisive_window_mechanism מחליפה את decisive_match_window. כך נשאר מקום להקשר היסטורי, מבני או אישי שבאמת מוסיף הסבר.",
         "בדוק תמיד אם התוצאה, כרטיס אדום, חילופים או דקות מאוחרות מעוותים נתונים מצטברים. כאשר rawShotTotalsNeedGameStateContext=true, game_state_distortion חייבת להיות תובנה primary, להופיע בתחילת הקשת הסיפורית ולהיתמך ב-flow.game_state_context.",
         "אל תתייחס ל-16 בעיטות בדקות שוויון כמו ל-16 בעיטות אחרי שהמשחק הוכרע. נפח מאוחר עשוי ללמד על זרימת המשחק, אבל לא בהכרח על מאזן הכוחות לפני האירוע.",
-        "היסטוריה, מפות חום, מאבקים בין חוליות ושחקנים הם חומרי גלם לבחירה, לא סעיפי חובה. סמן use רק אם הם מסבירים את התזה; סמן omit כאשר הם רק מוסיפים מספרים.",
+        "היסטוריה, מפות חום, מאבקים בין חוליות ושחקנים הם חומרי גלם לבחירה, לא סעיפי חובה. עם זאת, historicalAudit הוא חובה: בדוק את history.audit, את אותות הקבוצות ואת חריגות הנפח האישיות. סמן use רק אם נמצא שינוי משמעותי שמוסיף הסבר לתזה; אחרת סמן omit וכתוב מה היה האות החזק ביותר שנבדק ומדוע אינו מספיק.",
         "העדף דפוסי נפח ממדגם סביר על פני שער או בישול בודד. אל תסיק סיבתיות מנתון תצפיתי, ואל תמציא שינוי בזמן ממפת חום מצטברת.",
         "תכנן 2–4 גרפיקות בלבד. כל גרפיקה חייבת לתמוך בתובנה שנבחרה ולהציג משהו שקל יותר להבין חזותית מאשר בטקסט. אל תבחר גרפיקה כדי למלא מקום.",
         "כותרת וכותרת המשנה של גרפיקה חייבות להסביר מה היא מראה בלי לכלול מספרים. הערכים עצמם יוצגו מתוך הנתונים בקומפוננטה, וכך לא ייווצרו פערי מקור או עיגול בין הטקסט לגרפיקה.",
@@ -1232,11 +1304,13 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
         "כתוב כל כמות ומספר בספרות (למשל 6, לא שישה), כדי שמנוע האימות יוכל לבדוק אותם.",
         "המונחים המקצועיים היחידים שמותר לכתוב באותיות לטיניות הם xG ו-xGOT. אם משתמשים ב-xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)' ואל תשתמש בניסוח המעורפל 'שערים צפויים לאחר הבעיטה'.",
         "הכותרת והפתיח צריכים להציג את התזה, וכל סעיף צריך לקדם את הקשת הסיפורית שנבחרה. השתמש רק בתובנות שסומנו use וב-rankedInsights; אל תכניס בכוח קטגוריה שסומנה omit.",
+        "analysisPlan.explanatoryModel הוא עמוד השדרה של הכתבה. אל תכתוב רק מה קרה; הסבר כיצד נוצר פער איכות המצבים וכיצד נבנה החלון הדומיננטי, באמצעות המרכיבים שהאנליסט חיבר. הצג את ההסבר כקריאה מבוססת נתונים ולא כהוכחת סיבתיות.",
+        "בכל תובנת מנגנון שנבחרה, לפחות פסקה אחת חייבת להסתמך על evidenceId שמתחיל ב-mechanism. חבר בין המקום שממנו בעטו, חוליית המסיימים, חוליות היצירה והאירועים המתוזמנים; אל תציג כל אחד מהם כרשימת נתונים נפרדת.",
         "כל סעיף חייב לקבל insightIds מתוך analysisPlan. סדר הסעיפים חייב לעקוב אחר narrativeArc, ותובנת primary חייבת להופיע באחד מ-2 הסעיפים הראשונים.",
         "כל פסקה צריכה לעבוד כך: טענה אחת, הסבר למה היא חשובה, ורק אז 1–3 מספרים חיוניים כתמיכה. אל תכתוב רשימת מדדים ואל תנסה להכניס את כל הנתונים הזמינים.",
         "נקודות הסיכום רשאיות רק לתמצת טענות שכבר הוסברו בגוף הכתבה. אל תציג בהן מספר או עובדה שלא הופיעו קודם בגוף.",
         "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומפסקאות שנשמעות כמו טבלת נתונים.",
-        "השתמש בהשוואה היסטורית רק אם analysisPlan בחר בה. ציין את גודל המדגם והצג אותה כהקשר, לא כהוכחה מוחלטת לשינוי טקטי.",
+        "השתמש בהשוואה היסטורית רק אם analysisPlan.historicalAudit.decision הוא use וקטגוריית history נבחרה. ציין את גודל המדגם והצג אותה כהקשר, לא כהוכחה מוחלטת לשינוי טקטי. אם ההחלטה היא omit, אל תכתוב לקורא שלא נמצא שינוי ואל תוסיף סעיף מתודולוגי; פשוט השאר את ההיסטוריה מחוץ לכתבה.",
         "אם נבחרה השוואת שחקן היסטורית, היא מותרת רק מתוך notableChanges: מדדי נפח עם לפחות 3 משחקי בסיס. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה.",
         "הזכר בשם לפחות שחקן אחד שיש לו ראיות משמעותיות, כדי שהכתבה תוכל לקבל תגית שחקן שימושית.",
         "אל תבנה סעיף שלם סביב בעיטה אחת או אירוע אישי יחיד. דוגמת שחקן חייבת להסביר, להמחיש או לסייג את התזה המרכזית של הכתבה.",
@@ -1283,11 +1357,14 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         "אל תכתוב 'להציב יותר נוכחות' או שקבוצה 'קיבלה יותר איומים'. כתוב מי הציב יותר שחקנים באזור, או איזו חוליה תרמה יותר בעיטות, מצבים או שערים.",
         "ודא שכל רצף מספרי מובן מיד: כתוב מה נמדד, מהו הסכום, ומה קרה בפועל. אל תצמיד מספר ל-xG ולמספר שערים באותו חצי משפט אם הקשר ביניהם אינו מפורש.",
         "שמור על התזה, התובנות והקשת הסיפורית שב-analysisPlan. הסר משפטים שנשמעים כמו סיכום אוטומטי, רשימת מדדים או ניתוח צדדי שלא נבחר בתוכנית.",
+        "בדוק שהכתבה מיישמת את analysisPlan.explanatoryModel ולא רק חוזרת על התוצאה והפערים. חייב להיות בה חיבור מפורש בין לפחות 2 סוגי ראיות שמסביר כיצד נוצרו המצבים האיכותיים או כיצד התפתח החלון הדומיננטי.",
+        "כאשר הראיות מצביעות על חלוקת עבודה בין חוליות, נסח אותה בכדורגל טבעי: מי יצר, מי הצטרף לרחבה או למרכז, ומי סיים. אל תהפוך מתאם להוראה טקטית או לסיבה מוכחת.",
         "בכל פסקה שמור על טענה אחת, הסבר של המשמעות, ורק המספרים החיוניים. אם יש 4 מספרים או יותר, פצל או הסר את אלה שאינם נדרשים להבנת הטענה.",
         "ודא שנקודות הסיכום אינן מכניסות מספר או עובדה חדשים שלא הופיעו בגוף הכתבה.",
         "בדוק התאמה דקדוקית כאשר נושא המשפט הוא טווח או צמד מספרים. אם ההתאמה אינה טבעית, כתוב 'מאזן של...' במקום לפתוח את המשפט במספרים.",
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
         "השוואה היסטורית נדרשת רק אם analysisPlan בחר בה. השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges עם לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
+        "ודא ש-analysisPlan.historicalAudit תואם לשימוש בפועל: אם decision=omit, הסר השוואות היסטוריות מהנוסח; אם decision=use, הצג רק את האותות שנבחרו ובצירוף גודל המדגם והסייג.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
         "כל מספר חייב להופיע כפי שהוא ב-values של הראיות המצורפות לטענה. אל תחשב בעצמך הפרש, ממוצע, אחוז או יחס חדש, גם אם החישוב פשוט.",
         "שמור בנוסח לפחות אזכור אחד בשם של שחקן בעל ראיה משמעותית. אסור להסיר את כל שמות השחקנים, מפני שהפרסום דורש לפחות תגית שחקן אחת.",
@@ -1363,6 +1440,8 @@ async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameS
         "evidenceFaithfulness=true רק אם הפרשנות נובעת מהראיות. פסול סיבתיות, שינוי טקטי, צד מגרש או תזמון שאינם נתמכים במפורש.",
         "gameStateContext=true רק אם הכתבה נותנת להקשר מצב המשחק את המשקל שקבע analysisPlan. כאשר rawShotTotalsNeedGameStateContext=true, אחד מ-2 הסעיפים הראשונים חייב להסביר מדוע הסכומים הסופיים מטעים; אזכור מאוחר אינו מספיק.",
         "graphicRelevance=true רק אם כל גרפיקה בתוכנית קשורה לתובנה שמופיעה בכתבה, הכותרת שלה מתארת את התובנה, והיא אינה קישוט או שכפול של טקסט.",
+        "explanatoryDepth=true רק אם הכתבה עונה על 'למה' או 'כיצד' בעזרת לפחות 2 סוגי ראיות מחוברים: למשל אזור הבעיטה וחוליית המסיים, או סדר האירועים וזהות השחקנים בחלון הדומיננטי. חזרה על xG, בעיטות ושערים ללא מנגנון מחייבת false.",
+        "historicalAuditComplete=true רק אם השימוש בהיסטוריה תואם ל-analysisPlan.historicalAudit. decision=omit מחייב שלא תהיה בכתבה השוואה לעבר; decision=use מחייב מדגם, אות רלוונטי וסייג. עצם ההשמטה לאחר בדיקה אינה סיבה לפסול.",
         "אל תדרוש הערה מתודולוגית על מפות החום. להפך: פסול הסבר לקורא על כך שהמפה מצטברת, אינה תלויה בזמן או אינה מוכיחה שינוי. יש להציג רק תובנה מבנית בטוחה ולהימנע מטענת שינוי בזמן.",
         "issues חייב להכיל כל בעיה שמצאת, עם ציטוט קצר מהנוסח והסבר מעשי לעורך. אם issues אינו ריק, לפחות בדיקה אחת חייבת להיות false. אל תכתוב מחמאות ב-issues.",
         "אשר את הכתבה רק אם עורך אנושי דובר עברית לא היה צריך לשנות אף משפט לפני הפרסום.",
@@ -1422,6 +1501,8 @@ function curatedEditorialSeed(editorial) {
         evidenceFaithfulness: true,
         gameStateContext: true,
         graphicRelevance: true,
+        explanatoryDepth: true,
+        historicalAuditComplete: true,
       },
       notes: ["נוסח הדוגמה נערך כחלק מהקוד; מעבר עריכת ה־AI אינו רץ במצב --no-ai."],
     },
@@ -1444,6 +1525,8 @@ function fixtureQualityReview() {
       evidenceFaithfulness: true,
       gameStateContext: true,
       graphicRelevance: true,
+      explanatoryDepth: true,
+      historicalAuditComplete: true,
     },
     issues: [],
     attempt: 0,
@@ -1523,6 +1606,9 @@ function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameSta
   const referencedEvidenceIds = [
     ...analysisPlan.thesis.evidenceIds,
     ...analysisPlan.rankedInsights.flatMap((insight) => insight.evidenceIds),
+    ...analysisPlan.explanatoryModel.evidenceIds,
+    ...analysisPlan.explanatoryModel.components.flatMap((component) => component.evidenceIds),
+    ...analysisPlan.historicalAudit.evidenceIds,
     ...analysisPlan.graphics.flatMap((graphic) => graphic.evidenceIds),
     ...analysisPlan.coverageDecisions.flatMap((decision) => decision.evidenceIds),
   ];
@@ -1539,6 +1625,33 @@ function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameSta
   ))) failures.push("a history graphic references an unavailable metric");
   if (!Object.values(analysisPlan.quality).every(Boolean)) failures.push("the analyst did not pass its own planning checks");
   if (analysisPlan.rankedInsights.filter((insight) => insight.importance === "primary").length !== 1) failures.push("the plan must have exactly one primary insight");
+  if (plannedInsightIds.has("chance_creation_mechanism") && plannedInsightIds.has("chance_quality_gap")) failures.push("chance_creation_mechanism supersedes the descriptive chance_quality_gap insight");
+  if (plannedInsightIds.has("decisive_window_mechanism") && plannedInsightIds.has("decisive_match_window")) failures.push("decisive_window_mechanism supersedes the descriptive decisive_match_window insight");
+  const requiredMechanismCandidates = insightCandidates.filter((candidate) => (
+    ["chance_creation_mechanism", "decisive_window_mechanism"].includes(candidate.id)
+    && candidate.score >= 75
+  ));
+  for (const candidate of requiredMechanismCandidates) {
+    const planned = analysisPlan.rankedInsights.find((insight) => insight.id === candidate.id);
+    const requiredEvidenceId = candidate.id === "chance_creation_mechanism" ? "mechanism.chance_creation" : "mechanism.decisive_window";
+    if (!planned || !planned.evidenceIds.includes(requiredEvidenceId)) {
+      failures.push(`${candidate.id} must be selected with ${requiredEvidenceId} when the mechanism signal is strong`);
+    }
+    if (!analysisPlan.explanatoryModel.evidenceIds.includes(requiredEvidenceId)
+      || !analysisPlan.explanatoryModel.components.some((component) => component.evidenceIds.includes(requiredEvidenceId))) {
+      failures.push(`explanatoryModel does not incorporate ${requiredEvidenceId}`);
+    }
+  }
+  const explanatoryFamilies = new Set(analysisPlan.explanatoryModel.evidenceIds.map((id) => id.split(".")[0]));
+  if (explanatoryFamilies.size < 2 || !analysisPlan.explanatoryModel.evidenceIds.some((id) => id.startsWith("mechanism."))) {
+    failures.push("explanatoryModel must triangulate mechanism evidence with at least one other evidence family");
+  }
+  if (!analysisPlan.historicalAudit.teamSignalsReviewed || !analysisPlan.historicalAudit.playerSignalsReviewed
+    || !analysisPlan.historicalAudit.evidenceIds.includes("history.audit")) {
+    failures.push("historicalAudit must explicitly review team and player signals using history.audit");
+  }
+  const historyDecision = analysisPlan.coverageDecisions.find((decision) => decision.category === "history")?.decision;
+  if (historyDecision !== analysisPlan.historicalAudit.decision) failures.push("historicalAudit decision does not match history coverage");
   if (gameStateContext.rawShotTotalsNeedGameStateContext) {
     const gameStateInsight = analysisPlan.rankedInsights.find((insight) => insight.id === "game_state_distortion");
     if (!gameStateInsight || gameStateInsight.importance !== "primary" || !gameStateInsight.evidenceIds.includes("flow.game_state_context")) {
@@ -1579,7 +1692,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   )));
   const copy = editorialText(editorial);
   const usedEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds));
-  const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.game_state_context", "heatmap.spatial_profile"];
+  const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.game_state_context", "mechanism.chance_creation", "mechanism.decisive_window", "heatmap.spatial_profile", "history.audit"];
   const structuredEvidenceReady = structuredEvidenceIds.every((id) => evidence.find((item) => item.id === id)?.context);
   const planFailures = requiresAiReview ? validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameStateContext, players, historicalContext) : [];
   const plannedInsightIds = new Set(analysisPlan.rankedInsights.map((insight) => insight.id));
@@ -1594,6 +1707,23 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
       section.insightIds?.includes("game_state_distortion")
       && section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes("flow.game_state_context"))
     ))
+  );
+  const requiredMechanismInsightIds = insightCandidates
+    .filter((candidate) => ["chance_creation_mechanism", "decisive_window_mechanism"].includes(candidate.id) && candidate.score >= 75)
+    .map((candidate) => candidate.id);
+  const mechanismStoryPassed = !requiresAiReview || requiredMechanismInsightIds.every((insightId) => {
+    const evidenceId = insightId === "chance_creation_mechanism" ? "mechanism.chance_creation" : "mechanism.decisive_window";
+    return editorial.sections.some((section) => (
+      section.insightIds?.includes(insightId)
+      && section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes(evidenceId))
+    ));
+  });
+  const historicalEvidenceUsed = [...usedEvidenceIds].some((id) => id.startsWith("history.team.") || id.startsWith("history.player."));
+  const historicalAuditPassed = !requiresAiReview || (
+    analysisPlan.historicalAudit.teamSignalsReviewed
+    && analysisPlan.historicalAudit.playerSignalsReviewed
+    && analysisPlan.historicalAudit.evidenceIds.includes("history.audit")
+    && (analysisPlan.historicalAudit.decision === "use" ? historicalEvidenceUsed : !historicalEvidenceUsed)
   );
   const paragraphNumbers = editorial.sections.flatMap((section) => section.paragraphs.map((paragraph) => extractNumbers(paragraph.text).length));
   const disciplinedNumbers = !requiresAiReview || (paragraphNumbers.every((count) => count <= 6)
@@ -1661,6 +1791,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["analysis-plan", "האנליסט בחר תזה, תובנות והשמטות תקינות", planFailures.length === 0, planFailures.length ? planFailures.join(" | ") : `${analysisPlan.rankedInsights.length} תובנות ו-${analysisPlan.coverageDecisions.filter((item) => item.decision === "omit").length} קטגוריות שהושמטו`],
     ["plan-followed", "הכתבה עוקבת אחר התזה והקשת הסיפורית", planFollowed, `${sectionInsightIds.length} שיוכי תובנה נבדקו`],
     ["game-state-story", "מצב המשחק מקבל משקל לפני המספרים המצטברים", gameStateStoryPassed, gameStateContext.rawShotTotalsNeedGameStateContext ? "נתוני הבעיטות דורשים הקשר באחד מ-2 הסעיפים הראשונים" : "לא זוהה עיוות מהותי בסכומי הבעיטות"],
+    ["explanatory-depth", "הכתבה מסבירה כיצד נוצרו המצבים והחלון הדומיננטי", mechanismStoryPassed, `${requiredMechanismInsightIds.length} תובנות מנגנון נדרשו וקושרו לראיות`],
+    ["historical-audit", "נתוני העבר נבדקו והשימוש בהם תואם למסקנת האנליסט", historicalAuditPassed, `${analysisPlan.historicalAudit.decision}: ${analysisPlan.historicalAudit.findingHe}`],
     ["number-discipline", "המספרים תומכים בסיפור ואינם מחליפים אותו", disciplinedNumbers, `מספרים בפסקאות: ${paragraphNumbers.join(", ")}`],
     ["takeaways-summarize", "התקציר אינו מציג מספרים חדשים", takeawaysOnlySummarize, "כל מספר בתקציר הופיע קודם בגוף הכתבה"],
     ["graphic-plan", "הגרפיקות נבחרו עבור תובנות ושחקנים קיימים", graphicPlanReady, `${analysisPlan.graphics.length} גרפיקות מתוכננות`],
@@ -1704,6 +1836,23 @@ function fixtureAnalysisPlan(insightCandidates) {
       importance: index === 0 ? "primary" : "supporting",
       narrativeRole: index === 0 ? "setup" : "explanation",
     })),
+    explanatoryModel: {
+      questionHe: "מה מסביר את המשחק",
+      answerHe: "מצב בדיקה מכנית",
+      supportLevel: "descriptive",
+      evidenceIds: ["match.result", "team.quality"],
+      components: [
+        { findingHe: "מצב בדיקה", whyItExplainsHe: "בדיקה מכנית", confidence: "low", limitationHe: "אינו לפרסום", evidenceIds: ["match.result"] },
+        { findingHe: "מצב בדיקה", whyItExplainsHe: "בדיקה מכנית", confidence: "low", limitationHe: "אינו לפרסום", evidenceIds: ["team.quality"] },
+      ],
+    },
+    historicalAudit: {
+      decision: "omit",
+      teamSignalsReviewed: true,
+      playerSignalsReviewed: true,
+      findingHe: "מצב בדיקה מכנית",
+      evidenceIds: ["history.audit"],
+    },
     narrativeArc: fallbackIds.map((id) => ({ headingIdeaHe: id, purposeHe: id, insightIds: [id] })),
     graphics: [],
     coverageDecisions: ["game_state", "flow", "quality", "style", "matchup", "spatial", "history", "player"].map((category) => ({
@@ -1718,6 +1867,8 @@ function fixtureAnalysisPlan(insightCandidates) {
       gameStateAdjusted: true,
       selectiveEvidence: true,
       graphicsServeStory: true,
+      explanatoryDepth: true,
+      historicalAuditComplete: true,
     },
   };
 }
@@ -1779,6 +1930,18 @@ async function main() {
   const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId);
   const historicalContext = buildHistoricalContext(home, away, players, homeHistoryDataset, awayHistoryDataset, playerHistoryDataset);
   const gameStateContext = buildGameStateContext(dataset.shots, timelineEvents, home, away);
+  const mechanismContext = buildMechanismContext({
+    shots: dataset.shots,
+    players,
+    home,
+    away,
+    unitMatchups,
+    spatialProfile,
+    flowWindows,
+    timelineEvents,
+    gameStateContext,
+  });
+  const historicalAuditContext = buildHistoricalAuditContext(historicalContext);
   const insightCandidates = buildInsightCandidates({
     home,
     away,
@@ -1787,6 +1950,7 @@ async function main() {
     historicalContext,
     unitMatchups,
     spatialProfile,
+    mechanismContext,
   });
   const evidence = buildEvidence(
     match,
@@ -1800,7 +1964,9 @@ async function main() {
     timelineEvents,
     spatialProfile,
     historicalContext,
+    historicalAuditContext,
     gameStateContext,
+    mechanismContext,
   );
   const usedAi = !args.noAi;
   let analysisResult = { plan: fixtureAnalysisPlan(insightCandidates), model: null };
@@ -1879,7 +2045,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v11",
+      pipelineVersion: "match-review-v12",
     },
     match: {
       matchId: match.match_id,
@@ -1910,7 +2076,9 @@ async function main() {
       total: providerGame.actualPlayTime.totalTime?.name ?? null,
     } : null,
     historicalContext,
+    historicalAuditContext,
     gameStateContext,
+    mechanismContext,
     insightCandidates,
     analysisPlan,
     shots: dataset.shots.map(normalizeShot),

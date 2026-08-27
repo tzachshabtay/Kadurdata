@@ -244,6 +244,8 @@ export type ArticleEditorialReview = {
     evidenceFaithfulness: boolean;
     gameStateContext: boolean;
     graphicRelevance: boolean;
+    explanatoryDepth: boolean;
+    historicalAuditComplete: boolean;
   };
   notes: string[];
 };
@@ -287,6 +289,26 @@ export type ArticleGraphicSpec = {
 export type ArticleAnalysisPlan = {
   thesis: { claimHe: string; whyItMattersHe: string; evidenceIds: string[] };
   rankedInsights: ArticleInsight[];
+  explanatoryModel: {
+    questionHe: string;
+    answerHe: string;
+    supportLevel: "triangulated" | "descriptive";
+    evidenceIds: string[];
+    components: Array<{
+      findingHe: string;
+      whyItExplainsHe: string;
+      confidence: "high" | "medium" | "low";
+      limitationHe: string;
+      evidenceIds: string[];
+    }>;
+  };
+  historicalAudit: {
+    decision: "use" | "omit";
+    teamSignalsReviewed: boolean;
+    playerSignalsReviewed: boolean;
+    findingHe: string;
+    evidenceIds: string[];
+  };
   narrativeArc: Array<{ headingIdeaHe: string; purposeHe: string; insightIds: string[] }>;
   graphics: ArticleGraphicSpec[];
   coverageDecisions: Array<{
@@ -301,6 +323,8 @@ export type ArticleAnalysisPlan = {
     gameStateAdjusted: boolean;
     selectiveEvidence: boolean;
     graphicsServeStory: boolean;
+    explanatoryDepth: boolean;
+    historicalAuditComplete: boolean;
   };
 };
 
@@ -343,7 +367,9 @@ export type ContentArticle = {
   flowWindows: ArticleFlowWindow[];
   actualPlayTime: { actual: string | null; total: string | null } | null;
   historicalContext: ArticleHistoricalContext;
+  historicalAuditContext: Record<string, unknown>;
   gameStateContext: Record<string, unknown>;
+  mechanismContext: Record<string, unknown>;
   insightCandidates: Array<{ id: string; category: string; score: number; evidenceIds: string[]; context: unknown }>;
   analysisPlan: ArticleAnalysisPlan;
   shots: ArticleShot[];

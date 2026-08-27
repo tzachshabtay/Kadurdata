@@ -10,7 +10,7 @@ export const articles = Object.values(generatedModules)
     article.language === "he"
     && article.status === "published"
     && article.generation.mode === "openai_analyst_writer_editor_and_qa"
-    && article.generation.pipelineVersion === "match-review-v11"
+    && article.generation.pipelineVersion === "match-review-v12"
     && article.editorialReview.mode === "openai_second_pass_editor"
     && article.editorialReview.status === "passed"
     && article.qualityReview?.mode === "openai_independent_quality_gate"
@@ -18,6 +18,8 @@ export const articles = Object.values(generatedModules)
     && article.qualityReview.checks.storyValue
     && article.qualityReview.checks.gameStateContext
     && article.qualityReview.checks.graphicRelevance
+    && article.qualityReview.checks.explanatoryDepth
+    && article.qualityReview.checks.historicalAuditComplete
     && article.qualityReview.issues.length === 0
     && article.factCheck.status === "passed"
   ))
