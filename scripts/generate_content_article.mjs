@@ -23,6 +23,41 @@ const MAX_QUALITY_ATTEMPTS = 5;
 const MAX_ANALYSIS_ATTEMPTS = 3;
 const MAX_EDITORIAL_ATTEMPTS = 3;
 const MAX_OPENAI_REQUEST_ATTEMPTS = 2;
+const MAX_EDITORIAL_SECTIONS = 6;
+
+const AWKWARD_FOOTBALL_COPY_PATTERNS = [
+  /הפך מחריגה לסיפור/,
+  /ההיסטוריה הקצרה שלהם/,
+  /המספרים מספרים/,
+  /צבר(?:ה|ו)? את רוב האיום/,
+  /צבר(?:ה|ו)? את רוב הבעיטות/,
+  /xG\s*;/,
+  /השערים פונו/,
+  /כיתרה\s+\d/,
+  /המצביה/,
+  /ריבוי דו[־-]קרקעי/,
+  /גלים של איומים/,
+  /שימור איזון בנפח/,
+  /הציב(?:ה|ו)?\s+יותר\s+נוכחות/,
+  /קיבל(?:ה|ו)?[^.]{0,80}יותר\s+איומים/,
+  /נתיב(?:ים|י|י־|ה)?/,
+  /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/,
+  /מצב של המשחק/,
+  /מאזני בעיטות/,
+  /האות הקבוצתי/,
+  /(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/,
+  /התקרב(?:ה|ו)?\s+[^.]{0,50}\s+במספר\s+הבעיטות/,
+  /הגיע(?:ה|ו)?\s+טוב\s+יותר\s+לרחבה/,
+  /התקרב(?:ה|ו)?\s+ב?(?:ספירת|מניין)\s+הבעיטות/,
+  /(?:ספירת|מניין)\s+הבעיטות\s+התקרב/,
+  /(?:ה)?בעיטות[^.]{0,60}צמצמ(?:ה|ו)?\s+[^.]{0,30}(?:את\s+)?הפער/,
+  /לפני\s+שמצב\s+המשחק\s+השתנה/,
+  /כל\s+עוד\s+המשחק\s+היה\s+תחרותי/,
+  /שני\s+קצות\s+הרצף/,
+  /סיי(?:ם|מה|מו)\s+את\s+המצב/,
+  /מפת\s+הבעיטות[^.]{0,120}(?:המשחק\s+המלא|אינה\s+מסננת)/,
+  /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
+];
 const HISTORICAL_TEAM_METRICS = [
   "team_possession",
   "team_total_shots",
@@ -1134,7 +1169,7 @@ const editorialSchema = {
     sections: {
       type: "array",
       minItems: 3,
-      maxItems: 5,
+      maxItems: MAX_EDITORIAL_SECTIONS,
       items: {
         type: "object",
         additionalProperties: false,
@@ -1323,11 +1358,13 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
         "הכותרת והפתיח צריכים להציג את התזה, וכל סעיף צריך לקדם את הקשת הסיפורית שנבחרה. השתמש רק בתובנות שסומנו use וב-rankedInsights; אל תכניס בכוח קטגוריה שסומנה omit.",
         "analysisPlan.explanatoryModel הוא עמוד השדרה של הכתבה. אל תכתוב רק מה קרה; הסבר כיצד נוצר פער איכות המצבים וכיצד נבנה החלון הדומיננטי, באמצעות המרכיבים שהאנליסט חיבר. הצג את ההסבר כקריאה מבוססת נתונים ולא כהוכחת סיבתיות.",
         "בכל תובנת מנגנון שנבחרה, לפחות פסקה אחת חייבת להסתמך על evidenceId שמתחיל ב-mechanism. חבר בין המקום שממנו בעטו, חוליית המסיימים, חוליות היצירה והאירועים המתוזמנים; אל תציג כל אחד מהם כרשימת נתונים נפרדת.",
+        "בסעיף chance_creation_mechanism כתוב במפורש גם מאילו אזורים הגיעו הבעיטות וגם איזו חוליה יצרה או סיימה. אזכור כללי של xG או מספר הבעיטות אינו הסבר מספק.",
         "כל סעיף חייב לקבל insightIds מתוך analysisPlan. סדר הסעיפים חייב לעקוב אחר narrativeArc, ותובנת primary חייבת להופיע באחד מ-2 הסעיפים הראשונים.",
         "כל פסקה צריכה לעבוד כך: טענה אחת, הסבר למה היא חשובה, ורק אז 1–3 מספרים חיוניים כתמיכה. אל תכתוב רשימת מדדים ואל תנסה להכניס את כל הנתונים הזמינים.",
         "נקודות הסיכום רשאיות רק לתמצת טענות שכבר הוסברו בגוף הכתבה. אל תציג בהן מספר או עובדה שלא הופיעו קודם בגוף.",
         "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומפסקאות שנשמעות כמו טבלת נתונים.",
         "השתמש בהשוואה היסטורית רק אם analysisPlan.historicalAudit.decision הוא use וקטגוריית history נבחרה. ציין את גודל המדגם והצג אותה כהקשר, לא כהוכחה מוחלטת לשינוי טקטי. אם ההחלטה היא omit, אל תכתוב לקורא שלא נמצא שינוי ואל תוסיף סעיף מתודולוגי; פשוט השאר את ההיסטוריה מחוץ לכתבה.",
+        "כאשר historicalAudit.decision=use, ההשוואה ההיסטורית חייבת להופיע בגוף. מותר לכתוב עד 6 סעיפים כדי שלא להשמיט מנגנון, מצב משחק או הקשר היסטורי שנבחרו.",
         "אם נבחרה השוואת שחקן היסטורית, היא מותרת רק מתוך notableChanges: מדדי נפח עם לפחות 3 משחקי בסיס. אין להציג שערים, בישולים, כרטיסים או אירוע בודד כמגמה.",
         "הזכר בשם לפחות שחקן אחד שיש לו ראיות משמעותיות, כדי שהכתבה תוכל לקבל תגית שחקן שימושית.",
         "אל תבנה סעיף שלם סביב בעיטה אחת או אירוע אישי יחיד. דוגמת שחקן חייבת להסביר, להמחיש או לסייג את התזה המרכזית של הכתבה.",
@@ -1377,6 +1414,7 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         "שמור על התזה, התובנות והקשת הסיפורית שב-analysisPlan. הסר משפטים שנשמעים כמו סיכום אוטומטי, רשימת מדדים או ניתוח צדדי שלא נבחר בתוכנית.",
         "בדוק שהכתבה מיישמת את analysisPlan.explanatoryModel ולא רק חוזרת על התוצאה והפערים. חייב להיות בה חיבור מפורש בין לפחות 2 סוגי ראיות שמסביר כיצד נוצרו המצבים האיכותיים או כיצד התפתח החלון הדומיננטי.",
         "כאשר הראיות מצביעות על חלוקת עבודה בין חוליות, נסח אותה בכדורגל טבעי: מי יצר, מי הצטרף לרחבה או למרכז, ומי סיים. אל תהפוך מתאם להוראה טקטית או לסיבה מוכחת.",
+        "בסעיף chance_creation_mechanism חייבים להופיע גם אזור הבעיטות וגם חלוקת העבודה בין החוליות. אל תאשר סעיף שמציג רק xG, בעיטות או שערים.",
         "אסור להשמיט תובנת מנגנון שנבחרה ב-analysisPlan. ודא של-chance_creation_mechanism ול-decisive_window_mechanism, כאשר נבחרו, יש סעיף בגוף ולפחות פסקה אחת עם ראיית mechanism המתאימה. אם טיוטה קודמת השמיטה סעיף, הוסף אותו כעת; אינך רשאי לשנות את תוכנית הגרפיקה במקום לתקן את הכתבה.",
         "החזר גם graphics מעודכן. מותר לערוך כותרת, כותרת משנה, placementInsightId ו-evidenceIds כדי לתקן חוסר התאמה, אך אסור להוסיף תובנה שלא נבחרה. שמור על 2–4 סוגי גרפיקה שונים ועל גרפיקה רק כאשר היא משרתת סעיף שקיים בגוף.",
         "טווחי הגרפיקות קבועים לפי הקומפוננטה: match_flow מציגה את כל חלונות המשחק; shot_map מציגה את כל בעיטות המשחק; team_history מציגה את חלון המשחקים הקודמים; tactical_heatmap מציגה את זמן ההופעה כולו; player_focus מציגה את נתוני המשחק המלא. אל תבטיח בכותרת סינון זמן שאינו קיים, ואל תכלול מספרים בכותרת או בכותרת המשנה.",
@@ -1387,11 +1425,13 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
         "השוואה היסטורית נדרשת רק אם analysisPlan בחר בה. השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges עם לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "ודא ש-analysisPlan.historicalAudit תואם לשימוש בפועל: אם decision=omit, הסר השוואות היסטוריות מהנוסח; אם decision=use, הצג רק את האותות שנבחרו ובצירוף גודל המדגם והסייג.",
+        "כאשר decision=use אל תשמיט את סעיף ההיסטוריה כדי לעמוד במגבלת אורך. אפשר להחזיר עד 6 סעיפים; כל סעיף מנגנון והסעיף ההיסטורי שנבחרו חייבים להישאר.",
         "אל תוסיף עובדות, מספרים או פרשנות שאינם בראיות. שמור או תקן את evidenceIds כך שכל טענה תישען רק על הראיות המתאימות.",
         "כל מספר חייב להופיע כפי שהוא ב-values של הראיות המצורפות לטענה. אל תחשב בעצמך הפרש, ממוצע, אחוז או יחס חדש, גם אם החישוב פשוט.",
         "שמור בנוסח לפחות אזכור אחד בשם של שחקן בעל ראיה משמעותית. אסור להסיר את כל שמות השחקנים, מפני שהפרסום דורש לפחות תגית שחקן אחת.",
         "אם מופיע xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)'. אל תכתוב 'שערים צפויים לאחר הבעיטה' ואל תבנה סעיף נפרד סביב בעיטה יחידה שאינה מקדמת את התזה.",
         "מפת חום או matchup יישארו רק אם analysisPlan בחר בהם. כאשר הם נבחרו, הטענות צריכות לפרש מבנה או מאבק בין חוליות ולא להסביר את שיטת המדידה.",
+        "אל תכניס לגוף הערה טכנית שמפת הבעיטות מציגה את המשחק המלא או אינה מסננת דקות. נסח רק את הממצא שהמפה עצמה תומכת בו, ואת חלוקת הזמן ייחס לראיית ה-flow המתאימה.",
         "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
         "נתוני משחק תצפיתיים מראים קשר ולא סיבתיות. בלי ראיה סיבתית מפורשת, אל תכתוב 'בזכות', 'הכריע', 'הוביל ל-', 'גרם' או 'הסביר את התוצאה'; כתוב מה היה הפער הבולט בנתונים.",
         "נתון מצטבר אחרי אירוע אינו מוכיח לבדו שקצב הפעולה עלה. כאשר context כולל השוואת לפני־ואחרי מפורשת, מותר לתאר את ההבדל בקצב; עדיין אסור לטעון שהאירוע גרם לו בלי ראיה סיבתית.",
@@ -1483,6 +1523,17 @@ function editorialStructureFailures(editorial, analysisPlan, mechanismContext) {
     const missingScorers = decisiveWindowScorerNames(mechanismContext).filter((name) => !decisiveCopy.includes(name));
     if (missingScorers.length) failures.push(`סעיף חלון ההכרעה אינו מסביר את מעורבות המסיימים המרכזיים: ${missingScorers.join(", ")}`);
   }
+  if (analysisPlan.rankedInsights.some((insight) => insight.id === "chance_creation_mechanism")) {
+    const chanceCopy = editorial.sections
+      .filter((section) => section.insightIds?.includes("chance_creation_mechanism"))
+      .flatMap((section) => section.paragraphs.map((paragraph) => paragraph.text))
+      .join(" ");
+    const explainsShotLocation = /מרכז\s+הרחבה|בתוך\s+הרחבה|מהרחבה|אג(?:ף|פים)|כנפ(?:יים|ף)|חצי[־-]ה?מרחב/.test(chanceCopy);
+    const explainsRoleDivision = /שחקני\s+(?:ההתקפה|ההגנה|הקישור)|הקו\s+הקדמי|החלוצים|המגנים|קו\s+ההגנה|הקשרים|חוליית\s+(?:ההתקפה|ההגנה|הקישור)/.test(chanceCopy);
+    if (!explainsShotLocation || !explainsRoleDivision) {
+      failures.push("סעיף איכות המצבים אינו מחבר בין מיקום הבעיטות לבין חלוקת העבודה בין החוליות");
+    }
+  }
   const usesHistoricalEvidence = [...claimEvidenceIds].some((id) => id.startsWith("history.team.") || id.startsWith("history.player."));
   if (analysisPlan.historicalAudit.decision === "use" && !usesHistoricalEvidence) failures.push("הביקורת ההיסטורית בחרה use אך אין בגוף השוואה היסטורית");
   if (analysisPlan.historicalAudit.decision === "omit" && usesHistoricalEvidence) failures.push("הביקורת ההיסטורית בחרה omit אך הכתבה משתמשת בהשוואה היסטורית");
@@ -1499,6 +1550,29 @@ function editorialStructureFailures(editorial, analysisPlan, mechanismContext) {
   }
   if (/התקרב(?:ה|ו)?\s+[^.]{0,50}\s+במספר\s+הבעיטות/.test(copy)) {
     failures.push("הכתבה מתארת קבוצה כמי שהתקרבה ליריבה במספר הבעיטות");
+  }
+  if (AWKWARD_FOOTBALL_COPY_PATTERNS.some((pattern) => pattern.test(copy))) {
+    failures.push("הכתבה כוללת ניסוח שנפסל בספריית הרגרסיות של עברית כדורגל");
+  }
+  const undefinedQualityLabels = editorial.sections.flatMap((section) => section.paragraphs).filter((paragraph) => (
+    /(?:מצב(?:ים)?|בעיט(?:ה|ות))\s+(?:ב)?איכות\s+גבוהה/.test(paragraph.text)
+    && !/0[.,]2(?:0)?\s*xG/.test(paragraph.text)
+  ));
+  if (undefinedQualityLabels.length) {
+    failures.push("המונח מצב באיכות גבוהה מופיע ללא הגדרה של 0.20 xG לפחות");
+  }
+  const bodyCopy = editorial.sections.flatMap((section) => section.paragraphs.map((paragraph) => paragraph.text)).join(" ");
+  const summaryCopy = `${editorial.conclusion} ${editorial.takeaways.map((takeaway) => takeaway.text).join(" ")}`;
+  const roleGroups = [
+    /שחקני\s+ההתקפה|הקו\s+הקדמי|החלוצים|חוליית\s+ההתקפה/,
+    /שחקני\s+ההגנה|המגנים|קו\s+ההגנה|חוליית\s+ההגנה/,
+    /שחקני\s+הקישור|הקשרים|חוליית\s+הקישור/,
+  ];
+  if (roleGroups.some((pattern) => pattern.test(summaryCopy) && !pattern.test(bodyCopy))) {
+    failures.push("הסיכום מציג לראשונה חוליה שלא הוסברה בגוף הכתבה");
+  }
+  if (/(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(summaryCopy) && !/(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(bodyCopy)) {
+    failures.push("הסיכום מציג לראשונה ראיה מרחבית שלא הוסברה בגוף הכתבה");
   }
   return failures;
 }
@@ -1534,8 +1608,7 @@ function preserveRequiredEditorialSections(previousEditorial, nextEditorial, ana
   if (analysisPlan.historicalAudit.decision === "use" && !sections.some(usesHistoricalEvidence)) {
     const previousHistoricalSection = previousEditorial.sections.find(usesHistoricalEvidence);
     if (previousHistoricalSection) {
-      const historicalInsightIds = new Set(previousHistoricalSection.insightIds ?? []);
-      sections = sections.filter((section) => !section.insightIds?.some((id) => historicalInsightIds.has(id)));
+      sections = sections.filter((section) => !usesHistoricalEvidence(section));
       sections.push(previousHistoricalSection);
     }
   }
@@ -1562,11 +1635,16 @@ function preserveRequiredEditorialSections(previousEditorial, nextEditorial, ana
     const section = sortedSections.find((candidate) => sectionSupportsInsight(candidate, insightId, mechanismContext));
     if (section && !requiredSections.includes(section)) requiredSections.push(section);
   }
+  const historicalSection = analysisPlan.historicalAudit.decision === "use"
+    ? sortedSections.find(usesHistoricalEvidence)
+    : null;
+  if (historicalSection && !requiredSections.includes(historicalSection)) requiredSections.push(historicalSection);
   const optionalSections = sortedSections.filter((section) => (
     !requiredSections.includes(section)
     && !section.insightIds.some((id) => requiredInsightIds.includes(id))
   ));
-  sections = [...requiredSections, ...optionalSections].slice(0, 5);
+  const selectedSections = new Set([...requiredSections, ...optionalSections].slice(0, MAX_EDITORIAL_SECTIONS));
+  sections = sortedSections.filter((section) => selectedSections.has(section));
   return { ...nextEditorial, sections };
 }
 
@@ -1933,30 +2011,26 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ))
     && graphic.evidenceIds.some((id) => plannedInsightById.get(graphic.placementInsightId)?.evidenceIds.includes(id))
   ));
-  const awkwardPatterns = [
-    /הפך מחריגה לסיפור/,
-    /ההיסטוריה הקצרה שלהם/,
-    /המספרים מספרים/,
-    /צבר(?:ה|ו)? את רוב האיום/,
-    /צבר(?:ה|ו)? את רוב הבעיטות/,
-    /xG\s*;/,
-    /השערים פונו/,
-    /כיתרה\s+\d/,
-    /המצביה/,
-    /ריבוי דו[־-]קרקעי/,
-    /גלים של איומים/,
-    /שימור איזון בנפח/,
-    /הציב(?:ה|ו)?\s+יותר\s+נוכחות/,
-    /קיבל(?:ה|ו)?[^.]{0,80}יותר\s+איומים/,
-    /נתיב(?:ים|י|י־|ה)?/,
-    /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/,
-    /מצב של המשחק/,
-    /מאזני בעיטות/,
-    /האות הקבוצתי/,
-    /(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/,
-    /התקרב(?:ה|ו)?\s+[^.]{0,50}\s+במספר\s+הבעיטות/,
-    /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
+  const undefinedQualityLabels = editorial.sections.flatMap((section) => section.paragraphs).filter((paragraph) => (
+    /(?:מצב(?:ים)?|בעיט(?:ה|ות))\s+(?:ב)?איכות\s+גבוהה/.test(paragraph.text)
+    && !/0[.,]2(?:0)?\s*xG/.test(paragraph.text)
+  ));
+  const chanceMechanismCopy = editorial.sections
+    .filter((section) => section.insightIds?.includes("chance_creation_mechanism"))
+    .flatMap((section) => section.paragraphs.map((paragraph) => paragraph.text))
+    .join(" ");
+  const chanceMechanismExplainsLocationAndRoles = !requiresAiReview || !plannedInsightIds.has("chance_creation_mechanism") || (
+    /מרכז\s+הרחבה|בתוך\s+הרחבה|מהרחבה|אג(?:ף|פים)|כנפ(?:יים|ף)|חצי[־-]ה?מרחב/.test(chanceMechanismCopy)
+    && /שחקני\s+(?:ההתקפה|ההגנה|הקישור)|הקו\s+הקדמי|החלוצים|המגנים|קו\s+ההגנה|הקשרים|חוליית\s+(?:ההתקפה|ההגנה|הקישור)/.test(chanceMechanismCopy)
+  );
+  const summaryRolePatterns = [
+    /שחקני\s+ההתקפה|הקו\s+הקדמי|החלוצים|חוליית\s+ההתקפה/,
+    /שחקני\s+ההגנה|המגנים|קו\s+ההגנה|חוליית\s+ההגנה/,
+    /שחקני\s+הקישור|הקשרים|חוליית\s+הקישור/,
   ];
+  const summaryRolesGrounded = summaryRolePatterns.every((pattern) => !pattern.test(summaryCopy) || pattern.test(bodyCopy));
+  const summarySpatialEvidenceGrounded = !/(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(summaryCopy)
+    || /(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(bodyCopy);
   const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
     && editorialReview.status === "passed"
     && Object.values(editorialReview.checks).every(Boolean));
@@ -1980,17 +2054,19 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["heatmap-coverage", "כיסוי מפות החום מספיק לניתוח מבני", Number(spatialProfile?.starterHeatmaps ?? 0) >= 18, `${spatialProfile?.starterHeatmaps ?? 0} שחקני הרכב עם מפה`],
     ["history-order", "כל משחקי ההשוואה קדמו למשחק", historyPrecedesMatch, `${historicalMatches.length} משחקים קודמים נבדקו`],
     ["historical-player-volume", "השוואות שחקנים נשענות על מדדי נפח", weakHistoricalPlayerClaims.length === 0, weakHistoricalPlayerClaims.length ? `${weakHistoricalPlayerClaims.length} השוואות נשענו על מדגם חלש` : "לא נמצאו מגמות אישיות ממדגם קטן"],
-    ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", awkwardPatterns.every((pattern) => !pattern.test(copy)), "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
+    ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", AWKWARD_FOOTBALL_COPY_PATTERNS.every((pattern) => !pattern.test(copy)), "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
     ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
     ["independent-quality-review", "מבקר איכות בלתי־תלוי אישר את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
     ["analysis-plan", "האנליסט בחר תזה, תובנות והשמטות תקינות", planFailures.length === 0, planFailures.length ? planFailures.join(" | ") : `${analysisPlan.rankedInsights.length} תובנות ו-${analysisPlan.coverageDecisions.filter((item) => item.decision === "omit").length} קטגוריות שהושמטו`],
     ["plan-followed", "הכתבה עוקבת אחר התזה והקשת הסיפורית", planFollowed, `${sectionInsightIds.length} שיוכי תובנה נבדקו`],
     ["game-state-story", "מצב המשחק מקבל משקל לפני המספרים המצטברים", gameStateStoryPassed, gameStateContext.rawShotTotalsNeedGameStateContext ? "נתוני הבעיטות דורשים הקשר באחד מ-2 הסעיפים הראשונים" : "לא זוהה עיוות מהותי בסכומי הבעיטות"],
-    ["explanatory-depth", "הכתבה מסבירה כיצד נוצרו המצבים והחלון הדומיננטי", mechanismStoryPassed, `${requiredMechanismInsightIds.length} תובנות מנגנון נדרשו וקושרו לראיות`],
+    ["explanatory-depth", "הכתבה מסבירה כיצד נוצרו המצבים והחלון הדומיננטי", mechanismStoryPassed && chanceMechanismExplainsLocationAndRoles, `${requiredMechanismInsightIds.length} תובנות מנגנון נדרשו וקושרו למיקום ולחלוקת תפקידים`],
     ["historical-audit", "נתוני העבר נבדקו והשימוש בהם תואם למסקנת האנליסט", historicalAuditPassed, `${analysisPlan.historicalAudit.decision}: ${analysisPlan.historicalAudit.findingHe}`],
     ["number-discipline", "המספרים תומכים בסיפור ואינם מחליפים אותו", disciplinedNumbers, `מספרים בפסקאות: ${paragraphNumbers.join(", ")}`],
     ["takeaways-summarize", "התקציר אינו מציג מספרים חדשים", takeawaysOnlySummarize, "כל מספר בתקציר הופיע קודם בגוף הכתבה"],
     ["summary-player-grounding", "שחקנים בסיכום הוסברו קודם בגוף", ungroundedSummaryPlayers.length === 0, ungroundedSummaryPlayers.length ? `שמות שהופיעו לראשונה בסיכום: ${ungroundedSummaryPlayers.join(", ")}` : "כל שמות השחקנים בסיכום הופיעו בגוף"],
+    ["summary-tactical-grounding", "הסיכום אינו מציג לראשונה חוליה או ראיה מרחבית", !requiresAiReview || (summaryRolesGrounded && summarySpatialEvidenceGrounded), "כל טענה טקטית בסיכום נבנתה קודם בגוף"],
+    ["quality-label-definition", "תווית איכות מוגדרת באמצעות סף מדיד", !requiresAiReview || undefinedQualityLabels.length === 0, undefinedQualityLabels.length ? `${undefinedQualityLabels.length} תוויות איכות לא הוגדרו` : "כל תווית איכות הוגדרה"],
     ["graphic-plan", "הגרפיקות נבחרו עבור תובנות ושחקנים קיימים", graphicPlanReady, `${analysisPlan.graphics.length} גרפיקות מתוכננות`],
     ["structured-evidence-context", "ראיות הניתוח כוללות שמות מדדים וקבוצות", structuredEvidenceReady, `${structuredEvidenceIds.length} חבילות ראיות מובנות נבדקו`],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
@@ -2243,7 +2319,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v18",
+      pipelineVersion: "match-review-v19",
     },
     match: {
       matchId: match.match_id,
