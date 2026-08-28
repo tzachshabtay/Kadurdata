@@ -18,12 +18,12 @@ import {
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
+const defaultWorkbenchDirectory = path.join(projectRoot, ".content-workbench");
 const HISTORICAL_WINDOW = 5;
-const MAX_QUALITY_ATTEMPTS = 5;
-const MAX_ANALYSIS_ATTEMPTS = 3;
-const MAX_EDITORIAL_ATTEMPTS = 3;
-const MAX_OPENAI_REQUEST_ATTEMPTS = 2;
 const MAX_EDITORIAL_SECTIONS = 6;
+const PIPELINE_VERSION = "match-review-v20";
+const EDITORIAL_REVIEW_MODE = "codex_skill_editor";
+const QUALITY_REVIEW_MODE = "codex_skill_quality_gate";
 
 const AWKWARD_FOOTBALL_COPY_PATTERNS = [
   /הפך מחריגה לסיפור/,
@@ -128,9 +128,9 @@ function readArguments() {
   };
   return {
     matchId: valueAfter("--match-id"),
-    noAi: args.includes("--no-ai"),
     dryRun: args.includes("--dry-run"),
     force: args.includes("--force"),
+    workbenchDirectory: valueAfter("--workbench-dir"),
   };
 }
 
@@ -156,33 +156,8 @@ function numberValue(value) {
   return value === null || value === undefined ? null : Number(value);
 }
 
-async function postOpenAi(body, label) {
-  let lastError;
-  for (let attempt = 1; attempt <= MAX_OPENAI_REQUEST_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(150_000),
-      });
-      if (response.ok) return response;
-      const detail = await response.text();
-      lastError = new Error(`${label} failed (${response.status}): ${detail}`);
-      if (response.status < 500 && response.status !== 429) lastError.nonRetryable = true;
-    } catch (error) {
-      lastError = error;
-    }
-    if (lastError?.nonRetryable) throw lastError;
-    if (attempt < MAX_OPENAI_REQUEST_ATTEMPTS) {
-      console.log(JSON.stringify({ openAiRetry: label, attempt, reason: String(lastError) }, null, 2));
-      await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
-    }
-  }
-  throw lastError ?? new Error(`${label} failed without a response`);
+async function postOpenAi() {
+  throw new Error("Paid model calls are disabled. Use the kadurdata-match-review skill through a native Codex task.");
 }
 
 async function selectMatch(client, requestedMatchId) {
@@ -1292,7 +1267,7 @@ function evidenceSelectedByPlan(evidence, analysisPlan) {
 }
 
 async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext, analysisFeedback = []) {
-  const model = process.env.OPENAI_ANALYST_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5.6";
+  const model = "retired-paid-pipeline";
   const response = await postOpenAi({
       model,
       store: false,
@@ -1345,7 +1320,7 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
 async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext) {
   const selectedEvidence = evidenceSelectedByPlan(evidence, analysisPlan);
   const response = await postOpenAi({
-      model: process.env.OPENAI_MODEL ?? "gpt-5.6",
+      model: "retired-paid-pipeline",
       store: false,
       instructions: [
         "אתה כתב כדורגל ישראלי. כתוב כתבת ניתוח מקורית, בהירה ומדויקת בעברית בלבד לפי analysisPlan שסיפק האנליסט.",
@@ -1400,7 +1375,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
 }
 
 async function editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
-  const model = process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
+  const model = "retired-paid-pipeline";
   const selectedEvidence = evidenceSelectedByPlan(evidence, analysisPlan);
   const response = await postOpenAi({
       model,
@@ -1682,7 +1657,7 @@ async function editEditorialUntilPassed(match, evidence, analysisPlan, gameState
 }
 
 async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameStateContext, editorial, attempt) {
-  const model = process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
+  const model = "retired-paid-pipeline";
   const selectedEvidence = evidenceSelectedByPlan(evidence, analysisPlan);
   const response = await postOpenAi({
       model,
@@ -1955,6 +1930,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     && !(historicalPlayerByEvidenceId.get(id)?.notableChanges.length > 0)
   )));
   const copy = editorialText(editorial);
+  const awkwardCopyMatches = AWKWARD_FOOTBALL_COPY_PATTERNS.filter((pattern) => pattern.test(copy));
   const usedEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds));
   const structuredEvidenceIds = ["team.volume", "team.quality", "team.progression", "matchup.midfield", "matchup.home_attack_away_defense", "matchup.away_attack", "flow.shot_windows", "flow.game_state_context", "mechanism.chance_creation", "mechanism.decisive_window", "heatmap.spatial_profile", "history.audit"];
   const structuredEvidenceReady = structuredEvidenceIds.every((id) => evidence.find((item) => item.id === id)?.context);
@@ -2031,10 +2007,10 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const summaryRolesGrounded = summaryRolePatterns.every((pattern) => !pattern.test(summaryCopy) || pattern.test(bodyCopy));
   const summarySpatialEvidenceGrounded = !/(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(summaryCopy)
     || /(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(bodyCopy);
-  const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
+  const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === EDITORIAL_REVIEW_MODE
     && editorialReview.status === "passed"
     && Object.values(editorialReview.checks).every(Boolean));
-  const qualityReviewPassed = !requiresAiReview || (qualityReview.mode === "openai_independent_quality_gate"
+  const qualityReviewPassed = !requiresAiReview || (qualityReview.mode === QUALITY_REVIEW_MODE
     && qualityReview.status === "passed"
     && Object.values(qualityReview.checks).every(Boolean)
     && qualityReview.issues.length === 0);
@@ -2054,9 +2030,9 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["heatmap-coverage", "כיסוי מפות החום מספיק לניתוח מבני", Number(spatialProfile?.starterHeatmaps ?? 0) >= 18, `${spatialProfile?.starterHeatmaps ?? 0} שחקני הרכב עם מפה`],
     ["history-order", "כל משחקי ההשוואה קדמו למשחק", historyPrecedesMatch, `${historicalMatches.length} משחקים קודמים נבדקו`],
     ["historical-player-volume", "השוואות שחקנים נשענות על מדדי נפח", weakHistoricalPlayerClaims.length === 0, weakHistoricalPlayerClaims.length ? `${weakHistoricalPlayerClaims.length} השוואות נשענו על מדגם חלש` : "לא נמצאו מגמות אישיות ממדגם קטן"],
-    ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", AWKWARD_FOOTBALL_COPY_PATTERNS.every((pattern) => !pattern.test(copy)), "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
+    ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", awkwardCopyMatches.length === 0, awkwardCopyMatches.length ? awkwardCopyMatches.map(String).join(" | ") : "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
     ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
-    ["independent-quality-review", "מבקר איכות בלתי־תלוי אישר את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
+    ["quality-review", "בקרת האיכות אישרה את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
     ["analysis-plan", "האנליסט בחר תזה, תובנות והשמטות תקינות", planFailures.length === 0, planFailures.length ? planFailures.join(" | ") : `${analysisPlan.rankedInsights.length} תובנות ו-${analysisPlan.coverageDecisions.filter((item) => item.decision === "omit").length} קטגוריות שהושמטו`],
     ["plan-followed", "הכתבה עוקבת אחר התזה והקשת הסיפורית", planFollowed, `${sectionInsightIds.length} שיוכי תובנה נבדקו`],
     ["game-state-story", "מצב המשחק מקבל משקל לפני המספרים המצטברים", gameStateStoryPassed, gameStateContext.rawShotTotalsNeedGameStateContext ? "נתוני הבעיטות דורשים הקשר באחד מ-2 הסעיפים הראשונים" : "לא זוהה עיוות מהותי בסכומי הבעיטות"],
@@ -2145,14 +2121,12 @@ function fixtureAnalysisPlan(insightCandidates) {
   };
 }
 
-async function main() {
+async function retiredPaidPipeline() {
+  throw new Error("The paid API article pipeline has been retired. Use the kadurdata-match-review skill.");
   await loadLocalEnv();
   const args = readArguments();
   if (args.noAi && !args.dryRun) {
     throw new Error("--no-ai is only available with --dry-run for mechanical fixture checks; it cannot publish an article.");
-  }
-  if (!args.noAi && !process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is required: published articles must run both the AI writer and the independent AI editor.");
   }
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -2316,9 +2290,9 @@ async function main() {
     generation: {
       mode: usedAi ? "openai_analyst_writer_editor_and_qa" : "mechanical_fixture_dry_run",
       analystModel: analysisResult.model,
-      model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
-      editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
+      model: usedAi ? "retired-paid-pipeline" : null,
+      editorModel: usedAi ? "retired-paid-pipeline" : null,
+      qualityModel: usedAi ? "retired-paid-pipeline" : null,
       pipelineVersion: "match-review-v19",
     },
     match: {
@@ -2377,7 +2351,283 @@ async function main() {
   console.log(JSON.stringify({ outputPath, slug, usedAi, checks: checks.length, dryRun: args.dryRun }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+function blankReviewChecks(value = false) {
+  return {
+    naturalHebrew: value,
+    footballHebrew: value,
+    numericClarity: value,
+    cohesiveNarrative: value,
+    storyValue: value,
+    numberDiscipline: value,
+    highVolumeComparisonsOnly: value,
+    evidenceFaithfulness: value,
+    gameStateContext: value,
+    graphicRelevance: value,
+    explanatoryDepth: value,
+    historicalAuditComplete: value,
+  };
+}
+
+function draftEditorialTemplate(home, away) {
+  return {
+    headline: `להחליף בכותרת: ${home.nameHe} מול ${away.nameHe}`,
+    headlineEvidenceIds: ["match.result"],
+    dek: "להחליף בכותרת משנה שמציגה את התזה ולא רשימת מספרים.",
+    dekEvidenceIds: ["match.result"],
+    sections: [{
+      heading: "להחליף בכותרת סעיף",
+      insightIds: [],
+      paragraphs: [{ text: "להחליף בפסקה מבוססת ראיות.", evidenceIds: ["match.result"] }],
+    }],
+    takeaways: [
+      { text: "להחליף בתובנה שכבר הוסברה בגוף.", evidenceIds: ["match.result"] },
+      { text: "להחליף בתובנה שכבר הוסברה בגוף.", evidenceIds: ["match.result"] },
+      { text: "להחליף בתובנה שכבר הוסברה בגוף.", evidenceIds: ["match.result"] },
+    ],
+    conclusion: "להחליף במסקנה שמסכמת את ההסבר המרכזי.",
+    conclusionEvidenceIds: ["match.result"],
+  };
+}
+
+function authoringTemplate(sourceFilename, analysisPlan, editorial) {
+  return {
+    schemaVersion: 1,
+    source: sourceFilename,
+    model: "configured-codex-model",
+    analysisPlan,
+    editorial,
+    editorialReview: {
+      status: "failed",
+      checks: blankReviewChecks(false),
+      notes: ["העורך חייב להחליף את הטיוטה ולעבור על כל משפט לפני הפרסום."],
+    },
+    qualityReview: {
+      status: "failed",
+      checks: blankReviewChecks(false),
+      issues: ["טרם בוצעה בקרת איכות."],
+      attempt: 1,
+    },
+  };
+}
+
+async function currentSkillArticleExists(outputPath) {
+  try {
+    const article = JSON.parse(await readFile(outputPath, "utf8"));
+    return article.status === "published"
+      && article.generation?.mode === "codex_skill"
+      && article.generation?.pipelineVersion === PIPELINE_VERSION;
+  } catch {
+    return false;
+  }
+}
+
+async function prepareWorkbench() {
+  await loadLocalEnv();
+  const args = readArguments();
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) throw new Error("VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required.");
+
+  const client = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+  const match = await selectMatch(client, args.matchId);
+  const slug = `${cleanTeamSlug(match.away_team_name)}-at-${cleanTeamSlug(match.home_team_name)}-${datePart(match.scheduled_at)}`;
+  const publishedPath = path.join(generatedDirectory, `${slug}.json`);
+  const workbenchRoot = args.workbenchDirectory
+    ? path.resolve(projectRoot, args.workbenchDirectory)
+    : defaultWorkbenchDirectory;
+  const articleWorkbenchDirectory = path.join(workbenchRoot, slug);
+  const sourcePath = path.join(articleWorkbenchDirectory, "source.json");
+  const templatePath = path.join(articleWorkbenchDirectory, "authored.template.json");
+
+  if (!args.force && await currentSkillArticleExists(publishedPath)) {
+    console.log(JSON.stringify({ publishedPath, slug, skipped: true, reason: "current-skill-article-already-published" }, null, 2));
+    return;
+  }
+  if (!args.force) {
+    try {
+      await access(sourcePath);
+      console.log(JSON.stringify({ sourcePath, templatePath, slug, skipped: true, reason: "workbench-already-prepared" }, null, 2));
+      return;
+    } catch {
+      // Continue when no resumable workbench exists.
+    }
+  }
+
+  const dataset = await fetchMatchDataset(client, match);
+  if (dataset.teamRows.length === 0 || dataset.playerRows.length === 0 || dataset.shots.length === 0) {
+    throw new Error("The selected match does not have the team, player, and shot data required for a grounded review.");
+  }
+
+  const teamStats = pivotTeamStats(dataset.teamRows);
+  const players = pivotPlayerStats(dataset.playerRows);
+  const hebrewNames = new Map([
+    ...dataset.heatmaps.filter((row) => row.player_id && row.display_name_he).map((row) => [row.player_id, row.display_name_he]),
+    ...dataset.shots.filter((shot) => shot.player_id && shot.display_name_he).map((shot) => [shot.player_id, shot.display_name_he]),
+  ]);
+  players.forEach((player) => {
+    player.nameHe = hebrewNames.get(player.playerId) ?? player.nameHe;
+  });
+  const home = teamSnapshot(match, "home", teamStats.get(match.home_team_id) ?? {}, dataset.assets, dataset.shots);
+  const away = teamSnapshot(match, "away", teamStats.get(match.away_team_id) ?? {}, dataset.assets, dataset.shots);
+  const unitMatchups = {
+    home: teamUnits(players, home.teamId),
+    away: teamUnits(players, away.teamId),
+  };
+  const [providerGame, spatialProfile] = await Promise.all([
+    fetchProviderGameDetail(dataset.shots),
+    analyzeContentHeatmaps(dataset.heatmaps, players, home.teamId, away.teamId),
+  ]);
+  const homeHistoryDataset = await fetchHistoricalTeamDataset(client, match, home.teamId);
+  const awayHistoryDataset = await fetchHistoricalTeamDataset(client, match, away.teamId);
+  const playerHistoryDataset = await fetchHistoricalPlayerDataset(client, match, players);
+  const timelineEvents = normalizeTimelineEvents(providerGame, players, home, away);
+  const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId);
+  const historicalContext = buildHistoricalContext(home, away, players, homeHistoryDataset, awayHistoryDataset, playerHistoryDataset);
+  const gameStateContext = buildGameStateContext(dataset.shots, timelineEvents, home, away);
+  const mechanismContext = buildMechanismContext({
+    shots: dataset.shots,
+    players,
+    home,
+    away,
+    unitMatchups,
+    spatialProfile,
+    flowWindows,
+    timelineEvents,
+    gameStateContext,
+  });
+  const historicalAuditContext = buildHistoricalAuditContext(historicalContext);
+  const insightCandidates = buildInsightCandidates({
+    home,
+    away,
+    flowWindows,
+    gameStateContext,
+    historicalContext,
+    unitMatchups,
+    spatialProfile,
+    mechanismContext,
+  });
+  const evidence = buildEvidence(
+    match,
+    home,
+    away,
+    players,
+    dataset.shots,
+    unitMatchups,
+    dataset.heatmaps,
+    flowWindows,
+    timelineEvents,
+    spatialProfile,
+    historicalContext,
+    historicalAuditContext,
+    gameStateContext,
+    mechanismContext,
+  );
+  const generatedAt = new Date().toISOString();
+  const analysisPlan = fixtureAnalysisPlan(insightCandidates);
+  const editorial = draftEditorialTemplate(home, away);
+  const article = {
+    schemaVersion: 1,
+    slug,
+    language: "he",
+    kind: "match_review",
+    status: "draft",
+    publishedAt: generatedAt,
+    generatedAt,
+    generation: {
+      mode: "codex_skill_workbench",
+      analystModel: null,
+      model: null,
+      editorModel: null,
+      qualityModel: null,
+      pipelineVersion: PIPELINE_VERSION,
+    },
+    match: {
+      matchId: match.match_id,
+      competitionId: match.competition_id,
+      competitionNameHe: match.competition_name_he ?? "ליגת העל",
+      seasonId: match.season_id,
+      seasonName: match.season_name,
+      roundId: match.round_id,
+      roundNumber: match.round_number,
+      scheduledAt: match.scheduled_at,
+      status: match.status,
+    },
+    teams: { home, away },
+    tags: [],
+    aiDisclosure: "גילוי נאות: הכתבה נוצרה בעזרת בינה מלאכותית על בסיס נתוני כדורדאטה. הנתונים והטענות המספריות עברו בדיקות אוטומטיות לפני הפרסום.",
+    players,
+    playerSpotlight: players
+      .filter((player) => Number(player.metrics.goals ?? 0) > 0 || Number(player.metrics.assists ?? 0) > 0)
+      .sort((left, right) => Number(right.metrics.rating_365 ?? 0) - Number(left.metrics.rating_365 ?? 0))
+      .slice(0, 8),
+    heatmaps: dataset.heatmaps,
+    spatialProfile,
+    unitMatchups,
+    timelineEvents,
+    flowWindows,
+    actualPlayTime: providerGame?.actualPlayTime ? {
+      actual: providerGame.actualPlayTime.actualTime?.name ?? null,
+      total: providerGame.actualPlayTime.totalTime?.name ?? null,
+    } : null,
+    historicalContext,
+    historicalAuditContext,
+    gameStateContext,
+    mechanismContext,
+    insightCandidates,
+    analysisPlan,
+    shots: dataset.shots.map(normalizeShot),
+    editorialReview: {
+      mode: "codex_skill_editor_pending",
+      model: null,
+      status: "failed",
+      checks: blankReviewChecks(false),
+      notes: ["טרם בוצעה עריכת תוכן."],
+    },
+    qualityReview: {
+      mode: "codex_skill_quality_gate_pending",
+      model: null,
+      status: "failed",
+      checks: blankReviewChecks(false),
+      issues: ["טרם בוצעה בקרת איכות."],
+      attempt: 0,
+    },
+    editorial,
+    evidence,
+    factCheck: {
+      status: "failed",
+      checkedAt: generatedAt,
+      checks: [],
+      evidenceCount: evidence.length,
+      claimCount: 0,
+      sourceViews: ["api_matches", "api_match_team_stats", "api_match_player_stats", "api_match_shots", "api_match_player_heatmaps", "365scores_game_detail"],
+    },
+    _workbench: {
+      rawMatch: match,
+      rawShots: dataset.shots,
+    },
+  };
+
+  if (!args.dryRun) {
+    await mkdir(articleWorkbenchDirectory, { recursive: true });
+    await writeFile(sourcePath, `${JSON.stringify(article, null, 2)}\n`, "utf8");
+    await writeFile(templatePath, `${JSON.stringify(authoringTemplate("source.json", analysisPlan, editorial), null, 2)}\n`, "utf8");
+  }
+  console.log(JSON.stringify({ sourcePath, templatePath, publishedPath, slug, dryRun: args.dryRun }, null, 2));
+}
+
+export {
+  EDITORIAL_REVIEW_MODE,
+  PIPELINE_VERSION,
+  QUALITY_REVIEW_MODE,
+  buildArticleTags,
+  buildChecks,
+  claimEntries,
+};
+
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMainModule) {
+  prepareWorkbench().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

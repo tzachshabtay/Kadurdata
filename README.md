@@ -99,34 +99,36 @@ npm run dev
 
 Without `VITE_SUPABASE_ANON_KEY`, the local frontend renders a demo data state so the UI remains testable.
 
-## Hebrew Content Pipeline
+## Hebrew Content Skill
 
 The Hebrew-only `בלוג` tab reads fact-checked article packages from
-`src/content/generated/`. Each match review is built in eight stages:
+`src/content/generated/`. Match reviews are authored through the repository skill at
+`.agents/skills/kadurdata-match-review/`:
 
 1. Select a completed Ligat Ha'Al match with team, player, shot, event-timeline, and heatmap data.
 2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
 3. Derive time-window flow, spatial-team profiles, unit matchups, and game-state splits around red cards and late score states; flag when similar cumulative totals conceal a materially different match.
-4. Rank candidate insights, then ask a dedicated AI analyst to choose one thesis, explicitly omit weak angles, design the narrative arc, and select 2–4 evidence-backed graphics.
-5. Ask the OpenAI Responses API for a selective Hebrew narrative whose sections follow that plan and whose claims cite evidence IDs.
-6. Run a separate senior football-editor pass for idiomatic Israeli football Hebrew, numerical clarity, story value, and misuse of small samples.
-7. Run an independent adversarial quality gate plus deterministic checks for game-state context, plan adherence, graphic relevance, numeric density, score/event consistency, and evidence support; rejected drafts return to the editor for up to five attempts.
+4. Rank candidate insights and prepare an ignored local workbench containing the evidence package and authoring contract.
+5. Let the native Codex task choose one thesis, explicitly omit weak angles, write the Hebrew narrative, and select 2–4 evidence-backed graphics without calling a paid model API.
+6. Run distinct editorial and quality passes for idiomatic Israeli football Hebrew, numerical clarity, story value, explanatory depth, and misuse of small samples.
+7. Finalize through deterministic checks for game-state context, plan adherence, graphic relevance, numeric density, score/event consistency, and evidence support; any failure blocks publication.
 8. Publish the JSON package—including its analysis and graphic plans—with Hebrew team, player, and `סיכום משחק` tags; Vite renders only the selected code-native graphics and adds the article to the filterable blog archive.
 
-Generate the latest eligible match with AI:
+Prepare an evidence workbench for the latest eligible match:
 
 ```bash
-npm run content:generate:latest
+npm run content:prepare
+```
+
+Invoke `$kadurdata-match-review` in Codex to create `authored.json`, then finalize it using the paths reported by preparation:
+
+```bash
+npm run content:finalize -- --source <source.json> --authored <authored.json>
 npm run content:validate
 npm run build
 ```
 
-Set `OPENAI_API_KEY` and optionally `OPENAI_ANALYST_MODEL`, `OPENAI_MODEL`, `OPENAI_EDITOR_MODEL`, and `OPENAI_QA_MODEL` in `.env`. Rebuild the sample
-through the same real writer-and-editor pipeline with `npm run content:generate:sample`. Publishing without
-both AI passes is rejected. `npm run content:check:fixture` is available only as a dry-run mechanical fixture;
-it never writes or publishes an article.
-
-`.github/workflows/generate-content.yml` runs on Monday and Thursday, skips a match
-that is already published, validates the evidence package, builds the site, and only
-commits the generated article after every gate passes. A match UUID can also be
-supplied in a manual workflow run for a specific review.
+No `OPENAI_API_KEY` is used. The former paid GitHub Actions generator has been removed;
+the local Codex scheduled task invokes the skill with ChatGPT-plan usage. Keep the computer
+on and the ChatGPT desktop app running when the schedule is due. `npm run content:check:fixture`
+checks deterministic preparation without writing or publishing an article.

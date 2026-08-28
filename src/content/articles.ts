@@ -9,11 +9,11 @@ export const articles = Object.values(generatedModules)
   .filter((article) => (
     article.language === "he"
     && article.status === "published"
-    && article.generation.mode === "openai_analyst_writer_editor_and_qa"
-    && article.generation.pipelineVersion === "match-review-v19"
-    && article.editorialReview.mode === "openai_second_pass_editor"
+    && article.generation.mode === "codex_skill"
+    && article.generation.pipelineVersion === "match-review-v20"
+    && article.editorialReview.mode === "codex_skill_editor"
     && article.editorialReview.status === "passed"
-    && article.qualityReview?.mode === "openai_independent_quality_gate"
+    && article.qualityReview?.mode === "codex_skill_quality_gate"
     && article.qualityReview.status === "passed"
     && article.qualityReview.checks.storyValue
     && article.qualityReview.checks.gameStateContext

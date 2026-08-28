@@ -1,0 +1,8 @@
+interface:
+  display_name: "Kadurdata Match Review"
+  short_description: "Write grounded Hebrew football match reviews"
+  brand_color: "#167D5A"
+  default_prompt: "Use $kadurdata-match-review to prepare, write, fact-check, and publish the next eligible Hebrew match review."
+
+policy:
+  allow_implicit_invocation: true

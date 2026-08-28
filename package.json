@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "content:generate:latest": "node scripts/generate_content_article.mjs",
-    "content:generate:sample": "node scripts/generate_content_article.mjs --match-id 5b2957d1-6f48-4269-baf6-2f53753eb160 --force",
-    "content:check:fixture": "node scripts/generate_content_article.mjs --match-id 5b2957d1-6f48-4269-baf6-2f53753eb160 --no-ai --dry-run",
+    "content:prepare": "node scripts/generate_content_article.mjs",
+    "content:prepare:sample": "node scripts/generate_content_article.mjs --match-id 5b2957d1-6f48-4269-baf6-2f53753eb160 --force",
+    "content:finalize": "node scripts/finalize_content_article.mjs",
+    "content:check:fixture": "node scripts/generate_content_article.mjs --match-id 5b2957d1-6f48-4269-baf6-2f53753eb160 --force --dry-run",
     "content:validate": "node scripts/validate_content_articles.mjs"
   },
   "dependencies": {
