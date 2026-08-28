@@ -1516,6 +1516,7 @@ async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameS
         "אתה מבקר האיכות האחרון והבלתי־תלוי של מדור ספורט עברי. אינך עורך את הכתבה ואינך מתבקש להיות מנומס; תפקידך למנוע פרסום של נוסח שאינו ראוי.",
         "קרא כל משפט כאילו הוא עומד להתפרסם עכשיו באתר ספורט ישראלי. אפילו שגיאת התאמה אחת, מילה מומצאת אחת או צירוף שאינו קיים בעברית מחייבים naturalHebrew=false.",
         "פסול תרגום מילולי, מליצות ריקות ופעלים שאינם מתאימים לנתון. דוגמאות לסוגי כשל: 'השערים פונו', 'קבוצה כיתרה 51%', 'המצביה היו', 'ריבוי דו־קרקעי', 'גלים של איומים', 'להציב יותר נוכחות', 'לקבל יותר איומים' או 'שימור איזון בנפח'.",
+        "בדוק גם התאמה בין הפועל למושא: מאזן או פער מספרי אינם 'מתקרבים' ואי אפשר 'לקרב' אותם. יש לתאר מה באמת השתנה, למשל שהקבוצה צמצמה את הפער במספר הבעיטות.",
         "footballHebrew=true רק אם הטקסט נשמע כמו ניתוח כדורגל ישראלי: מרכז השדה, אגפים או כנפיים, חילוצי כדור ומצבים. המילה 'נתיב' לתיאור אזור במגרש, 'לייצר בעיטות' או ניסוח מופשט של איום מחייבים false.",
         "numericClarity=true רק אם ברור לקורא מה כל מספר מודד, מהו בסיס ההשוואה, ומה ההבדל בין נתון של המשחק למדגם היסטורי.",
         "cohesiveNarrative=true רק אם לכתבה יש טענה מרכזית אחת, כל פסקה מקדמת אותה, ואין חזרות, סתירות או משפטי מילוי אוטומטיים.",
@@ -1848,6 +1849,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/,
     /מצב של המשחק/,
     /מאזני בעיטות/,
+    /(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/,
     /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
   ];
   const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
@@ -2135,7 +2137,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v13",
+      pipelineVersion: "match-review-v14",
     },
     match: {
       matchId: match.match_id,
