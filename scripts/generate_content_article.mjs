@@ -1443,7 +1443,22 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
   };
 }
 
-function editorialStructureFailures(editorial, analysisPlan) {
+function decisiveWindowScorerNames(mechanismContext) {
+  const decisiveWindow = mechanismContext?.decisiveWindow;
+  if (!decisiveWindow) return [];
+  const dominantShooters = decisiveWindow.away?.goals > decisiveWindow.home?.goals
+    ? decisiveWindow.awayShooters
+    : decisiveWindow.home?.goals > decisiveWindow.away?.goals
+      ? decisiveWindow.homeShooters
+      : [...(decisiveWindow.homeShooters ?? []), ...(decisiveWindow.awayShooters ?? [])];
+  return [...(dominantShooters ?? [])]
+    .filter((shooter) => shooter.goals > 0 && shooter.playerNameHe)
+    .sort((left, right) => right.goals - left.goals || right.expectedGoals - left.expectedGoals)
+    .slice(0, 2)
+    .map((shooter) => shooter.playerNameHe);
+}
+
+function editorialStructureFailures(editorial, analysisPlan, mechanismContext) {
   const failures = [];
   const sectionInsightIds = new Set(editorial.sections.flatMap((section) => section.insightIds ?? []));
   const claimEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds ?? []));
@@ -1459,6 +1474,14 @@ function editorialStructureFailures(editorial, analysisPlan) {
         && section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes(evidenceId)))) {
       failures.push(`התובנה ${insightId} אינה מוסברת באמצעות ${evidenceId}`);
     }
+  }
+  if (analysisPlan.rankedInsights.some((insight) => insight.id === "decisive_window_mechanism")) {
+    const decisiveCopy = editorial.sections
+      .filter((section) => section.insightIds?.includes("decisive_window_mechanism"))
+      .flatMap((section) => section.paragraphs.map((paragraph) => paragraph.text))
+      .join(" ");
+    const missingScorers = decisiveWindowScorerNames(mechanismContext).filter((name) => !decisiveCopy.includes(name));
+    if (missingScorers.length) failures.push(`סעיף חלון ההכרעה אינו מסביר את מעורבות המסיימים המרכזיים: ${missingScorers.join(", ")}`);
   }
   const usesHistoricalEvidence = [...claimEvidenceIds].some((id) => id.startsWith("history.team.") || id.startsWith("history.player."));
   if (analysisPlan.historicalAudit.decision === "use" && !usesHistoricalEvidence) failures.push("הביקורת ההיסטורית בחרה use אך אין בגוף השוואה היסטורית");
@@ -1477,22 +1500,27 @@ function editorialStructureFailures(editorial, analysisPlan) {
   return failures;
 }
 
-function sectionSupportsInsight(section, insightId) {
+function sectionSupportsInsight(section, insightId, mechanismContext) {
   if (!section.insightIds?.includes(insightId)) return false;
   const requiredEvidenceId = insightId === "chance_creation_mechanism"
     ? "mechanism.chance_creation"
     : insightId === "decisive_window_mechanism"
       ? "mechanism.decisive_window"
       : null;
-  return !requiredEvidenceId || section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes(requiredEvidenceId));
+  if (requiredEvidenceId && !section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes(requiredEvidenceId))) return false;
+  if (insightId === "decisive_window_mechanism") {
+    const copy = section.paragraphs.map((paragraph) => paragraph.text).join(" ");
+    return decisiveWindowScorerNames(mechanismContext).every((name) => copy.includes(name));
+  }
+  return true;
 }
 
-function preserveRequiredEditorialSections(previousEditorial, nextEditorial, analysisPlan) {
+function preserveRequiredEditorialSections(previousEditorial, nextEditorial, analysisPlan, mechanismContext) {
   let sections = [...nextEditorial.sections];
   const requiredInsightIds = analysisPlan.rankedInsights.map((insight) => insight.id);
   for (const insightId of requiredInsightIds) {
-    if (sections.some((section) => sectionSupportsInsight(section, insightId))) continue;
-    const previousSection = previousEditorial.sections.find((section) => sectionSupportsInsight(section, insightId));
+    if (sections.some((section) => sectionSupportsInsight(section, insightId, mechanismContext))) continue;
+    const previousSection = previousEditorial.sections.find((section) => sectionSupportsInsight(section, insightId, mechanismContext));
     if (!previousSection) continue;
     sections = sections.filter((section) => !section.insightIds?.includes(insightId));
     sections.push(previousSection);
@@ -1531,7 +1559,7 @@ function preserveRequiredEditorialSections(previousEditorial, nextEditorial, ana
   return { ...nextEditorial, sections };
 }
 
-async function editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
+async function editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, mechanismContext, draft, qualityFeedback = []) {
   let currentDraft = draft;
   let currentAnalysisPlan = analysisPlan;
   let currentFeedback = [...qualityFeedback];
@@ -1539,8 +1567,8 @@ async function editEditorialUntilPassed(match, evidence, analysisPlan, gameState
   for (let attempt = 1; attempt <= MAX_EDITORIAL_ATTEMPTS; attempt += 1) {
     result = await editEditorialWithAi(match, evidence, currentAnalysisPlan, gameStateContext, currentDraft, currentFeedback);
     currentAnalysisPlan = { ...currentAnalysisPlan, graphics: result.graphics };
-    result.editorial = preserveRequiredEditorialSections(currentDraft, result.editorial, currentAnalysisPlan);
-    const structuralFailures = editorialStructureFailures(result.editorial, currentAnalysisPlan);
+    result.editorial = preserveRequiredEditorialSections(currentDraft, result.editorial, currentAnalysisPlan, mechanismContext);
+    const structuralFailures = editorialStructureFailures(result.editorial, currentAnalysisPlan, mechanismContext);
     if (structuralFailures.length) {
       result.review.status = "failed";
       result.review.notes = [...new Set([
@@ -1581,6 +1609,7 @@ async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameS
         "storyValue=true רק אם כל סעיף מסביר למה הנתונים חשובים לתזה. פסקה שמונה מדדים בלי להסביר מה הם מלמדים על המשחק מחייבת false.",
         "numberDiscipline=true רק אם המספרים נבחרו במשורה. פסקה עם 4 מספרים או יותר שאינה מפרידה בבירור בין טענה להסבר מחייבת false.",
         "שלוש נקודות הסיכום רשאיות לתמצת בקצרה טענות מהכתבה; אל תפסול אותן רק משום שהן מסכמות. פסול חזרה כמעט מילולית בתוך גוף הכתבה או מסקנה שאינה מוסיפה סינתזה.",
+        "כל שחקן או אירוע שמופיעים בנקודות הסיכום או במסקנה חייבים להיבנות קודם בגוף הכתבה. שם חדש שמופיע לראשונה בסיכום מחייב cohesiveNarrative=false.",
         "highVolumeComparisonsOnly=true רק אם מגמות שחקנים נשענות על מדדי נפח ועל notableChanges, ולא על שער, בישול או אירוע יחיד.",
         "evidenceFaithfulness=true רק אם הפרשנות נובעת מהראיות. פסול סיבתיות, שינוי טקטי, צד מגרש או תזמון שאינם נתמכים במפורש.",
         "gameStateContext=true רק אם הכתבה נותנת להקשר מצב המשחק את המשקל שקבע analysisPlan. כאשר rawShotTotalsNeedGameStateContext=true, אחד מ-2 הסעיפים הראשונים חייב להסביר מדוע הסכומים הסופיים מטעים; אזכור מאוחר אינו מספיק.",
@@ -1810,7 +1839,7 @@ function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameSta
   return failures;
 }
 
-function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, requiresAiReview, analysisPlan, insightCandidates, gameStateContext) {
+function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, requiresAiReview, analysisPlan, insightCandidates, gameStateContext, mechanismContext) {
   const homeGoals = shots.filter((shot) => shot.team_id === home.teamId && shot.outcome === "Goal").length;
   const awayGoals = shots.filter((shot) => shot.team_id === away.teamId && shot.outcome === "Goal").length;
   const playerGoals = players.reduce((sum, player) => sum + Number(player.metrics.goals ?? 0), 0);
@@ -1878,6 +1907,11 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const takeawaysOnlySummarize = !requiresAiReview || editorial.takeaways.every((takeaway) => (
     extractNumbers(takeaway.text).every((value) => bodyNumbers.some((candidate) => numbersMatch(candidate, value)))
   ));
+  const bodyCopy = editorial.sections.flatMap((section) => section.paragraphs.map((paragraph) => paragraph.text)).join(" ");
+  const summaryCopy = `${editorial.conclusion} ${editorial.takeaways.map((takeaway) => takeaway.text).join(" ")}`;
+  const ungroundedSummaryPlayers = players
+    .filter((player) => player.nameHe && summaryCopy.includes(player.nameHe) && !bodyCopy.includes(player.nameHe))
+    .map((player) => player.nameHe);
   const knownPlayerIds = new Set(players.map((player) => player.playerId));
   const plannedInsightById = new Map(analysisPlan.rankedInsights.map((insight) => [insight.id, insight]));
   const graphicPlanReady = !requiresAiReview || analysisPlan.graphics.every((graphic) => (
@@ -1907,6 +1941,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/,
     /מצב של המשחק/,
     /מאזני בעיטות/,
+    /האות הקבוצתי/,
     /(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/,
     /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
   ];
@@ -1943,6 +1978,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["historical-audit", "נתוני העבר נבדקו והשימוש בהם תואם למסקנת האנליסט", historicalAuditPassed, `${analysisPlan.historicalAudit.decision}: ${analysisPlan.historicalAudit.findingHe}`],
     ["number-discipline", "המספרים תומכים בסיפור ואינם מחליפים אותו", disciplinedNumbers, `מספרים בפסקאות: ${paragraphNumbers.join(", ")}`],
     ["takeaways-summarize", "התקציר אינו מציג מספרים חדשים", takeawaysOnlySummarize, "כל מספר בתקציר הופיע קודם בגוף הכתבה"],
+    ["summary-player-grounding", "שחקנים בסיכום הוסברו קודם בגוף", ungroundedSummaryPlayers.length === 0, ungroundedSummaryPlayers.length ? `שמות שהופיעו לראשונה בסיכום: ${ungroundedSummaryPlayers.join(", ")}` : "כל שמות השחקנים בסיכום הופיעו בגוף"],
     ["graphic-plan", "הגרפיקות נבחרו עבור תובנות ושחקנים קיימים", graphicPlanReady, `${analysisPlan.graphics.length} גרפיקות מתוכננות`],
     ["structured-evidence-context", "ראיות הניתוח כוללות שמות מדדים וקבוצות", structuredEvidenceReady, `${structuredEvidenceIds.length} חבילות ראיות מובנות נבדקו`],
     ["article-tags", "תגיות הכתבה כוללות קבוצות, שחקנים וסוג כתבה", requiredTeamTags.every((id) => teamTagIds.has(id)) && tags.some((tag) => tag.kind === "player") && tags.some((tag) => tag.id === "topic:match-summary"), `${tags.length} תגיות נשמרו`],
@@ -2135,7 +2171,7 @@ async function main() {
     ? await generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext)
     : fallbackEditorial(match, home, away);
   const reviewed = usedAi
-    ? await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, draftEditorial)
+    ? await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, mechanismContext, draftEditorial)
     : curatedEditorialSeed(draftEditorial);
   if (usedAi) analysisPlan = reviewed.analysisPlan;
   let { editorial, review: editorialReview } = reviewed;
@@ -2154,7 +2190,7 @@ async function main() {
       let currentFeedback = [];
       if (qualityReview.status === "passed") {
         tags = buildArticleTags(home, away, players, editorial);
-        checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, true, analysisPlan, insightCandidates, gameStateContext);
+        checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, true, analysisPlan, insightCandidates, gameStateContext, mechanismContext);
         failedChecks = checks.filter((check) => check.status === "failed");
         if (failedChecks.length === 0) break;
         console.log(JSON.stringify({ deterministicAttempt: attempt, failedChecks }, null, 2));
@@ -2163,7 +2199,7 @@ async function main() {
         currentFeedback = qualityReview.issues;
       }
       if (attempt === MAX_QUALITY_ATTEMPTS) break;
-      const revised = await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, editorial, [...new Set(currentFeedback)]);
+      const revised = await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, mechanismContext, editorial, [...new Set(currentFeedback)]);
       editorial = revised.editorial;
       editorialReview = revised.review;
       analysisPlan = revised.analysisPlan;
@@ -2173,7 +2209,7 @@ async function main() {
     }
   } else {
     tags = buildArticleTags(home, away, players, editorial);
-    checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, false, analysisPlan, insightCandidates, gameStateContext);
+    checks = buildChecks(match, home, away, players, dataset.shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, false, analysisPlan, insightCandidates, gameStateContext, mechanismContext);
     failedChecks = checks.filter((check) => check.status === "failed");
   }
   if (failedChecks.length) {
@@ -2195,7 +2231,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v16",
+      pipelineVersion: "match-review-v17",
     },
     match: {
       matchId: match.match_id,
