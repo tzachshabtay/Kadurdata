@@ -19,7 +19,7 @@ import {
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
 const HISTORICAL_WINDOW = 5;
-const MAX_QUALITY_ATTEMPTS = 7;
+const MAX_QUALITY_ATTEMPTS = 5;
 const MAX_ANALYSIS_ATTEMPTS = 3;
 const MAX_EDITORIAL_ATTEMPTS = 3;
 const MAX_OPENAI_REQUEST_ATTEMPTS = 2;
@@ -132,7 +132,7 @@ async function postOpenAi(body, label) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(270_000),
+        signal: AbortSignal.timeout(150_000),
       });
       if (response.ok) return response;
       const detail = await response.text();
@@ -1471,7 +1471,64 @@ function editorialStructureFailures(editorial, analysisPlan) {
   if (/מפת?\s*ה?(?:חום|מיקום|פעילות).*?(?:מצטברת|אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את כל זמן ההופעה)/s.test(copy)) {
     failures.push("הכתבה כוללת הסבר מתודולוגי לקורא על צבירת מפת החום");
   }
+  if (/(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/.test(copy)) {
+    failures.push("הכתבה משתמשת בפועל קירב או התקרב לתיאור מאזן מספרי");
+  }
   return failures;
+}
+
+function sectionSupportsInsight(section, insightId) {
+  if (!section.insightIds?.includes(insightId)) return false;
+  const requiredEvidenceId = insightId === "chance_creation_mechanism"
+    ? "mechanism.chance_creation"
+    : insightId === "decisive_window_mechanism"
+      ? "mechanism.decisive_window"
+      : null;
+  return !requiredEvidenceId || section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes(requiredEvidenceId));
+}
+
+function preserveRequiredEditorialSections(previousEditorial, nextEditorial, analysisPlan) {
+  let sections = [...nextEditorial.sections];
+  const requiredInsightIds = analysisPlan.rankedInsights.map((insight) => insight.id);
+  for (const insightId of requiredInsightIds) {
+    if (sections.some((section) => sectionSupportsInsight(section, insightId))) continue;
+    const previousSection = previousEditorial.sections.find((section) => sectionSupportsInsight(section, insightId));
+    if (!previousSection) continue;
+    sections = sections.filter((section) => !section.insightIds?.includes(insightId));
+    sections.push(previousSection);
+  }
+  const usesHistoricalEvidence = (section) => section.paragraphs.some((paragraph) => (
+    paragraph.evidenceIds.some((id) => id.startsWith("history.team.") || id.startsWith("history.player."))
+  ));
+  if (analysisPlan.historicalAudit.decision === "use" && !sections.some(usesHistoricalEvidence)) {
+    const previousHistoricalSection = previousEditorial.sections.find(usesHistoricalEvidence);
+    if (previousHistoricalSection) {
+      const historicalInsightIds = new Set(previousHistoricalSection.insightIds ?? []);
+      sections = sections.filter((section) => !section.insightIds?.some((id) => historicalInsightIds.has(id)));
+      sections.push(previousHistoricalSection);
+    }
+  }
+  const arcOrder = new Map();
+  analysisPlan.narrativeArc.forEach((arcItem, arcIndex) => {
+    arcItem.insightIds.forEach((id) => {
+      if (!arcOrder.has(id)) arcOrder.set(id, arcIndex);
+    });
+  });
+  sections = sections
+    .map((section, originalIndex) => ({ section, originalIndex }))
+    .sort((left, right) => {
+      const leftOrder = Math.min(...left.section.insightIds.map((id) => arcOrder.get(id) ?? Number.MAX_SAFE_INTEGER));
+      const rightOrder = Math.min(...right.section.insightIds.map((id) => arcOrder.get(id) ?? Number.MAX_SAFE_INTEGER));
+      return leftOrder - rightOrder || left.originalIndex - right.originalIndex;
+    })
+    .map(({ section }) => section);
+  if (sections.length > 5) {
+    const requiredSet = new Set(requiredInsightIds);
+    const requiredSections = sections.filter((section) => section.insightIds.some((id) => requiredSet.has(id)));
+    const optionalSections = sections.filter((section) => !section.insightIds.some((id) => requiredSet.has(id)));
+    sections = [...requiredSections, ...optionalSections].slice(0, 5);
+  }
+  return { ...nextEditorial, sections };
 }
 
 async function editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
@@ -1482,6 +1539,7 @@ async function editEditorialUntilPassed(match, evidence, analysisPlan, gameState
   for (let attempt = 1; attempt <= MAX_EDITORIAL_ATTEMPTS; attempt += 1) {
     result = await editEditorialWithAi(match, evidence, currentAnalysisPlan, gameStateContext, currentDraft, currentFeedback);
     currentAnalysisPlan = { ...currentAnalysisPlan, graphics: result.graphics };
+    result.editorial = preserveRequiredEditorialSections(currentDraft, result.editorial, currentAnalysisPlan);
     const structuralFailures = editorialStructureFailures(result.editorial, currentAnalysisPlan);
     if (structuralFailures.length) {
       result.review.status = "failed";
@@ -2137,7 +2195,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v15",
+      pipelineVersion: "match-review-v16",
     },
     match: {
       matchId: match.match_id,
