@@ -19,7 +19,7 @@ import {
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
 const HISTORICAL_WINDOW = 5;
-const MAX_QUALITY_ATTEMPTS = 5;
+const MAX_QUALITY_ATTEMPTS = 7;
 const MAX_ANALYSIS_ATTEMPTS = 3;
 const MAX_EDITORIAL_ATTEMPTS = 3;
 const MAX_OPENAI_REQUEST_ATTEMPTS = 2;
@@ -2137,7 +2137,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v14",
+      pipelineVersion: "match-review-v15",
     },
     match: {
       matchId: match.match_id,
