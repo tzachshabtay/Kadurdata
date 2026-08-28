@@ -1497,6 +1497,9 @@ function editorialStructureFailures(editorial, analysisPlan, mechanismContext) {
   if (/(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/.test(copy)) {
     failures.push("הכתבה משתמשת בפועל קירב או התקרב לתיאור מאזן מספרי");
   }
+  if (/התקרב(?:ה|ו)?\s+[^.]{0,50}\s+במספר\s+הבעיטות/.test(copy)) {
+    failures.push("הכתבה מתארת קבוצה כמי שהתקרבה ליריבה במספר הבעיטות");
+  }
   return failures;
 }
 
@@ -1542,7 +1545,7 @@ function preserveRequiredEditorialSections(previousEditorial, nextEditorial, ana
       if (!arcOrder.has(id)) arcOrder.set(id, arcIndex);
     });
   });
-  sections = sections
+  const sortedSections = sections
     .map((section, originalIndex) => ({ section, originalIndex }))
     .sort((left, right) => {
       const leftOrder = Math.min(...left.section.insightIds.map((id) => arcOrder.get(id) ?? Number.MAX_SAFE_INTEGER));
@@ -1550,12 +1553,20 @@ function preserveRequiredEditorialSections(previousEditorial, nextEditorial, ana
       return leftOrder - rightOrder || left.originalIndex - right.originalIndex;
     })
     .map(({ section }) => section);
-  if (sections.length > 5) {
-    const requiredSet = new Set(requiredInsightIds);
-    const requiredSections = sections.filter((section) => section.insightIds.some((id) => requiredSet.has(id)));
-    const optionalSections = sections.filter((section) => !section.insightIds.some((id) => requiredSet.has(id)));
-    sections = [...requiredSections, ...optionalSections].slice(0, 5);
+  const orderedRequiredInsightIds = [...new Set([
+    ...analysisPlan.narrativeArc.flatMap((arcItem) => arcItem.insightIds),
+    ...requiredInsightIds,
+  ])].filter((id) => requiredInsightIds.includes(id));
+  const requiredSections = [];
+  for (const insightId of orderedRequiredInsightIds) {
+    const section = sortedSections.find((candidate) => sectionSupportsInsight(candidate, insightId, mechanismContext));
+    if (section && !requiredSections.includes(section)) requiredSections.push(section);
   }
+  const optionalSections = sortedSections.filter((section) => (
+    !requiredSections.includes(section)
+    && !section.insightIds.some((id) => requiredInsightIds.includes(id))
+  ));
+  sections = [...requiredSections, ...optionalSections].slice(0, 5);
   return { ...nextEditorial, sections };
 }
 
@@ -1943,6 +1954,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /מאזני בעיטות/,
     /האות הקבוצתי/,
     /(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/,
+    /התקרב(?:ה|ו)?\s+[^.]{0,50}\s+במספר\s+הבעיטות/,
     /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
   ];
   const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === "openai_second_pass_editor"
@@ -2231,7 +2243,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v17",
+      pipelineVersion: "match-review-v18",
     },
     match: {
       matchId: match.match_id,
