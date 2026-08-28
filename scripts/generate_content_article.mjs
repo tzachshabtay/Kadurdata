@@ -21,6 +21,7 @@ const generatedDirectory = path.join(projectRoot, "src", "content", "generated")
 const HISTORICAL_WINDOW = 5;
 const MAX_QUALITY_ATTEMPTS = 5;
 const MAX_ANALYSIS_ATTEMPTS = 3;
+const MAX_EDITORIAL_ATTEMPTS = 3;
 const MAX_OPENAI_REQUEST_ATTEMPTS = 2;
 const HISTORICAL_TEAM_METRICS = [
   "team_possession",
@@ -1301,6 +1302,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
         "השתמש אך ורק בחבילת הראיות שסופקה. אין להוסיף הקשר חיצוני, ציטוטים, סיבות טקטיות שלא נמדדו או עובדות שאינן בחבילה.",
         "לכל טענה מספרית צרף רק מזהי evidenceIds שמכילים את המספרים הללו. שמור על טון עיתונאי ולא שיווקי.",
         "כל מספר שמופיע בטקסט חייב להופיע כפי שהוא במערך values של אחת הראיות המצורפות. אל תחשב הפרשים, ממוצעים, אחוזים או יחסים חדשים בעצמך.",
+        "אל תכתוב 'מצב איכותי' או 'בעיטה באיכות גבוהה' על בסיס shotsAtLeastPointTwoXg בלי לציין שהכוונה לבעיטה בשווי 0.20 xG לפחות. עדיף בדרך כלל לתאר את מיקום הבעיטות ואת ה-xG הממוצע לבעיטה.",
         "כתוב כל כמות ומספר בספרות (למשל 6, לא שישה), כדי שמנוע האימות יוכל לבדוק אותם.",
         "המונחים המקצועיים היחידים שמותר לכתוב באותיות לטיניות הם xG ו-xGOT. אם משתמשים ב-xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)' ואל תשתמש בניסוח המעורפל 'שערים צפויים לאחר הבעיטה'.",
         "הכותרת והפתיח צריכים להציג את התזה, וכל סעיף צריך לקדם את הקשת הסיפורית שנבחרה. השתמש רק בתובנות שסומנו use וב-rankedInsights; אל תכניס בכוח קטגוריה שסומנה omit.",
@@ -1359,9 +1361,11 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         "שמור על התזה, התובנות והקשת הסיפורית שב-analysisPlan. הסר משפטים שנשמעים כמו סיכום אוטומטי, רשימת מדדים או ניתוח צדדי שלא נבחר בתוכנית.",
         "בדוק שהכתבה מיישמת את analysisPlan.explanatoryModel ולא רק חוזרת על התוצאה והפערים. חייב להיות בה חיבור מפורש בין לפחות 2 סוגי ראיות שמסביר כיצד נוצרו המצבים האיכותיים או כיצד התפתח החלון הדומיננטי.",
         "כאשר הראיות מצביעות על חלוקת עבודה בין חוליות, נסח אותה בכדורגל טבעי: מי יצר, מי הצטרף לרחבה או למרכז, ומי סיים. אל תהפוך מתאם להוראה טקטית או לסיבה מוכחת.",
+        "אסור להשמיט תובנת מנגנון שנבחרה ב-analysisPlan. ודא של-chance_creation_mechanism ול-decisive_window_mechanism, כאשר נבחרו, יש סעיף בגוף ולפחות פסקה אחת עם ראיית mechanism המתאימה. אם טיוטה קודמת השמיטה סעיף, הוסף אותו כעת; אינך רשאי לשנות את תוכנית הגרפיקה במקום לתקן את הכתבה.",
         "בכל פסקה שמור על טענה אחת, הסבר של המשמעות, ורק המספרים החיוניים. אם יש 4 מספרים או יותר, פצל או הסר את אלה שאינם נדרשים להבנת הטענה.",
         "ודא שנקודות הסיכום אינן מכניסות מספר או עובדה חדשים שלא הופיעו בגוף הכתבה.",
         "בדוק התאמה דקדוקית כאשר נושא המשפט הוא טווח או צמד מספרים. אם ההתאמה אינה טבעית, כתוב 'מאזן של...' במקום לפתוח את המשפט במספרים.",
+        "ביחס בין 2 קבוצות, כתוב ראשון את המספר של הקבוצה שהיא נושא המשפט. אם מכבי הובילה בבעיטות, הניסוח צריך להיות 'מכבי הובילה 17:7' ולא '7:17'.",
         "מותר לתאר שער או בישול כאירוע במשחק הנוכחי, אך אסור להציג שערים, בישולים, כרטיסים או מדגם קטן כמגמה היסטורית.",
         "השוואה היסטורית נדרשת רק אם analysisPlan בחר בה. השוואה היסטורית אישית מותרת רק כאשר היא נשענת על notableChanges עם לפחות 3 משחקים, נפח מספיק וחריגה משמעותית.",
         "ודא ש-analysisPlan.historicalAudit תואם לשימוש בפועל: אם decision=omit, הסר השוואות היסטוריות מהנוסח; אם decision=use, הצג רק את האותות שנבחרו ובצירוף גודל המדגם והסייג.",
@@ -1408,17 +1412,37 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
   if (!outputText) throw new Error("The editorial review returned no structured output.");
   const reviewed = JSON.parse(outputText);
   const passed = Object.values(reviewed.checks).every(Boolean);
-  if (!passed) throw new Error(`Article rejected by Hebrew editorial review: ${reviewed.notes.join(" | ")}`);
   return {
     editorial: reviewed.editorial,
     review: {
       mode: "openai_second_pass_editor",
       model,
-      status: "passed",
+      status: passed ? "passed" : "failed",
       checks: reviewed.checks,
       notes: reviewed.notes,
     },
   };
+}
+
+async function editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
+  let currentDraft = draft;
+  let currentFeedback = [...qualityFeedback];
+  let result = null;
+  for (let attempt = 1; attempt <= MAX_EDITORIAL_ATTEMPTS; attempt += 1) {
+    result = await editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, currentDraft, currentFeedback);
+    console.log(JSON.stringify({
+      editorialAttempt: attempt,
+      status: result.review.status,
+      notes: result.review.notes,
+    }, null, 2));
+    if (result.review.status === "passed") return result;
+    currentDraft = result.editorial;
+    currentFeedback = [...new Set([
+      ...currentFeedback,
+      ...result.review.notes.map((note) => `בדיקת העורך נכשלה — ${note}`),
+    ])];
+  }
+  return result;
 }
 
 async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameStateContext, editorial, attempt) {
@@ -1747,6 +1771,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     /ההיסטוריה הקצרה שלהם/,
     /המספרים מספרים/,
     /צבר(?:ה|ו)? את רוב האיום/,
+    /צבר(?:ה|ו)? את רוב הבעיטות/,
     /xG\s*;/,
     /השערים פונו/,
     /כיתרה\s+\d/,
@@ -1987,7 +2012,7 @@ async function main() {
     ? await generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext)
     : fallbackEditorial(match, home, away);
   const reviewed = usedAi
-    ? await editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, draftEditorial)
+    ? await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, draftEditorial)
     : curatedEditorialSeed(draftEditorial);
   let { editorial, review: editorialReview } = reviewed;
   let qualityReview = fixtureQualityReview();
@@ -2014,7 +2039,7 @@ async function main() {
         currentFeedback = qualityReview.issues;
       }
       if (attempt === MAX_QUALITY_ATTEMPTS) break;
-      const revised = await editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, editorial, [...new Set(currentFeedback)]);
+      const revised = await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, editorial, [...new Set(currentFeedback)]);
       editorial = revised.editorial;
       editorialReview = revised.review;
     }

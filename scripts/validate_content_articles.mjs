@@ -148,7 +148,7 @@ function validateArticle(article, filename) {
   const bodyNumbers = article.editorial.sections.flatMap((section) => section.paragraphs.flatMap((paragraph) => extractNumbers(paragraph.text)));
   if (article.editorial.takeaways.some((takeaway) => extractNumbers(takeaway.text).some((value) => !bodyNumbers.some((candidate) => numbersMatch(candidate, value))))) fail("a takeaway introduces a number that was not explained in the article body");
   const editorialCopy = claims(article).map((claim) => claim.text).join(" ");
-  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /צבר(?:ה|ו)? את רוב האיום/, /xG\s*;/, /השערים פונו/, /כיתרה\s+\d/, /המצביה/, /ריבוי דו[־-]קרקעי/, /גלים של איומים/, /שימור איזון בנפח/, /נתיב(?:ים|י|י־|ה)?/, /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/, /מצב של המשחק/, /מאזני בעיטות/]) {
+  for (const pattern of [/הפך מחריגה לסיפור/, /ההיסטוריה הקצרה שלהם/, /המספרים מספרים/, /צבר(?:ה|ו)? את רוב האיום/, /צבר(?:ה|ו)? את רוב הבעיטות/, /xG\s*;/, /השערים פונו/, /כיתרה\s+\d/, /המצביה/, /ריבוי דו[־-]קרקעי/, /גלים של איומים/, /שימור איזון בנפח/, /נתיב(?:ים|י|י־|ה)?/, /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/, /מצב של המשחק/, /מאזני בעיטות/]) {
     if (pattern.test(editorialCopy)) fail(`editorial copy contains a blocked phrasing pattern: ${pattern}`);
   }
   return failures;
