@@ -1184,6 +1184,7 @@ const editorialReviewResponseSchema = {
   additionalProperties: false,
   properties: {
     editorial: editorialSchema,
+    graphics: analysisPlanSchema.properties.graphics,
     checks: {
       type: "object",
       additionalProperties: false,
@@ -1205,7 +1206,7 @@ const editorialReviewResponseSchema = {
     },
     notes: { type: "array", items: { type: "string" }, maxItems: 6 },
   },
-  required: ["editorial", "checks", "notes"],
+  required: ["editorial", "graphics", "checks", "notes"],
 };
 
 const qualityReviewResponseSchema = {
@@ -1240,6 +1241,19 @@ function responseOutputText(payload) {
   return payload.output_text ?? payload.output
     ?.flatMap((item) => item.content ?? [])
     .find((item) => item.type === "output_text")?.text;
+}
+
+function evidenceSelectedByPlan(evidence, analysisPlan) {
+  const selectedIds = new Set([
+    ...analysisPlan.thesis.evidenceIds,
+    ...analysisPlan.rankedInsights.flatMap((insight) => insight.evidenceIds),
+    ...analysisPlan.explanatoryModel.evidenceIds,
+    ...analysisPlan.explanatoryModel.components.flatMap((component) => component.evidenceIds),
+    ...analysisPlan.historicalAudit.evidenceIds,
+    ...analysisPlan.graphics.flatMap((graphic) => graphic.evidenceIds),
+    ...analysisPlan.coverageDecisions.filter((decision) => decision.decision === "use").flatMap((decision) => decision.evidenceIds),
+  ]);
+  return evidence.filter((item) => selectedIds.has(item.id));
 }
 
 async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, gameStateContext, analysisFeedback = []) {
@@ -1294,6 +1308,7 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
 }
 
 async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext) {
+  const selectedEvidence = evidenceSelectedByPlan(evidence, analysisPlan);
   const response = await postOpenAi({
       model: process.env.OPENAI_MODEL ?? "gpt-5.6",
       store: false,
@@ -1330,7 +1345,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
         },
         analysisPlan,
         gameStateContext,
-        evidence,
+        evidence: selectedEvidence,
       }),
       text: {
         format: {
@@ -1349,6 +1364,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
 
 async function editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
   const model = process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
+  const selectedEvidence = evidenceSelectedByPlan(evidence, analysisPlan);
   const response = await postOpenAi({
       model,
       store: false,
@@ -1362,6 +1378,8 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         "בדוק שהכתבה מיישמת את analysisPlan.explanatoryModel ולא רק חוזרת על התוצאה והפערים. חייב להיות בה חיבור מפורש בין לפחות 2 סוגי ראיות שמסביר כיצד נוצרו המצבים האיכותיים או כיצד התפתח החלון הדומיננטי.",
         "כאשר הראיות מצביעות על חלוקת עבודה בין חוליות, נסח אותה בכדורגל טבעי: מי יצר, מי הצטרף לרחבה או למרכז, ומי סיים. אל תהפוך מתאם להוראה טקטית או לסיבה מוכחת.",
         "אסור להשמיט תובנת מנגנון שנבחרה ב-analysisPlan. ודא של-chance_creation_mechanism ול-decisive_window_mechanism, כאשר נבחרו, יש סעיף בגוף ולפחות פסקה אחת עם ראיית mechanism המתאימה. אם טיוטה קודמת השמיטה סעיף, הוסף אותו כעת; אינך רשאי לשנות את תוכנית הגרפיקה במקום לתקן את הכתבה.",
+        "החזר גם graphics מעודכן. מותר לערוך כותרת, כותרת משנה, placementInsightId ו-evidenceIds כדי לתקן חוסר התאמה, אך אסור להוסיף תובנה שלא נבחרה. שמור על 2–4 סוגי גרפיקה שונים ועל גרפיקה רק כאשר היא משרתת סעיף שקיים בגוף.",
+        "טווחי הגרפיקות קבועים לפי הקומפוננטה: match_flow מציגה את כל חלונות המשחק; shot_map מציגה את כל בעיטות המשחק; team_history מציגה את חלון המשחקים הקודמים; tactical_heatmap מציגה את זמן ההופעה כולו; player_focus מציגה את נתוני המשחק המלא. אל תבטיח בכותרת סינון זמן שאינו קיים, ואל תכלול מספרים בכותרת או בכותרת המשנה.",
         "בכל פסקה שמור על טענה אחת, הסבר של המשמעות, ורק המספרים החיוניים. אם יש 4 מספרים או יותר, פצל או הסר את אלה שאינם נדרשים להבנת הטענה.",
         "ודא שנקודות הסיכום אינן מכניסות מספר או עובדה חדשים שלא הופיעו בגוף הכתבה.",
         "בדוק התאמה דקדוקית כאשר נושא המשפט הוא טווח או צמד מספרים. אם ההתאמה אינה טבעית, כתוב 'מאזן של...' במקום לפתוח את המשפט במספרים.",
@@ -1394,7 +1412,7 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         },
         analysisPlan,
         gameStateContext,
-        evidence,
+        evidence: selectedEvidence,
         draft,
         qualityFeedback,
       }),
@@ -1414,6 +1432,7 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
   const passed = Object.values(reviewed.checks).every(Boolean);
   return {
     editorial: reviewed.editorial,
+    graphics: reviewed.graphics,
     review: {
       mode: "openai_second_pass_editor",
       model,
@@ -1424,12 +1443,54 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
   };
 }
 
+function editorialStructureFailures(editorial, analysisPlan) {
+  const failures = [];
+  const sectionInsightIds = new Set(editorial.sections.flatMap((section) => section.insightIds ?? []));
+  const claimEvidenceIds = new Set(claimEntries(editorial).flatMap((claim) => claim.evidenceIds ?? []));
+  for (const insight of analysisPlan.rankedInsights) {
+    if (!sectionInsightIds.has(insight.id)) failures.push(`התובנה שנבחרה ${insight.id} חסרה מסעיפי הכתבה`);
+  }
+  for (const [insightId, evidenceId] of [
+    ["chance_creation_mechanism", "mechanism.chance_creation"],
+    ["decisive_window_mechanism", "mechanism.decisive_window"],
+  ]) {
+    if (analysisPlan.rankedInsights.some((insight) => insight.id === insightId)
+      && !editorial.sections.some((section) => section.insightIds?.includes(insightId)
+        && section.paragraphs.some((paragraph) => paragraph.evidenceIds.includes(evidenceId)))) {
+      failures.push(`התובנה ${insightId} אינה מוסברת באמצעות ${evidenceId}`);
+    }
+  }
+  const usesHistoricalEvidence = [...claimEvidenceIds].some((id) => id.startsWith("history.team.") || id.startsWith("history.player."));
+  if (analysisPlan.historicalAudit.decision === "use" && !usesHistoricalEvidence) failures.push("הביקורת ההיסטורית בחרה use אך אין בגוף השוואה היסטורית");
+  if (analysisPlan.historicalAudit.decision === "omit" && usesHistoricalEvidence) failures.push("הביקורת ההיסטורית בחרה omit אך הכתבה משתמשת בהשוואה היסטורית");
+  for (const graphic of analysisPlan.graphics) {
+    if (!sectionInsightIds.has(graphic.placementInsightId)) failures.push(`הגרפיקה ${graphic.type} משויכת לתובנה שאינה מופיעה בגוף`);
+    if (extractNumbers(`${graphic.titleHe} ${graphic.subtitleHe}`).length) failures.push(`כותרת הגרפיקה ${graphic.type} כוללת מספרים`);
+  }
+  const copy = editorialText(editorial);
+  if (/מפת?\s*ה?(?:חום|מיקום|פעילות).*?(?:מצטברת|אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את כל זמן ההופעה)/s.test(copy)) {
+    failures.push("הכתבה כוללת הסבר מתודולוגי לקורא על צבירת מפת החום");
+  }
+  return failures;
+}
+
 async function editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, draft, qualityFeedback = []) {
   let currentDraft = draft;
+  let currentAnalysisPlan = analysisPlan;
   let currentFeedback = [...qualityFeedback];
   let result = null;
   for (let attempt = 1; attempt <= MAX_EDITORIAL_ATTEMPTS; attempt += 1) {
-    result = await editEditorialWithAi(match, evidence, analysisPlan, gameStateContext, currentDraft, currentFeedback);
+    result = await editEditorialWithAi(match, evidence, currentAnalysisPlan, gameStateContext, currentDraft, currentFeedback);
+    currentAnalysisPlan = { ...currentAnalysisPlan, graphics: result.graphics };
+    const structuralFailures = editorialStructureFailures(result.editorial, currentAnalysisPlan);
+    if (structuralFailures.length) {
+      result.review.status = "failed";
+      result.review.notes = [...new Set([
+        ...result.review.notes,
+        ...structuralFailures.map((failure) => `בדיקה מבנית נכשלה — ${failure}`),
+      ])];
+    }
+    result.analysisPlan = currentAnalysisPlan;
     console.log(JSON.stringify({
       editorialAttempt: attempt,
       status: result.review.status,
@@ -1447,6 +1508,7 @@ async function editEditorialUntilPassed(match, evidence, analysisPlan, gameState
 
 async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameStateContext, editorial, attempt) {
   const model = process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6";
+  const selectedEvidence = evidenceSelectedByPlan(evidence, analysisPlan);
   const response = await postOpenAi({
       model,
       store: false,
@@ -1464,6 +1526,7 @@ async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameS
         "evidenceFaithfulness=true רק אם הפרשנות נובעת מהראיות. פסול סיבתיות, שינוי טקטי, צד מגרש או תזמון שאינם נתמכים במפורש.",
         "gameStateContext=true רק אם הכתבה נותנת להקשר מצב המשחק את המשקל שקבע analysisPlan. כאשר rawShotTotalsNeedGameStateContext=true, אחד מ-2 הסעיפים הראשונים חייב להסביר מדוע הסכומים הסופיים מטעים; אזכור מאוחר אינו מספיק.",
         "graphicRelevance=true רק אם כל גרפיקה בתוכנית קשורה לתובנה שמופיעה בכתבה, הכותרת שלה מתארת את התובנה, והיא אינה קישוט או שכפול של טקסט.",
+        "בדוק את הגרפיקות לפי הטווח שהקומפוננטה באמת מציגה: match_flow ומפת הבעיטות מציגות את המשחק המלא, גרפיקת היסטוריה את חלון משחקי העבר, מפת חום את זמן ההופעה כולו וגרפיקת שחקן את המשחק המלא. אם הכותרת מבטיחה סינון זמן שאינו קיים, פסול את הניסוח; אל תציע לעורך להוסיף סינון שהקומפוננטה אינה תומכת בו.",
         "explanatoryDepth=true רק אם הכתבה עונה על 'למה' או 'כיצד' בעזרת לפחות 2 סוגי ראיות מחוברים: למשל אזור הבעיטה וחוליית המסיים, או סדר האירועים וזהות השחקנים בחלון הדומיננטי. חזרה על xG, בעיטות ושערים ללא מנגנון מחייבת false.",
         "historicalAuditComplete=true רק אם השימוש בהיסטוריה תואם ל-analysisPlan.historicalAudit. decision=omit מחייב שלא תהיה בכתבה השוואה לעבר; decision=use מחייב מדגם, אות רלוונטי וסייג. עצם ההשמטה לאחר בדיקה אינה סיבה לפסול.",
         "אל תדרוש הערה מתודולוגית על מפות החום. להפך: פסול הסבר לקורא על כך שהמפה מצטברת, אינה תלויה בזמן או אינה מוכיחה שינוי. יש להציג רק תובנה מבנית בטוחה ולהימנע מטענת שינוי בזמן.",
@@ -1478,7 +1541,7 @@ async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameS
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
         },
-        evidence,
+        evidence: selectedEvidence,
         analysisPlan,
         gameStateContext,
         editorial,
@@ -2007,13 +2070,14 @@ async function main() {
       throw new Error(`Analysis plan rejected after ${MAX_ANALYSIS_ATTEMPTS} attempts:\n${analysisFeedback.map((issue) => `- ${issue}`).join("\n")}`);
     }
   }
-  const analysisPlan = analysisResult.plan;
+  let analysisPlan = analysisResult.plan;
   const draftEditorial = usedAi
     ? await generateEditorialWithAi(match, evidence, analysisPlan, gameStateContext)
     : fallbackEditorial(match, home, away);
   const reviewed = usedAi
     ? await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, draftEditorial)
     : curatedEditorialSeed(draftEditorial);
+  if (usedAi) analysisPlan = reviewed.analysisPlan;
   let { editorial, review: editorialReview } = reviewed;
   let qualityReview = fixtureQualityReview();
   let tags = [];
@@ -2042,6 +2106,7 @@ async function main() {
       const revised = await editEditorialUntilPassed(match, evidence, analysisPlan, gameStateContext, editorial, [...new Set(currentFeedback)]);
       editorial = revised.editorial;
       editorialReview = revised.review;
+      analysisPlan = revised.analysisPlan;
     }
     if (qualityReview.status === "failed") {
       throw new Error(`Article rejected by independent Hebrew quality gate after ${MAX_QUALITY_ATTEMPTS} attempts:\n${qualityReview.issues.map((issue) => `- ${issue}`).join("\n")}`);
@@ -2070,7 +2135,7 @@ async function main() {
       model: usedAi ? (process.env.OPENAI_MODEL ?? "gpt-5.6") : null,
       editorModel: usedAi ? (process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
       qualityModel: usedAi ? (process.env.OPENAI_QA_MODEL ?? process.env.OPENAI_EDITOR_MODEL ?? "gpt-5.6") : null,
-      pipelineVersion: "match-review-v12",
+      pipelineVersion: "match-review-v13",
     },
     match: {
       matchId: match.match_id,
