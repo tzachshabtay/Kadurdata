@@ -35,7 +35,9 @@ Inspect historical team metrics and every player with non-empty `notableChanges`
 
 ## Finalization
 
-The finalizer derives tags from player names used in the article, verifies role separation and review artifacts, stamps candidate generation metadata, recomputes every fact check from the raw source, and writes `.content-workbench/<slug>/candidate.json` only when all checks pass. A finalized candidate is not published and must not appear in the blog index.
+The finalizer derives tags from player names used in the article, verifies role separation and review artifacts, stamps candidate generation metadata, recomputes every fact check from the raw source, and writes `.content-workbench/<slug>/candidate.json` plus a readable `candidate-preview.html` only when all checks pass. Both files remain local and ignored. A finalized candidate is not published and must not appear in the blog index.
+
+Open the HTML file for review, or serve the exact candidate with `npm run content:preview -- --candidate <candidate.json>`. The preview must show `approval.status: pending` and is never a substitute for explicit approval in a later user message.
 
 Publication is a separate promotion step. Run it only after the user explicitly approves the exact candidate in a later message. `content:publish` records the approval note, changes the candidate to published status, and writes `src/content/generated/<slug>.json`. A request to generate, revise, review, preview, finalize, automate, or schedule content is not publication approval.
 
