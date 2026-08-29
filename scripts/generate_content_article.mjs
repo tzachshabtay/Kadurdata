@@ -24,6 +24,28 @@ const MAX_EDITORIAL_SECTIONS = 6;
 const PIPELINE_VERSION = "match-review-v21";
 const EDITORIAL_REVIEW_MODE = "codex_skill_editor";
 const QUALITY_REVIEW_MODE = "codex_skill_quality_gate";
+const TERMINAL_MATCH_STATUSES = new Set(["Ended", "After ET", "After Penalties"]);
+
+const ARTICLE_COMPETITION_NAMES_HE = new Map([
+  ["israeli premier league", "ליגת העל"],
+  ["premier league", "ליגת העל"],
+  ["liga leumit", "הליגה הלאומית"],
+  ["fa cup", "גביע המדינה"],
+  ["toto league cup", "גביע הטוטו"],
+  ["uefa champions league", "ליגת האלופות"],
+  ["uefa champions league qualifiers", "מוקדמות ליגת האלופות"],
+  ["uefa europa league", "הליגה האירופית"],
+  ["uefa europa league qualifiers", "מוקדמות הליגה האירופית"],
+  ["uefa conference league", "הקונפרנס ליג"],
+  ["conference league", "הקונפרנס ליג"],
+  ["club friendlies", "משחקי ידידות"],
+]);
+
+function competitionNameHe(match) {
+  if (match.competition_name_he?.trim()) return match.competition_name_he.trim();
+  const sourceName = match.competition_name?.trim() ?? "";
+  return ARTICLE_COMPETITION_NAMES_HE.get(sourceName.toLowerCase()) ?? (sourceName || "מפעל");
+}
 
 const AWKWARD_FOOTBALL_COPY_PATTERNS = [
   /הפך מחריגה לסיפור/,
@@ -285,7 +307,7 @@ function historicalTeamSnapshot(team, dataset) {
     return {
       matchId: match.match_id,
       scheduledAt: match.scheduled_at,
-      competitionNameHe: match.competition_name_he ?? match.competition_name,
+      competitionNameHe: competitionNameHe(match),
       opponentTeamId: isHome ? match.away_team_id : match.home_team_id,
       opponentNameHe: isHome
         ? (match.away_team_name_he ?? match.away_team_name)
@@ -498,8 +520,10 @@ function normalizeTimelineEvents(game, players, home, away) {
   });
 }
 
-function buildFlowWindows(shots, homeTeamId, awayTeamId) {
-  return [[1, 15], [16, 30], [31, 45], [46, 60], [61, 75], [76, 105]].map(([start, end]) => {
+function buildFlowWindows(shots, homeTeamId, awayTeamId, matchStatus = "Ended") {
+  const windows = [[1, 15], [16, 30], [31, 45], [46, 60], [61, 75], [76, 90]];
+  if (["After ET", "After Penalties"].includes(matchStatus)) windows.push([91, 105], [106, 120]);
+  return windows.map(([start, end]) => {
     const summary = (teamId) => {
       const relevant = shots.filter((shot) => shot.team_id === teamId && Number(shot.minute) >= start && Number(shot.minute) <= end);
       return {
@@ -508,7 +532,7 @@ function buildFlowWindows(shots, homeTeamId, awayTeamId) {
         goals: relevant.filter((shot) => shot.outcome === "Goal").length,
       };
     };
-    return { start, end: end === 105 ? 90 : end, home: summary(homeTeamId), away: summary(awayTeamId) };
+    return { start, end, home: summary(homeTeamId), away: summary(awayTeamId) };
   });
 }
 
@@ -1286,7 +1310,7 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
       ].join("\n"),
       input: JSON.stringify({
         match: {
-          competition: match.competition_name_he ?? match.competition_name,
+          competition: competitionNameHe(match),
           scheduledAt: match.scheduled_at,
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
@@ -1344,7 +1368,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
       ].join("\n"),
       input: JSON.stringify({
         match: {
-          competition: match.competition_name_he ?? match.competition_name,
+          competition: competitionNameHe(match),
           scheduledAt: match.scheduled_at,
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
@@ -1414,7 +1438,7 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
       ].join("\n"),
       input: JSON.stringify({
         match: {
-          competition: match.competition_name_he ?? match.competition_name,
+          competition: competitionNameHe(match),
           scheduledAt: match.scheduled_at,
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
@@ -1682,7 +1706,7 @@ async function reviewEditorialQualityWithAi(match, evidence, analysisPlan, gameS
       ].join("\n"),
       input: JSON.stringify({
         match: {
-          competition: match.competition_name_he ?? match.competition_name,
+          competition: competitionNameHe(match),
           scheduledAt: match.scheduled_at,
           home: match.home_team_name_he ?? match.home_team_name,
           away: match.away_team_name_he ?? match.away_team_name,
@@ -2027,15 +2051,15 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     && qualityReview.numberlessReview.articleStillCoherent
     && qualityReview.numberlessReview.issues.length === 0);
   const checks = [
-    ["match-ended", "המשחק הסתיים", match.status === "Ended", `סטטוס המקור: ${match.status}`],
+    ["match-ended", "המשחק הסתיים", TERMINAL_MATCH_STATUSES.has(match.status), `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
     ["score-vs-players", "סך שערי השחקנים תואם לתוצאה", playerGoals === home.score + away.score, `${playerGoals} שערים בשורות השחקנים`],
     ["shots-home", `בעיטות ${home.nameHe} תואמות למפת הבעיטות`, home.stats.team_total_shots === home.shotSummary.count, `${home.shotSummary.count} בעיטות`],
     ["shots-away", `בעיטות ${away.nameHe} תואמות למפת הבעיטות`, away.stats.team_total_shots === away.shotSummary.count, `${away.shotSummary.count} בעיטות`],
     ["target-home", `בעיטות ${home.nameHe} למסגרת תואמות`, home.stats.team_shots_on_target === home.shotSummary.onTarget, `${home.shotSummary.onTarget} למסגרת`],
     ["target-away", `בעיטות ${away.nameHe} למסגרת תואמות`, away.stats.team_shots_on_target === away.shotSummary.onTarget, `${away.shotSummary.onTarget} למסגרת`],
-    ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - home.shotSummary.xg) <= 0.05, `${home.stats.team_expected_goals} מול ${home.shotSummary.xg}`],
-    ["xg-away", `xG ${away.nameHe} עקבי בין המקורות`, Math.abs(away.stats.team_expected_goals - away.shotSummary.xg) <= 0.05, `${away.stats.team_expected_goals} מול ${away.shotSummary.xg}`],
+    ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - home.shotSummary.xg) <= Math.max(0.05, home.shotSummary.count * 0.005 + 0.005), `${home.stats.team_expected_goals} מול ${home.shotSummary.xg}; סבילות עיגול לפי ${home.shotSummary.count} בעיטות`],
+    ["xg-away", `xG ${away.nameHe} עקבי בין המקורות`, Math.abs(away.stats.team_expected_goals - away.shotSummary.xg) <= Math.max(0.05, away.shotSummary.count * 0.005 + 0.005), `${away.stats.team_expected_goals} מול ${away.shotSummary.xg}; סבילות עיגול לפי ${away.shotSummary.count} בעיטות`],
     ["player-goal-events", "שערי השחקנים תואמים לאירועי הבעיטה", playerGoalEventsMatch, `${playerGoals} שערים נבדקו ברמת השחקן`],
     ["flow-shot-total", "חלונות הזמן מכסים את כל הבעיטות", windowShotTotal === shots.length, `${windowShotTotal} בעיטות בחלונות הזמן`],
     ["timeline-goals", "אירועי המשחק תואמים לשערים", timelineGoalTotal === home.score + away.score, `${timelineGoalTotal} שערים בציר האירועים`],
@@ -2186,7 +2210,7 @@ async function retiredPaidPipeline() {
   const awayHistoryDataset = await fetchHistoricalTeamDataset(client, match, away.teamId);
   const playerHistoryDataset = await fetchHistoricalPlayerDataset(client, match, players);
   const timelineEvents = normalizeTimelineEvents(providerGame, players, home, away);
-  const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId);
+  const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId, match.status);
   const historicalContext = buildHistoricalContext(home, away, players, homeHistoryDataset, awayHistoryDataset, playerHistoryDataset);
   const gameStateContext = buildGameStateContext(dataset.shots, timelineEvents, home, away);
   const mechanismContext = buildMechanismContext({
@@ -2200,13 +2224,14 @@ async function retiredPaidPipeline() {
     timelineEvents,
     gameStateContext,
   });
-  const historicalAuditContext = buildHistoricalAuditContext(historicalContext);
+  const historicalAuditContext = buildHistoricalAuditContext(historicalContext, flowWindows.at(-1)?.end ?? 90);
   const insightCandidates = buildInsightCandidates({
     home,
     away,
     flowWindows,
     gameStateContext,
     historicalContext,
+    historicalAuditContext,
     unitMatchups,
     spatialProfile,
     mechanismContext,
@@ -2311,7 +2336,7 @@ async function retiredPaidPipeline() {
     match: {
       matchId: match.match_id,
       competitionId: match.competition_id,
-      competitionNameHe: match.competition_name_he ?? "ליגת העל",
+      competitionNameHe: competitionNameHe(match),
       seasonId: match.season_id,
       seasonName: match.season_name,
       roundId: match.round_id,
@@ -2517,7 +2542,7 @@ async function prepareWorkbench() {
   const awayHistoryDataset = await fetchHistoricalTeamDataset(client, match, away.teamId);
   const playerHistoryDataset = await fetchHistoricalPlayerDataset(client, match, players);
   const timelineEvents = normalizeTimelineEvents(providerGame, players, home, away);
-  const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId);
+  const flowWindows = buildFlowWindows(dataset.shots, home.teamId, away.teamId, match.status);
   const historicalContext = buildHistoricalContext(home, away, players, homeHistoryDataset, awayHistoryDataset, playerHistoryDataset);
   const gameStateContext = buildGameStateContext(dataset.shots, timelineEvents, home, away);
   const mechanismContext = buildMechanismContext({
@@ -2531,13 +2556,14 @@ async function prepareWorkbench() {
     timelineEvents,
     gameStateContext,
   });
-  const historicalAuditContext = buildHistoricalAuditContext(historicalContext);
+  const historicalAuditContext = buildHistoricalAuditContext(historicalContext, flowWindows.at(-1)?.end ?? 90);
   const insightCandidates = buildInsightCandidates({
     home,
     away,
     flowWindows,
     gameStateContext,
     historicalContext,
+    historicalAuditContext,
     unitMatchups,
     spatialProfile,
     mechanismContext,
@@ -2580,7 +2606,7 @@ async function prepareWorkbench() {
     match: {
       matchId: match.match_id,
       competitionId: match.competition_id,
-      competitionNameHe: match.competition_name_he ?? "ליגת העל",
+      competitionNameHe: competitionNameHe(match),
       seasonId: match.season_id,
       seasonName: match.season_name,
       roundId: match.round_id,

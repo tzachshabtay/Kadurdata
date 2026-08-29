@@ -80,7 +80,7 @@ function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: Ar
       </div>
       <div className="flow-windows" dir="ltr">
         {article.flowWindows.map((window) => {
-          const events = article.timelineEvents.filter((event) => event.minute >= window.start && event.minute <= (window.end === 90 ? 105 : window.end));
+          const events = article.timelineEvents.filter((event) => event.minute >= window.start && event.minute <= window.end);
           const substitutions = events.filter((event) => event.type === "Substitution").length;
           const highlighted = events.filter((event) => ["Goal", "Red Card", "Woodwork"].includes(event.type));
           return (
@@ -344,7 +344,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
       <header className="story-hero">
         <div className="story-hero-copy">
           <div className="story-kicker"><Sparkles size={15} aria-hidden="true" /> הסיפור של המשחק</div>
-          <p className="story-meta">{match.competitionNameHe} · מחזור {match.roundNumber} · {hebrewDate.format(new Date(match.scheduledAt))}</p>
+          <p className="story-meta">
+            {match.competitionNameHe}
+            {match.roundNumber !== null && match.roundNumber !== undefined ? ` · מחזור ${match.roundNumber}` : ""}
+            {` · ${hebrewDate.format(new Date(match.scheduledAt))}`}
+          </p>
           <h1>{editorial.headline}</h1>
           <p className="story-dek">{editorial.dek}</p>
           <div className="story-tags" aria-label="תגיות הכתבה">

@@ -244,7 +244,7 @@ function eventWithRoles(event, playerByName) {
 
 export function buildMechanismContext({ shots, players, home, away, unitMatchups, spatialProfile, flowWindows, timelineEvents, gameStateContext }) {
   const distortingEvent = gameStateContext.materialEvents.find((event) => event.eventId === gameStateContext.distortingEventId) ?? null;
-  const distortionMinute = distortingEvent?.minute ?? 105;
+  const distortionMinute = distortingEvent?.minute ?? flowWindows.at(-1)?.end ?? 90;
   const decisiveWindow = decisiveFlowWindow(flowWindows);
   const playerByName = new Map(players.map((player) => [player.nameHe, player]));
   const eventsNearWindow = decisiveWindow ? timelineEvents
@@ -329,12 +329,17 @@ export function mechanismEvidenceValues(mechanismContext) {
   ].filter((value) => value !== null && value !== undefined);
 }
 
-export function buildHistoricalAuditContext(historicalContext) {
+export function buildHistoricalAuditContext(historicalContext, matchDurationMinutes = 90) {
+  const hasExtraTime = matchDurationMinutes > 90;
   const teamSignals = [
     ["home", historicalContext.teams.home],
     ["away", historicalContext.teams.away],
   ].flatMap(([side, team]) => Object.entries(team.metrics)
-    .filter(([, metric]) => metric.sampleSize >= 3 && metric.changePercent !== null)
+    .filter(([metricCode, metric]) => (
+      metric.sampleSize >= 3
+      && metric.changePercent !== null
+      && (!hasExtraTime || metricCode === "team_possession")
+    ))
     .map(([metricCode, metric]) => ({
       side,
       teamId: team.teamId,
@@ -353,6 +358,8 @@ export function buildHistoricalAuditContext(historicalContext) {
   }))).sort((left, right) => Math.abs(right.zScore ?? 0) - Math.abs(left.zScore ?? 0));
   return {
     scopeHe: historicalContext.scopeHe,
+    matchDurationMinutes,
+    excludedExtraTimeVolumeMetrics: hasExtraTime,
     teamMetricSeriesReviewed: teamSignals.length,
     playerProfilesReviewed: historicalContext.players.length,
     eligiblePlayerSignals: playerSignals.length,
@@ -371,12 +378,12 @@ export function historicalAuditEvidenceValues(historicalAuditContext) {
   ].filter((value) => value !== null && value !== undefined);
 }
 
-export function buildInsightCandidates({ home, away, flowWindows, gameStateContext, historicalContext, unitMatchups, spatialProfile, mechanismContext }) {
+export function buildInsightCandidates({ home, away, flowWindows, gameStateContext, historicalContext, historicalAuditContext, unitMatchups, spatialProfile, mechanismContext }) {
   const qualityGap = Math.abs(Number(home.stats.team_expected_goals ?? 0) - Number(away.stats.team_expected_goals ?? 0));
   const bigChanceGap = Math.abs(Number(home.stats.team_big_chances_created ?? 0) - Number(away.stats.team_big_chances_created ?? 0));
   const decisiveWindow = decisiveFlowWindow(flowWindows);
-  const homeHistoryChange = largestHistoricalChange(historicalContext.teams.home);
-  const awayHistoryChange = largestHistoricalChange(historicalContext.teams.away);
+  const homeHistoryChange = historicalAuditContext?.strongestTeamSignals.find((signal) => signal.side === "home") ?? null;
+  const awayHistoryChange = historicalAuditContext?.strongestTeamSignals.find((signal) => signal.side === "away") ?? null;
   const notablePlayers = historicalContext.players
     .flatMap((player) => player.notableChanges.map((change) => ({
       playerId: player.playerId,
