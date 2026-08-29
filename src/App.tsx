@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { BlogView } from "./blog/BlogView";
+import { featuredArticle } from "./content/articles";
 import {
   Area,
   AreaChart,
@@ -887,9 +888,11 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = language === "he" ? "rtl" : "ltr";
-    document.title = view === "blog" ? "לא הכמות, אלא האיכות | כדורדאטה" : text.pageTitle;
+    document.title = view === "blog"
+      ? `${featuredArticle?.editorial.headline ?? "בלוג כדורדאטה"} | כדורדאטה`
+      : text.pageTitle;
     document.querySelector('meta[name="description"]')?.setAttribute("content", view === "blog"
-      ? "ניתוח הנתונים המלא של הניצחון 5:2 של מכבי תל אביב על הפועל ירושלים."
+      ? (featuredArticle?.editorial.dek ?? "כתבות וניתוחי משחקים בעברית, המבוססים על נתוני כדורדאטה.")
       : text.metaDescription);
     window.localStorage.setItem("kadurdata-language", language);
     if (language === "en" && view === "blog") setView("overview");
