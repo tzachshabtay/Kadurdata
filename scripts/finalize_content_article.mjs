@@ -158,7 +158,7 @@ function requireLanguageReviewArtifacts(authored) {
 async function main() {
   const args = readArguments();
   if (!args.sourcePath || !args.authoredPath) {
-    throw new Error("Usage: node scripts/finalize_content_article.mjs --source <source.json> --authored <authored.json> [--dry-run]");
+    throw new Error("Usage: node scripts/finalize_content_article.mjs --source <source.json> --authored <authored.json> [--output <candidate.json>] [--dry-run]");
   }
 
   const sourcePath = path.resolve(projectRoot, args.sourcePath);
@@ -221,14 +221,15 @@ async function main() {
     throw new Error(`Article rejected by deterministic finalization:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
   }
 
-  const publishedAt = new Date().toISOString();
+  const finalizedAt = new Date().toISOString();
   const { _workbench, ...publishableSource } = source;
   const article = {
     ...publishableSource,
-    status: "published",
-    publishedAt,
+    status: "draft",
+    publishedAt: null,
+    finalizedAt,
     generation: {
-      mode: "codex_skill",
+      mode: "codex_skill_candidate",
       analystModel: model,
       writerModel: model,
       model,
@@ -242,9 +243,14 @@ async function main() {
     editorialReview,
     qualityReview,
     editorial: authored.editorial,
+    approval: {
+      status: "pending",
+      approvedAt: null,
+      note: null,
+    },
     factCheck: {
       status: "passed",
-      checkedAt: publishedAt,
+      checkedAt: finalizedAt,
       checks,
       evidenceCount: source.evidence.length,
       claimCount: claimEntries(authored.editorial).length,
@@ -253,12 +259,15 @@ async function main() {
   };
   const outputPath = args.outputPath
     ? path.resolve(projectRoot, args.outputPath)
-    : path.join(generatedDirectory, `${source.slug}.json`);
+    : path.join(path.dirname(sourcePath), "candidate.json");
+  if (outputPath === generatedDirectory || outputPath.startsWith(`${generatedDirectory}${path.sep}`)) {
+    throw new Error("Finalization cannot write to the public blog. Write a candidate, then use content:publish after explicit user approval.");
+  }
   if (!args.dryRun) {
     await mkdir(path.dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(article, null, 2)}\n`, "utf8");
   }
-  console.log(JSON.stringify({ outputPath, slug: source.slug, checks: checks.length, dryRun: args.dryRun }, null, 2));
+  console.log(JSON.stringify({ candidatePath: outputPath, slug: source.slug, checks: checks.length, approval: "pending", dryRun: args.dryRun }, null, 2));
 }
 
 main().catch((error) => {

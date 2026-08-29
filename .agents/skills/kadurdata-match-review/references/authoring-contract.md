@@ -35,6 +35,8 @@ Inspect historical team metrics and every player with non-empty `notableChanges`
 
 ## Finalization
 
-The finalizer derives tags from player names used in the article, verifies role separation and review artifacts, stamps the Codex-skill generation modes, recomputes every fact check from the raw source, and writes `src/content/generated/<slug>.json` only when all checks pass.
+The finalizer derives tags from player names used in the article, verifies role separation and review artifacts, stamps candidate generation metadata, recomputes every fact check from the raw source, and writes `.content-workbench/<slug>/candidate.json` only when all checks pass. A finalized candidate is not published and must not appear in the blog index.
+
+Publication is a separate promotion step. Run it only after the user explicitly approves the exact candidate in a later message. `content:publish` records the approval note, changes the candidate to published status, and writes `src/content/generated/<slug>.json`. A request to generate, revise, review, preview, finalize, automate, or schedule content is not publication approval.
 
 Never edit stored check results to bypass a failure. Fix the analysis plan or prose and run finalization again.

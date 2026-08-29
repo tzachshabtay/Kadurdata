@@ -23,8 +23,10 @@ function hashJson(value) {
 function splitSentences(text) {
   const normalized = String(text ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) return [];
-  return (normalized.match(/[^.!?…]+(?:[.!?…]+(?=\s|$)|$)/g) ?? [normalized])
-    .map((sentence) => sentence.trim())
+  const decimalMarker = "\uE000";
+  const protectedDecimals = normalized.replace(/(?<=\d)\.(?=\d)/g, decimalMarker);
+  return (protectedDecimals.match(/[^.!?…]+(?:[.!?…]+(?=\s|$)|$)/g) ?? [protectedDecimals])
+    .map((sentence) => sentence.replaceAll(decimalMarker, ".").trim())
     .filter(Boolean);
 }
 

@@ -21,7 +21,7 @@ const generatedDirectory = path.join(projectRoot, "src", "content", "generated")
 const defaultWorkbenchDirectory = path.join(projectRoot, ".content-workbench");
 const HISTORICAL_WINDOW = 5;
 const MAX_EDITORIAL_SECTIONS = 6;
-const PIPELINE_VERSION = "match-review-v21";
+const PIPELINE_VERSION = "match-review-v22";
 const EDITORIAL_REVIEW_MODE = "codex_skill_editor";
 const QUALITY_REVIEW_MODE = "codex_skill_quality_gate";
 const TERMINAL_MATCH_STATUSES = new Set(["Ended", "After ET", "After Penalties"]);
@@ -73,6 +73,16 @@ const AWKWARD_FOOTBALL_COPY_PATTERNS = [
   /סיי(?:ם|מה|מו)\s+את\s+המצב/,
   /מפת\s+הבעיטות[^.]{0,120}(?:המשחק\s+המלא|אינה\s+מסננת)/,
   /מפת?\s*ה?(?:חום|פעילות).*?(?:אינה תלויה בזמן|אינה מלמדת על שינוי|מסכמת את מיקומי השחקנים לאורך)/s,
+  /מפות?\s*ה?חום[^.]{0,180}(?:מסכמ(?:ת|ות)|בלי\s+ציר\s+זמן)/,
+  /(?:אי\s+אפשר|לא\s+ניתן)\s+להסיק[^.]{0,100}מפות?\s*ה?חום/,
+  /הנתונים\s+(?:אינם|לא)\s+(?:מוכיחים|קושרים|מאפשרים)/,
+  /היי?תה\s+יותר\s+החזקה/,
+  /היי?תה\s+רחבה\s+יותר/,
+  /בעט(?:ה|ו)\s+בתדירות\s+גבוהה\s+יותר/,
+  /לאורך\s+ההופעות/,
+  /רוחב\s+בעמדות/,
+  /המסיימים\s+העיקריים/,
+  /מצא(?:ה|ו)\s+שוב\s+ושוב\s+את\s+מרכז\s+הרחבה/,
 ];
 const HISTORICAL_TEAM_METRICS = [
   "team_possession",
@@ -1139,13 +1149,14 @@ const analysisPlanSchema = {
       properties: {
         singleThesis: { type: "boolean" },
         explainsRatherThanLists: { type: "boolean" },
+        readerValue: { type: "boolean" },
         gameStateAdjusted: { type: "boolean" },
         selectiveEvidence: { type: "boolean" },
         graphicsServeStory: { type: "boolean" },
         explanatoryDepth: { type: "boolean" },
         historicalAuditComplete: { type: "boolean" },
       },
-      required: ["singleThesis", "explainsRatherThanLists", "gameStateAdjusted", "selectiveEvidence", "graphicsServeStory", "explanatoryDepth", "historicalAuditComplete"],
+      required: ["singleThesis", "explainsRatherThanLists", "readerValue", "gameStateAdjusted", "selectiveEvidence", "graphicsServeStory", "explanatoryDepth", "historicalAuditComplete"],
     },
   },
   required: ["thesis", "rankedInsights", "explanatoryModel", "historicalAudit", "narrativeArc", "graphics", "coverageDecisions", "quality"],
@@ -1299,6 +1310,8 @@ async function generateAnalysisPlanWithAi(match, evidence, insightCandidates, ga
         "בדוק תמיד אם התוצאה, כרטיס אדום, חילופים או דקות מאוחרות מעוותים נתונים מצטברים. כאשר rawShotTotalsNeedGameStateContext=true, game_state_distortion חייבת להיות תובנה primary, להופיע בתחילת הקשת הסיפורית ולהיתמך ב-flow.game_state_context.",
         "אל תתייחס ל-16 בעיטות בדקות שוויון כמו ל-16 בעיטות אחרי שהמשחק הוכרע. נפח מאוחר עשוי ללמד על זרימת המשחק, אבל לא בהכרח על מאזן הכוחות לפני האירוע.",
         "היסטוריה, מפות חום, מאבקים בין חוליות ושחקנים הם חומרי גלם לבחירה, לא סעיפי חובה. עם זאת, historicalAudit הוא חובה: בדוק את history.audit, את אותות הקבוצות ואת חריגות הנפח האישיות. סמן use רק אם נמצא שינוי משמעותי שמוסיף הסבר לתזה; אחרת סמן omit וכתוב מה היה האות החזק ביותר שנבדק ומדוע אינו מספיק.",
+        "העבר כל תובנה במבחן ערך לקורא: היא חייבת לתאר ניגוד כדורגל קונקרטי, להסביר מדוע הוא היה חשוב במשחק, ולהוסיף דבר שאינו מתקבל מקריאה ישירה של טבלת הנתונים. סייג, תיאור של מקור הנתונים או משפט על מה שאי אפשר להסיק אינם תובנה.",
+        "בחר תובנה מרחבית רק כשהיא נתמכת גם במשפחת ראיות שאינה מפת חום, למשל הגבהות, מסירות לשליש האחרון, חלוקת בעיטות בין חוליות או מיקום הבעיטות. אין לבחור תובנה שמסתכמת בכך שקבוצה אחת הייתה רחבה יותר; צריך לזהות מי ריווח את המשחק, איפה נוצר היתרון ומה משמעותו לסיפור.",
         "העדף דפוסי נפח ממדגם סביר על פני שער או בישול בודד. אל תסיק סיבתיות מנתון תצפיתי, ואל תמציא שינוי בזמן ממפת חום מצטברת.",
         "תכנן 2–4 גרפיקות בלבד. כל גרפיקה חייבת לתמוך בתובנה שנבחרה ולהציג משהו שקל יותר להבין חזותית מאשר בטקסט. אל תבחר גרפיקה כדי למלא מקום.",
         "כותרת וכותרת המשנה של גרפיקה חייבות להסביר מה היא מראה בלי לכלול מספרים. הערכים עצמם יוצגו מתוך הנתונים בקומפוננטה, וכך לא ייווצרו פערי מקור או עיגול בין הטקסט לגרפיקה.",
@@ -1354,6 +1367,7 @@ async function generateEditorialWithAi(match, evidence, analysisPlan, gameStateC
         "בסעיף chance_creation_mechanism כתוב במפורש גם מאילו אזורים הגיעו הבעיטות וגם איזו חוליה יצרה או סיימה. אזכור כללי של xG או מספר הבעיטות אינו הסבר מספק.",
         "כל סעיף חייב לקבל insightIds מתוך analysisPlan. סדר הסעיפים חייב לעקוב אחר narrativeArc, ותובנת primary חייבת להופיע באחד מ-2 הסעיפים הראשונים.",
         "כל פסקה צריכה לעבוד כך: טענה אחת, הסבר למה היא חשובה, ורק אז 1–3 מספרים חיוניים כתמיכה. אל תכתוב רשימת מדדים ואל תנסה להכניס את כל הנתונים הזמינים.",
+        "אל תכתוב בגוף הכתבה הסבר על מה שהנתונים אינם מאפשרים לקבוע. מגבלות קצרות של גרפיקה שייכות לכותרת המשנה שלה בלבד. אם אחרי המגבלה לא נותר ממצא חיובי ומעניין, השמט את התובנה.",
         "נקודות הסיכום רשאיות רק לתמצת טענות שכבר הוסברו בגוף הכתבה. אל תציג בהן מספר או עובדה שלא הופיעו קודם בגוף.",
         "כתוב עברית עיתונאית טבעית עם קצב מגוון. הימנע מניסוחים תבניתיים כמו 'המספרים מספרים', מחזרות על 'כלומר', ומפסקאות שנשמעות כמו טבלת נתונים.",
         "השתמש בהשוואה היסטורית רק אם analysisPlan.historicalAudit.decision הוא use וקטגוריית history נבחרה. ציין את גודל המדגם והצג אותה כהקשר, לא כהוכחה מוחלטת לשינוי טקטי. אם ההחלטה היא omit, אל תכתוב לקורא שלא נמצא שינוי ואל תוסיף סעיף מתודולוגי; פשוט השאר את ההיסטוריה מחוץ לכתבה.",
@@ -1424,6 +1438,7 @@ async function editEditorialWithAi(match, evidence, analysisPlan, gameStateConte
         "שמור בנוסח לפחות אזכור אחד בשם של שחקן בעל ראיה משמעותית. אסור להסיר את כל שמות השחקנים, מפני שהפרסום דורש לפחות תגית שחקן אחת.",
         "אם מופיע xGOT, כתוב בפעם הראשונה 'שערים צפויים מבעיטות למסגרת (xGOT)'. אל תכתוב 'שערים צפויים לאחר הבעיטה' ואל תבנה סעיף נפרד סביב בעיטה יחידה שאינה מקדמת את התזה.",
         "מפת חום או matchup יישארו רק אם analysisPlan בחר בהם. כאשר הם נבחרו, הטענות צריכות לפרש מבנה או מאבק בין חוליות ולא להסביר את שיטת המדידה.",
+        "פסול סעיף מרחבי שאין בו ראיה נוספת מעבר למפת החום. במקום 'הייתה רחבה יותר', כתוב מי ריווח את המשחק לצדדים ומה התבנית הזאת אפשרה או אילצה, ורק אם הראיות תומכות בכך. במקום 'הייתה יותר החזקה', כתוב שהקבוצה החזיקה יותר בכדור.",
         "אל תכניס לגוף הערה טכנית שמפת הבעיטות מציגה את המשחק המלא או אינה מסננת דקות. נסח רק את הממצא שהמפה עצמה תומכת בו, ואת חלוקת הזמן ייחס לראיית ה-flow המתאימה.",
         "קרא כל משפט בקול לפני ההחזרה. פסול ותקן שגיאות התאמה, מילים מומצאות, צירופים מתורגמים, פעלים שאינם מתאימים לנתון ומטפורות עמומות.",
         "נתוני משחק תצפיתיים מראים קשר ולא סיבתיות. בלי ראיה סיבתית מפורשת, אל תכתוב 'בזכות', 'הכריע', 'הוביל ל-', 'גרם' או 'הסביר את התוצאה'; כתוב מה היה הפער הבולט בנתונים.",
@@ -1546,6 +1561,13 @@ function editorialStructureFailures(editorial, analysisPlan, mechanismContext) {
   }
   if (AWKWARD_FOOTBALL_COPY_PATTERNS.some((pattern) => pattern.test(copy))) {
     failures.push("הכתבה כוללת ניסוח שנפסל בספריית הרגרסיות של עברית כדורגל");
+  }
+  for (const section of editorial.sections) {
+    const sectionEvidenceIds = new Set(section.paragraphs.flatMap((paragraph) => paragraph.evidenceIds));
+    if (sectionEvidenceIds.has("heatmap.spatial_profile")
+      && ![...sectionEvidenceIds].some((id) => !id.startsWith("heatmap."))) {
+      failures.push("הסעיף " + section.heading + " נשען רק על מפת חום ואינו משלב משפחת ראיות נוספת");
+    }
   }
   const undefinedQualityLabels = editorial.sections.flatMap((section) => section.paragraphs).filter((paragraph) => (
     /(?:מצב(?:ים)?|בעיט(?:ה|ות))\s+(?:ב)?איכות\s+גבוהה/.test(paragraph.text)
@@ -1881,6 +1903,7 @@ function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameSta
     || graphic.metricCodes.some((code) => !historicalContext.teams.home.metrics[code] && !historicalContext.teams.away.metrics[code])
   ))) failures.push("a history graphic references an unavailable metric");
   if (!Object.values(analysisPlan.quality).every(Boolean)) failures.push("the analyst did not pass its own planning checks");
+  if (analysisPlan.quality.readerValue !== true) failures.push("the analyst did not pass the reader-value gate");
   if (analysisPlan.rankedInsights.filter((insight) => insight.importance === "primary").length !== 1) failures.push("the plan must have exactly one primary insight");
   if (plannedInsightIds.has("chance_creation_mechanism") && plannedInsightIds.has("chance_quality_gap")) failures.push("chance_creation_mechanism supersedes the descriptive chance_quality_gap insight");
   if (plannedInsightIds.has("decisive_window_mechanism") && plannedInsightIds.has("decisive_match_window")) failures.push("decisive_window_mechanism supersedes the descriptive decisive_match_window insight");
@@ -1902,6 +1925,18 @@ function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameSta
   const explanatoryFamilies = new Set(analysisPlan.explanatoryModel.evidenceIds.map((id) => id.split(".")[0]));
   if (explanatoryFamilies.size < 2 || !analysisPlan.explanatoryModel.evidenceIds.some((id) => id.startsWith("mechanism."))) {
     failures.push("explanatoryModel must triangulate mechanism evidence with at least one other evidence family");
+  }
+  for (const insight of analysisPlan.rankedInsights.filter((item) => candidateById.get(item.id)?.category === "spatial")) {
+    if (!insight.evidenceIds.some((id) => id.startsWith("heatmap."))
+      || !insight.evidenceIds.some((id) => !id.startsWith("heatmap."))) {
+      failures.push("spatial insight " + insight.id + " must triangulate heatmaps with another evidence family");
+    }
+  }
+  for (const graphic of analysisPlan.graphics.filter((item) => item.type === "tactical_heatmap")) {
+    const placementInsight = analysisPlan.rankedInsights.find((insight) => insight.id === graphic.placementInsightId);
+    if (!placementInsight?.evidenceIds.some((id) => !id.startsWith("heatmap."))) {
+      failures.push("a tactical heatmap graphic must support an insight that also uses non-heatmap evidence");
+    }
   }
   if (!analysisPlan.historicalAudit.teamSignalsReviewed || !analysisPlan.historicalAudit.playerSignalsReviewed
     || !analysisPlan.historicalAudit.evidenceIds.includes("history.audit")) {
@@ -2149,6 +2184,7 @@ function fixtureAnalysisPlan(insightCandidates) {
     quality: {
       singleThesis: true,
       explainsRatherThanLists: true,
+      readerValue: true,
       gameStateAdjusted: true,
       selectiveEvidence: true,
       graphicsServeStory: true,

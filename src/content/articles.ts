@@ -9,8 +9,9 @@ export const articles = Object.values(generatedModules)
   .filter((article) => (
     article.language === "he"
     && article.status === "published"
+    && article.approval?.status === "approved"
     && article.generation.mode === "codex_skill"
-    && article.generation.pipelineVersion === "match-review-v21"
+    && article.generation.pipelineVersion === "match-review-v22"
     && new Set(Object.values(article.authorship ?? {})).size === 4
     && article.editorialReview.mode === "codex_skill_editor"
     && article.editorialReview.status === "passed"
@@ -24,6 +25,6 @@ export const articles = Object.values(generatedModules)
     && article.qualityReview.issues.length === 0
     && article.factCheck.status === "passed"
   ))
-  .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt));
+  .sort((left, right) => Date.parse(right.publishedAt ?? "") - Date.parse(left.publishedAt ?? ""));
 
 export const featuredArticle = articles[0];

@@ -30,6 +30,39 @@ function numeric(value: number | null | undefined, digits = 0) {
   }).format(value);
 }
 
+function rgbFromHex(value: string | null | undefined) {
+  const normalized = value?.trim().replace(/^#/, "") ?? "";
+  const expanded = normalized.length === 3
+    ? normalized.split("").map((character) => character.repeat(2)).join("")
+    : normalized;
+  if (!/^[0-9a-f]{6}$/i.test(expanded)) return null;
+  return {
+    red: Number.parseInt(expanded.slice(0, 2), 16),
+    green: Number.parseInt(expanded.slice(2, 4), 16),
+    blue: Number.parseInt(expanded.slice(4, 6), 16),
+  };
+}
+
+function colorDistance(left: string, right: string) {
+  const leftRgb = rgbFromHex(left);
+  const rightRgb = rgbFromHex(right);
+  if (!leftRgb || !rightRgb) return Number.POSITIVE_INFINITY;
+  return Math.hypot(
+    leftRgb.red - rightRgb.red,
+    leftRgb.green - rightRgb.green,
+    leftRgb.blue - rightRgb.blue,
+  );
+}
+
+function graphicTeamColors(article: ContentArticle) {
+  const home = article.teams.home.color || "#e9435d";
+  const requestedAway = article.teams.away.color || "#2bbf9b";
+  if (colorDistance(home, requestedAway) >= 100) return { home, away: requestedAway };
+  const contrastOptions = ["#2bbf9b", "#3b82f6", "#f4b942", "#a78bfa"];
+  const away = contrastOptions.sort((left, right) => colorDistance(home, right) - colorDistance(home, left))[0];
+  return { home, away };
+}
+
 function goalLabel(shot: ArticleShot) {
   return `${shot.eventTime} · ${shot.playerNameHe}`;
 }
@@ -61,6 +94,7 @@ function StoryScoreCard({ article }: { article: ContentArticle }) {
 
 function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
   const { home, away } = article.teams;
+  const colors = graphicTeamColors(article);
   const maxXg = Math.max(0.1, ...article.flowWindows.flatMap((window) => [window.home.xg, window.away.xg]));
   const eventTypeHe: Record<string, string> = {
     Goal: "שער",
@@ -75,8 +109,8 @@ function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: Ar
         <div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div>
       </figcaption>
       <div className="flow-legend">
-        <span><i style={{ background: home.color }} />{home.nameHe}</span>
-        <span><i style={{ background: away.color }} />{away.nameHe}</span>
+        <span><i style={{ background: colors.home }} />{home.nameHe}</span>
+        <span><i style={{ background: colors.away }} />{away.nameHe}</span>
       </div>
       <div className="flow-windows" dir="ltr">
         {article.flowWindows.map((window) => {
@@ -87,8 +121,8 @@ function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: Ar
             <section className="flow-window" key={window.start}>
               <strong>{window.start}–{window.end}׳</strong>
               <div className="flow-bars">
-                <span style={{ height: `${Math.max(3, window.home.xg / maxXg * 100)}%`, background: home.color }}><b>{numeric(window.home.xg, 2)}</b></span>
-                <span style={{ height: `${Math.max(3, window.away.xg / maxXg * 100)}%`, background: away.color }}><b>{numeric(window.away.xg, 2)}</b></span>
+                <span style={{ height: `${Math.max(3, window.home.xg / maxXg * 100)}%`, background: colors.home }}><b>{numeric(window.home.xg, 2)}</b></span>
+                <span style={{ height: `${Math.max(3, window.away.xg / maxXg * 100)}%`, background: colors.away }}><b>{numeric(window.away.xg, 2)}</b></span>
               </div>
               <small>{window.home.shots}–{window.away.shots} בעיטות</small>
               <div className="flow-event-list" dir="rtl">
@@ -111,9 +145,10 @@ function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: Ar
 }
 
 function HistoricalComparisonGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+  const colors = graphicTeamColors(article);
   const teams = [
-    { team: article.teams.home, history: article.historicalContext.teams.home },
-    { team: article.teams.away, history: article.historicalContext.teams.away },
+    { team: article.teams.home, history: article.historicalContext.teams.home, color: colors.home },
+    { team: article.teams.away, history: article.historicalContext.teams.away, color: colors.away },
   ];
   const metricCatalog: Record<string, { label: string; suffix: string; digits: number }> = {
     team_possession: { label: "החזקה", suffix: "%", digits: 1 },
@@ -139,8 +174,8 @@ function HistoricalComparisonGraphic({ article, spec }: { article: ContentArticl
         <div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div>
       </figcaption>
       <div className="history-comparison-grid">
-        {teams.map(({ team, history }) => (
-          <section key={team.teamId} style={{ "--history-color": team.color } as CSSProperties}>
+        {teams.map(({ team, history, color }) => (
+          <section key={team.teamId} style={{ "--history-color": color } as CSSProperties}>
             <header>
               {team.logoUrl && <img src={team.logoUrl} alt="" />}
               <div><strong>{team.nameHe}</strong><small>ממוצע {history.matchCount} משחקים קודמים</small></div>
@@ -194,6 +229,7 @@ function PlayerSpotlight({ article, spec }: { article: ContentArticle; spec: Art
 
 function ShotMap({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
   const outcomeHe: Record<string, string> = { Goal: "שער", Saved: "נעצרה", Missed: "החטאה", Blocked: "נחסמה" };
+  const colors = graphicTeamColors(article);
   return (
     <figure className="story-graphic shot-map-graphic">
       <figcaption>
@@ -221,7 +257,7 @@ function ShotMap({ article, spec }: { article: ContentArticle; spec: ArticleGrap
                   left: `${left}%`,
                   width: size,
                   height: size,
-                  "--shot-color": isHome ? article.teams.home.color : article.teams.away.color,
+                  "--shot-color": isHome ? colors.home : colors.away,
                 } as CSSProperties}
                 tabIndex={0}
                 title={`${goalLabel(shot)} · ${outcomeHe[shot.outcome] ?? shot.outcome} · xG ${shot.xg}`}
@@ -230,8 +266,8 @@ function ShotMap({ article, spec }: { article: ContentArticle; spec: ArticleGrap
           })}
         </div>
         <div className="shot-map-legend">
-          <span><i style={{ background: article.teams.home.color }} />{article.teams.home.nameHe}<strong>{article.teams.home.shotSummary.count}</strong></span>
-          <span><i style={{ background: article.teams.away.color }} />{article.teams.away.nameHe}<strong>{article.teams.away.shotSummary.count}</strong></span>
+          <span><i style={{ background: colors.home }} />{article.teams.home.nameHe}<strong>{article.teams.home.shotSummary.count}</strong></span>
+          <span><i style={{ background: colors.away }} />{article.teams.away.nameHe}<strong>{article.teams.away.shotSummary.count}</strong></span>
           <small>עיגול גדול יותר = xG גבוה יותר · טבעת = שער</small>
         </div>
       </div>

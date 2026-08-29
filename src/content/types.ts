@@ -358,6 +358,7 @@ export type ArticleAnalysisPlan = {
   quality: {
     singleThesis: boolean;
     explainsRatherThanLists: boolean;
+    readerValue: boolean;
     gameStateAdjusted: boolean;
     selectiveEvidence: boolean;
     graphicsServeStory: boolean;
@@ -372,7 +373,7 @@ export type ContentArticle = {
   language: "he";
   kind: "match_review";
   status: "published" | "draft";
-  publishedAt: string;
+  publishedAt: string | null;
   generatedAt: string;
   generation: {
     mode: string;
@@ -388,6 +389,11 @@ export type ContentArticle = {
     writerAgentId: string;
     editorAgentId: string;
     reviewerAgentId: string;
+  };
+  approval?: {
+    status: "pending" | "approved";
+    approvedAt: string | null;
+    note: string | null;
   };
   match: {
     matchId: string;

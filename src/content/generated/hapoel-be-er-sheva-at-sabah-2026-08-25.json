@@ -3,17 +3,22 @@
   "slug": "hapoel-be-er-sheva-at-sabah-2026-08-25",
   "language": "he",
   "kind": "match_review",
-  "status": "published",
-  "publishedAt": "2026-08-29T17:16:47.885Z",
+  "status": "draft",
+  "publishedAt": null,
   "generatedAt": "2026-08-29T17:16:42.142Z",
   "generation": {
-    "mode": "codex_skill",
+    "mode": "codex_skill_candidate",
     "analystModel": "gpt-5.4",
     "writerModel": "gpt-5.4",
     "model": "gpt-5.4",
     "editorModel": "gpt-5.4",
     "qualityModel": "gpt-5.4",
     "pipelineVersion": "match-review-v21"
+  },
+  "approval": {
+    "status": "pending",
+    "approvedAt": null,
+    "note": null
   },
   "match": {
     "matchId": "3fa820a9-4753-413a-81eb-28d369f47c1d",
