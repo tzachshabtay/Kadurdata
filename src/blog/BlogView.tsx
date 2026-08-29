@@ -342,27 +342,63 @@ function FactCheckPanel({ article }: { article: ContentArticle }) {
 }
 
 export function BlogView({ onOpenMatch }: BlogViewProps) {
-  const [selectedSlug, setSelectedSlug] = useState(articles[0]?.slug ?? "");
+  const reviewTarget = import.meta.env.DEV
+    ? new URLSearchParams(window.location.search).get("review")
+    : null;
+  const reviewMode = Boolean(reviewTarget);
+  const [reviewCandidates, setReviewCandidates] = useState<ContentArticle[] | null>(reviewMode ? null : []);
+  useEffect(() => {
+    if (!reviewMode) return;
+    const controller = new AbortController();
+    fetch("/__content-review", { cache: "no-store", signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Review candidates failed to load: ${response.status}`);
+        return response.json() as Promise<ContentArticle[]>;
+      })
+      .then((candidates) => setReviewCandidates(candidates
+        .filter((candidate) => (
+          candidate.language === "he"
+          && candidate.status === "draft"
+          && candidate.approval?.status === "pending"
+          && candidate.generation.mode === "codex_skill_candidate"
+          && candidate.generation.pipelineVersion === "match-review-v23"
+          && candidate.factCheck.status === "passed"
+          && candidate.qualityReview.status === "passed"
+        ))
+        .sort((left, right) => Date.parse(right.match.scheduledAt) - Date.parse(left.match.scheduledAt))))
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setReviewCandidates([]);
+      });
+    return () => controller.abort();
+  }, [reviewMode]);
+  const reviewArticles = reviewCandidates ?? [];
+  const articleSource = reviewTarget === "all"
+    ? reviewArticles
+    : reviewTarget
+      ? reviewArticles.filter((item) => item.slug === reviewTarget)
+      : articles;
+  const [selectedSlug, setSelectedSlug] = useState(articleSource[0]?.slug ?? "");
   const [activeTagId, setActiveTagId] = useState("");
   const filteredArticles = activeTagId
-    ? articles.filter((item) => item.tags?.some((tag) => tag.id === activeTagId))
-    : articles;
-  const selectedArticle = articles.find((item) => item.slug === selectedSlug) ?? articles[0];
+    ? articleSource.filter((item) => item.tags?.some((tag) => tag.id === activeTagId))
+    : articleSource;
+  const selectedArticle = articleSource.find((item) => item.slug === selectedSlug) ?? articleSource[0];
   const article = activeTagId && !selectedArticle?.tags?.some((tag) => tag.id === activeTagId)
     ? filteredArticles[0]
     : selectedArticle;
-  if (!article) return <div className="story-empty">אין עדיין כתבות שעמדו בבדיקות הפרסום.</div>;
+  if (!article) return <div className="story-empty">{reviewMode && reviewCandidates === null ? "טוען טיוטות לבדיקה…" : reviewMode ? "אין טיוטות מאושרות לבדיקה מקומית." : "אין עדיין כתבות שעמדו בבדיקות הפרסום."}</div>;
   const { editorial, match, teams } = article;
   const graphicsBySection = editorial.sections.map((section, index) => article.analysisPlan.graphics.filter((graphic) => (
     section.insightIds.includes(graphic.placementInsightId)
     && editorial.sections.findIndex((candidate) => candidate.insightIds.includes(graphic.placementInsightId)) === index
   )));
-  const activeTag = articles.flatMap((item) => item.tags ?? []).find((tag) => tag.id === activeTagId);
+  const activeTag = articleSource.flatMap((item) => item.tags ?? []).find((tag) => tag.id === activeTagId);
   const filterByTag = (tag: ArticleTag) => {
     const nextTagId = activeTagId === tag.id ? "" : tag.id;
     setActiveTagId(nextTagId);
     if (nextTagId) {
-      const firstMatch = articles.find((item) => item.tags?.some((itemTag) => itemTag.id === nextTagId));
+      const firstMatch = articleSource.find((item) => item.tags?.some((itemTag) => itemTag.id === nextTagId));
       if (firstMatch) setSelectedSlug(firstMatch.slug);
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -370,6 +406,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
 
   return (
     <div className="story-blog" dir="rtl">
+      {reviewMode && (
+        <div className="story-filter-status" role="status">
+          <span><strong>תצוגה מקומית לאישור</strong> · הכתבות האלו עדיין לא פורסמו</span>
+        </div>
+      )}
       {activeTag && (
         <div className="story-filter-status" role="status">
           <span>מסנן לפי תגית: <strong>{activeTag.label}</strong> · {filteredArticles.length} כתבות</span>

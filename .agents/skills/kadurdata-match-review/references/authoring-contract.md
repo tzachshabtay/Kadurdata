@@ -10,11 +10,11 @@ The workbench writes two ignored files under `.content-workbench/<slug>/`:
 - `schemaVersion`: `2`.
 - `model`: the Codex model selected for the task.
 - `authorship`: four non-empty and distinct real agent IDs for analyst, writer, Hebrew editor, and blind reviewer.
-- `analysisPlan`: one thesis, 3–5 ranked insights, a two-or-more-source explanatory model, the mandatory historical audit, a narrative arc, 2–4 distinct relevant graphics, all eight coverage decisions, and all quality flags.
+- `analysisPlan`: one thesis, 3–5 ranked insights, a two-or-more-source explanatory model, the mandatory historical audit, a narrative arc, 2–4 distinct relevant graphics, all eight coverage decisions, and all quality flags. `playerRoleAttribution` is true only after the analyst has compared unit-level creation/finishing and representative players from both sides.
 - `draftEditorial`: the writer's untouched draft: headline, dek, 3–6 sections, exactly three takeaways, and a conclusion.
 - `editorial`: the Hebrew editor's final version in the same shape. Each claim carries one or more valid `evidenceIds`.
-- `editorialReview`: the writer/editor IDs, hashes of the draft and final copy, at least three concrete edit records, exact coverage of every visible final sentence, `status: "passed"`, and all twelve checks true.
-- `qualityReview`: a distinct reviewer ID, hashes of the final and numberless copy, exact independent coverage of every visible final sentence, a passed numberless read with no issues, all twelve checks true, `issues: []`, and a positive attempt number.
+- `editorialReview`: the writer/editor IDs, hashes of the draft and final copy, at least three concrete edit records, exact coverage of every visible final sentence, `status: "passed"`, and all thirteen checks true.
+- `qualityReview`: a distinct reviewer ID, hashes of the final and numberless copy, exact independent coverage of every visible final sentence, a passed numberless read with no issues, all thirteen checks true, `issues: []`, and a positive attempt number.
 
 Use the TypeScript definitions in `src/content/types.ts` when a field is unclear. Use candidate IDs verbatim. A section may reference only insights selected in `analysisPlan.rankedInsights`. Run `npm run content:review-packet -- --authored <authored.json>` after the editor finishes; it prints the hashes, numberless copy, and exact sentence locations that the editor and reviewer must cover.
 
@@ -35,9 +35,9 @@ Inspect historical team metrics and every player with non-empty `notableChanges`
 
 ## Finalization
 
-The finalizer derives tags from player names used in the article, verifies role separation and review artifacts, stamps candidate generation metadata, recomputes every fact check from the raw source, and writes `.content-workbench/<slug>/candidate.json` plus a readable `candidate-preview.html` only when all checks pass. Both files remain local and ignored. A finalized candidate is not published and must not appear in the blog index.
+The finalizer derives tags from player names used in the article, verifies role separation and review artifacts, stamps candidate generation metadata, recomputes every fact check from the raw source, and writes `.content-workbench/<slug>/candidate.json` only when all checks pass. It remains local and ignored. A finalized candidate is not published and must not appear in the blog index.
 
-Open the HTML file for review, or serve the exact candidate with `npm run content:preview -- --candidate <candidate.json>`. The preview must show `approval.status: pending` and is never a substitute for explicit approval in a later user message.
+Serve the exact candidate with `npm run content:preview -- --candidate <candidate.json>`. The command stages ignored review data and opens the actual blog components in local development mode. Repeat `--candidate` to show several drafts in the article archive. The preview must show `approval.status: pending` and is never a substitute for explicit approval in a later user message.
 
 Publication is a separate promotion step. Run it only after the user explicitly approves the exact candidate in a later message. `content:publish` records the approval note, changes the candidate to published status, and writes `src/content/generated/<slug>.json`. A request to generate, revise, review, preview, finalize, automate, or schedule content is not publication approval.
 

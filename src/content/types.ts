@@ -273,6 +273,7 @@ export type ArticleEditorialReview = {
     gameStateContext: boolean;
     graphicRelevance: boolean;
     explanatoryDepth: boolean;
+    playerRoleAttribution: boolean;
     historicalAuditComplete: boolean;
   };
   notes: string[];
@@ -363,6 +364,7 @@ export type ArticleAnalysisPlan = {
     selectiveEvidence: boolean;
     graphicsServeStory: boolean;
     explanatoryDepth: boolean;
+    playerRoleAttribution: boolean;
     historicalAuditComplete: boolean;
   };
 };
@@ -374,6 +376,7 @@ export type ContentArticle = {
   kind: "match_review";
   status: "published" | "draft";
   publishedAt: string | null;
+  finalizedAt?: string;
   generatedAt: string;
   generation: {
     mode: string;

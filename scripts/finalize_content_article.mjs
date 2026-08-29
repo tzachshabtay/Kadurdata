@@ -13,7 +13,6 @@ import {
   claimEntries,
 } from "./generate_content_article.mjs";
 import { buildReviewPacket } from "./content_language_review.mjs";
-import { renderCandidatePreview } from "./content_candidate_preview.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -264,16 +263,11 @@ async function main() {
   if (outputPath === generatedDirectory || outputPath.startsWith(`${generatedDirectory}${path.sep}`)) {
     throw new Error("Finalization cannot write to the public blog. Write a candidate, then use content:publish after explicit user approval.");
   }
-  const previewPath = path.join(
-    path.dirname(outputPath),
-    `${path.basename(outputPath, path.extname(outputPath))}-preview.html`,
-  );
   if (!args.dryRun) {
     await mkdir(path.dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(article, null, 2)}\n`, "utf8");
-    await writeFile(previewPath, renderCandidatePreview(article), "utf8");
   }
-  console.log(JSON.stringify({ candidatePath: outputPath, previewPath, slug: source.slug, checks: checks.length, approval: "pending", dryRun: args.dryRun }, null, 2));
+  console.log(JSON.stringify({ candidatePath: outputPath, slug: source.slug, checks: checks.length, approval: "pending", dryRun: args.dryRun }, null, 2));
 }
 
 main().catch((error) => {

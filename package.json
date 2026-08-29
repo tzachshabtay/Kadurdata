@@ -11,7 +11,6 @@
     "content:prepare:sample": "node scripts/generate_content_article.mjs --match-id 5b2957d1-6f48-4269-baf6-2f53753eb160 --force",
     "content:review-packet": "node scripts/content_language_review.mjs",
     "content:check:language-review": "node scripts/check_content_language_review.mjs",
-    "content:check:preview": "node scripts/check_content_candidate_preview.mjs",
     "content:finalize": "node scripts/finalize_content_article.mjs",
     "content:preview": "node scripts/preview_content_candidate.mjs",
     "content:publish": "node scripts/publish_content_article.mjs",

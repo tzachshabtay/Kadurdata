@@ -17,3 +17,4 @@ dist/
 vite.config.js
 vite.config.d.ts
 .content-workbench/
+src/content/review/*.json

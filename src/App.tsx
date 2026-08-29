@@ -656,6 +656,9 @@ function writeDeepLinkState(state: DeepLinkState) {
   };
 
   setString("lang", state.language ?? "");
+  if (import.meta.env.DEV) {
+    setString("review", new URLSearchParams(window.location.search).get("review") ?? "");
+  }
   setString("competition", state.competitionId);
   setString("season", state.seasonId);
   setString("round", state.roundId);
