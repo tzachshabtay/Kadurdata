@@ -109,9 +109,9 @@ The Hebrew-only `בלוג` tab reads fact-checked article packages from
 2. Compare both teams with up to five preceding matches, and detect player changes only in high-volume metrics with at least three comparable appearances.
 3. Derive time-window flow, spatial-team profiles, unit matchups, and game-state splits around red cards and late score states; flag when similar cumulative totals conceal a materially different match.
 4. Rank candidate insights and prepare an ignored local workbench containing the evidence package and authoring contract.
-5. Let the native Codex task choose one thesis, explicitly omit weak angles, write the Hebrew narrative, and select 2–4 evidence-backed graphics without calling a paid model API.
-6. Run distinct editorial and quality passes for idiomatic Israeli football Hebrew, numerical clarity, story value, explanatory depth, and misuse of small samples.
-7. Finalize through deterministic checks for game-state context, plan adherence, graphic relevance, numeric density, score/event consistency, and evidence support; any failure blocks publication.
+5. Let a native Codex analyst choose one thesis and explicitly omit weak angles, then hand the plan to a fresh-context writer without calling a paid model API.
+6. Send the draft through a separate Hebrew editor and a blind reviewer. Both must cover every visible sentence; the blind reviewer also reads a numberless copy to ensure that the prose carries a story rather than merely listing statistics.
+7. Finalize through deterministic checks for distinct role IDs, exact-copy hashes, sentence coverage, recorded edits, game-state context, plan adherence, graphic relevance, numeric density, score/event consistency, and evidence support; any failure blocks publication.
 8. Publish the JSON package—including its analysis and graphic plans—with Hebrew team, player, and `סיכום משחק` tags; Vite renders only the selected code-native graphics and adds the article to the filterable blog archive.
 
 Prepare an evidence workbench for the latest eligible match:
@@ -123,6 +123,7 @@ npm run content:prepare
 Invoke `$kadurdata-match-review` in Codex to create `authored.json`, then finalize it using the paths reported by preparation:
 
 ```bash
+npm run content:review-packet -- --authored <authored.json>
 npm run content:finalize -- --source <source.json> --authored <authored.json>
 npm run content:validate
 npm run build

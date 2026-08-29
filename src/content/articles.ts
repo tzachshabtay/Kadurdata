@@ -10,7 +10,8 @@ export const articles = Object.values(generatedModules)
     article.language === "he"
     && article.status === "published"
     && article.generation.mode === "codex_skill"
-    && article.generation.pipelineVersion === "match-review-v20"
+    && article.generation.pipelineVersion === "match-review-v21"
+    && new Set(Object.values(article.authorship ?? {})).size === 4
     && article.editorialReview.mode === "codex_skill_editor"
     && article.editorialReview.status === "passed"
     && article.qualityReview?.mode === "codex_skill_quality_gate"

@@ -21,7 +21,7 @@ const generatedDirectory = path.join(projectRoot, "src", "content", "generated")
 const defaultWorkbenchDirectory = path.join(projectRoot, ".content-workbench");
 const HISTORICAL_WINDOW = 5;
 const MAX_EDITORIAL_SECTIONS = 6;
-const PIPELINE_VERSION = "match-review-v20";
+const PIPELINE_VERSION = "match-review-v21";
 const EDITORIAL_REVIEW_MODE = "codex_skill_editor";
 const QUALITY_REVIEW_MODE = "codex_skill_quality_gate";
 
@@ -43,14 +43,8 @@ const AWKWARD_FOOTBALL_COPY_PATTERNS = [
   /נתיב(?:ים|י|י־|ה)?/,
   /ייצר(?:ה|ו)?[^.]{0,40}בעיטות/,
   /מצב של המשחק/,
-  /מאזני בעיטות/,
   /האות הקבוצתי/,
-  /(?:קירב(?:ה|ו)?|התקרב(?:ה|ו)?)\s+(?:את\s+)?(?:ה)?מאזן/,
-  /התקרב(?:ה|ו)?\s+[^.]{0,50}\s+במספר\s+הבעיטות/,
   /הגיע(?:ה|ו)?\s+טוב\s+יותר\s+לרחבה/,
-  /התקרב(?:ה|ו)?\s+ב?(?:ספירת|מניין)\s+הבעיטות/,
-  /(?:ספירת|מניין)\s+הבעיטות\s+התקרב/,
-  /(?:ה)?בעיטות[^.]{0,60}צמצמ(?:ה|ו)?\s+[^.]{0,30}(?:את\s+)?הפער/,
   /לפני\s+שמצב\s+המשחק\s+השתנה/,
   /כל\s+עוד\s+המשחק\s+היה\s+תחרותי/,
   /שני\s+קצות\s+הרצף/,
@@ -2007,13 +2001,31 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const summaryRolesGrounded = summaryRolePatterns.every((pattern) => !pattern.test(summaryCopy) || pattern.test(bodyCopy));
   const summarySpatialEvidenceGrounded = !/(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(summaryCopy)
     || /(?:פרופיל\s+מרחבי|מפת\s+חום)/.test(bodyCopy);
+  const roleSeparatedLanguageReview = !requiresAiReview || (
+    editorialReview.writerAgentId
+    && editorialReview.editorAgentId
+    && qualityReview.reviewerAgentId
+    && new Set([
+      editorialReview.writerAgentId,
+      editorialReview.editorAgentId,
+      qualityReview.reviewerAgentId,
+    ]).size === 3
+  );
   const editorialReviewPassed = !requiresAiReview || (editorialReview.mode === EDITORIAL_REVIEW_MODE
     && editorialReview.status === "passed"
-    && Object.values(editorialReview.checks).every(Boolean));
+    && Object.values(editorialReview.checks).every(Boolean)
+    && editorialReview.sentenceReviews?.length > 0
+    && editorialReview.sentenceReviews.every((review) => review.verdict === "passed")
+    && editorialReview.changes?.length >= 3);
   const qualityReviewPassed = !requiresAiReview || (qualityReview.mode === QUALITY_REVIEW_MODE
     && qualityReview.status === "passed"
     && Object.values(qualityReview.checks).every(Boolean)
-    && qualityReview.issues.length === 0);
+    && qualityReview.issues.length === 0
+    && qualityReview.sentenceReviews?.length > 0
+    && qualityReview.sentenceReviews.every((review) => review.verdict === "passed")
+    && qualityReview.numberlessReview?.status === "passed"
+    && qualityReview.numberlessReview.articleStillCoherent
+    && qualityReview.numberlessReview.issues.length === 0);
   const checks = [
     ["match-ended", "המשחק הסתיים", match.status === "Ended", `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
@@ -2031,6 +2043,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["history-order", "כל משחקי ההשוואה קדמו למשחק", historyPrecedesMatch, `${historicalMatches.length} משחקים קודמים נבדקו`],
     ["historical-player-volume", "השוואות שחקנים נשענות על מדדי נפח", weakHistoricalPlayerClaims.length === 0, weakHistoricalPlayerClaims.length ? `${weakHistoricalPlayerClaims.length} השוואות נשענו על מדגם חלש` : "לא נמצאו מגמות אישיות ממדגם קטן"],
     ["hebrew-copy-lint", "הנוסח נקי מתבניות עברית בעייתיות", awkwardCopyMatches.length === 0, awkwardCopyMatches.length ? awkwardCopyMatches.map(String).join(" | ") : "נבדקו ניסוחים ומעברים מספריים בעייתיים"],
+    ["role-separated-language-review", "הכותב, העורך ומבקר העברית פעלו כתפקידים נפרדים", roleSeparatedLanguageReview, roleSeparatedLanguageReview ? "שלושת מזהי התפקידים שונים" : "נמצא שימוש חוזר באותו מזהה תפקיד"],
     ["editorial-review", "הנוסח עבר בקרת עברית, בהירות ורצף", editorialReviewPassed, editorialReview.notes.join(" | ")],
     ["quality-review", "בקרת האיכות אישרה את הנוסח", qualityReviewPassed, qualityReview.issues.length ? qualityReview.issues.join(" | ") : `אושר בניסיון ${qualityReview.attempt}`],
     ["analysis-plan", "האנליסט בחר תזה, תובנות והשמטות תקינות", planFailures.length === 0, planFailures.length ? planFailures.join(" | ") : `${analysisPlan.rankedInsights.length} תובנות ו-${analysisPlan.coverageDecisions.filter((item) => item.decision === "omit").length} קטגוריות שהושמטו`],
@@ -2391,18 +2404,41 @@ function draftEditorialTemplate(home, away) {
 
 function authoringTemplate(sourceFilename, analysisPlan, editorial) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     source: sourceFilename,
     model: "configured-codex-model",
+    authorship: {
+      analystAgentId: "analyst-agent-id",
+      writerAgentId: "writer-agent-id",
+      editorAgentId: "editor-agent-id",
+      reviewerAgentId: "reviewer-agent-id",
+    },
     analysisPlan,
+    draftEditorial: editorial,
     editorial,
     editorialReview: {
       status: "failed",
+      writerAgentId: "writer-agent-id",
+      editorAgentId: "editor-agent-id",
+      draftHash: "pending-draft-hash",
+      finalHash: "pending-final-hash",
+      changes: [],
+      sentenceReviews: [],
       checks: blankReviewChecks(false),
       notes: ["העורך חייב להחליף את הטיוטה ולעבור על כל משפט לפני הפרסום."],
     },
     qualityReview: {
       status: "failed",
+      reviewerAgentId: "reviewer-agent-id",
+      reviewedHash: "pending-final-hash",
+      numberlessHash: "pending-numberless-hash",
+      sentenceReviews: [],
+      numberlessReview: {
+        status: "failed",
+        articleStillCoherent: false,
+        summaryHe: "טרם בוצעה קריאה ללא מספרים.",
+        issues: ["טרם בוצעה קריאה ללא מספרים."],
+      },
       checks: blankReviewChecks(false),
       issues: ["טרם בוצעה בקרת איכות."],
       attempt: 1,
@@ -2616,6 +2652,7 @@ async function prepareWorkbench() {
 }
 
 export {
+  AWKWARD_FOOTBALL_COPY_PATTERNS,
   EDITORIAL_REVIEW_MODE,
   PIPELINE_VERSION,
   QUALITY_REVIEW_MODE,

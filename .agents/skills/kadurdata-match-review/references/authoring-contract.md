@@ -7,13 +7,18 @@ The workbench writes two ignored files under `.content-workbench/<slug>/`:
 
 ## Required authored fields
 
+- `schemaVersion`: `2`.
 - `model`: the Codex model selected for the task.
+- `authorship`: four non-empty and distinct real agent IDs for analyst, writer, Hebrew editor, and blind reviewer.
 - `analysisPlan`: one thesis, 3–5 ranked insights, a two-or-more-source explanatory model, the mandatory historical audit, a narrative arc, 2–4 distinct relevant graphics, all eight coverage decisions, and all quality flags.
-- `editorial`: headline, dek, 3–6 sections, exactly three takeaways, and a conclusion. Each claim carries one or more valid `evidenceIds`.
-- `editorialReview`: `status: "passed"`, all twelve checks true, and concise notes describing actual changes.
-- `qualityReview`: `status: "passed"`, all twelve checks true, `issues: []`, and a positive attempt number.
+- `draftEditorial`: the writer's untouched draft: headline, dek, 3–6 sections, exactly three takeaways, and a conclusion.
+- `editorial`: the Hebrew editor's final version in the same shape. Each claim carries one or more valid `evidenceIds`.
+- `editorialReview`: the writer/editor IDs, hashes of the draft and final copy, at least three concrete edit records, exact coverage of every visible final sentence, `status: "passed"`, and all twelve checks true.
+- `qualityReview`: a distinct reviewer ID, hashes of the final and numberless copy, exact independent coverage of every visible final sentence, a passed numberless read with no issues, all twelve checks true, `issues: []`, and a positive attempt number.
 
-Use the TypeScript definitions in `src/content/types.ts` when a field is unclear. Use candidate IDs verbatim. A section may reference only insights selected in `analysisPlan.rankedInsights`.
+Use the TypeScript definitions in `src/content/types.ts` when a field is unclear. Use candidate IDs verbatim. A section may reference only insights selected in `analysisPlan.rankedInsights`. Run `npm run content:review-packet -- --authored <authored.json>` after the editor finishes; it prints the hashes, numberless copy, and exact sentence locations that the editor and reviewer must cover.
+
+The writer, editor, and reviewer must be fresh-context agents. Give the editor the draft, voice guide, and focused evidence. Give the reviewer the final visible copy and voice guide first; only after its language read should it inspect evidence. Do not show the reviewer the editor's notes or ask it to confirm a prior verdict.
 
 ## Focused inspection
 
@@ -30,6 +35,6 @@ Inspect historical team metrics and every player with non-empty `notableChanges`
 
 ## Finalization
 
-The finalizer derives tags from player names used in the article, stamps the Codex-skill generation modes, recomputes every fact check from the raw source, and writes `src/content/generated/<slug>.json` only when all checks pass.
+The finalizer derives tags from player names used in the article, verifies role separation and review artifacts, stamps the Codex-skill generation modes, recomputes every fact check from the raw source, and writes `src/content/generated/<slug>.json` only when all checks pass.
 
 Never edit stored check results to bypass a failure. Fix the analysis plan or prose and run finalization again.

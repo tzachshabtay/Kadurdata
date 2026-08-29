@@ -18,6 +18,17 @@ export type ArticleClaim = {
   evidenceIds: string[];
 };
 
+export type ArticleEditorial = {
+  headline: string;
+  headlineEvidenceIds: string[];
+  dek: string;
+  dekEvidenceIds: string[];
+  sections: Array<{ heading: string; insightIds: string[]; paragraphs: ArticleClaim[] }>;
+  takeaways: ArticleClaim[];
+  conclusion: string;
+  conclusionEvidenceIds: string[];
+};
+
 export type ArticleTeam = {
   teamId: string;
   name: string;
@@ -233,6 +244,23 @@ export type ArticleEditorialReview = {
   mode: string;
   model: string | null;
   status: "passed" | "failed";
+  writerAgentId: string;
+  editorAgentId: string;
+  draftHash: string;
+  finalHash: string;
+  changes: Array<{
+    location: string;
+    original: string;
+    revised: string;
+    category: "translationese" | "abstract_language" | "football_register" | "clarity" | "rhythm" | "numeric_overload" | "cohesion";
+    reasonHe: string;
+  }>;
+  sentenceReviews: Array<{
+    location: string;
+    text: string;
+    verdict: "passed" | "failed";
+    noteHe: string;
+  }>;
   checks: {
     naturalHebrew: boolean;
     footballHebrew: boolean;
@@ -254,6 +282,16 @@ export type ArticleQualityReview = {
   mode: string;
   model: string | null;
   status: "passed" | "failed";
+  reviewerAgentId: string;
+  reviewedHash: string;
+  numberlessHash: string;
+  sentenceReviews: ArticleEditorialReview["sentenceReviews"];
+  numberlessReview: {
+    status: "passed" | "failed";
+    articleStillCoherent: boolean;
+    summaryHe: string;
+    issues: string[];
+  };
   checks: ArticleEditorialReview["checks"];
   issues: string[];
   attempt: number;
@@ -339,10 +377,17 @@ export type ContentArticle = {
   generation: {
     mode: string;
     analystModel: string | null;
+    writerModel: string | null;
     model: string | null;
     editorModel: string | null;
     qualityModel: string | null;
     pipelineVersion: string;
+  };
+  authorship: {
+    analystAgentId: string;
+    writerAgentId: string;
+    editorAgentId: string;
+    reviewerAgentId: string;
   };
   match: {
     matchId: string;
@@ -375,16 +420,7 @@ export type ContentArticle = {
   shots: ArticleShot[];
   editorialReview: ArticleEditorialReview;
   qualityReview: ArticleQualityReview;
-  editorial: {
-    headline: string;
-    headlineEvidenceIds: string[];
-    dek: string;
-    dekEvidenceIds: string[];
-    sections: Array<{ heading: string; insightIds: string[]; paragraphs: ArticleClaim[] }>;
-    takeaways: ArticleClaim[];
-    conclusion: string;
-    conclusionEvidenceIds: string[];
-  };
+  editorial: ArticleEditorial;
   evidence: ArticleEvidence[];
   factCheck: {
     status: "passed" | "failed";
