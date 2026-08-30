@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "content:prepare": "node scripts/generate_content_article.mjs",
     "content:prepare:sample": "node scripts/generate_content_article.mjs --match-id 5b2957d1-6f48-4269-baf6-2f53753eb160 --force",
+    "content:postprocess": "node scripts/postprocess_content_article.mjs",
     "content:review-packet": "node scripts/content_language_review.mjs",
     "content:check:language-review": "node scripts/check_content_language_review.mjs",
     "content:finalize": "node scripts/finalize_content_article.mjs",

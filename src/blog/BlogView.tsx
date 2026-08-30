@@ -23,7 +23,7 @@ const hebrewDate = new Intl.DateTimeFormat("he-IL", {
 });
 
 function numeric(value: number | null | undefined, digits = 0) {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   return new Intl.NumberFormat("he-IL", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -136,8 +136,8 @@ function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: Ar
       {article.actualPlayTime && (
         <div className="flow-playing-time">
           <span>זמן משחק נטו</span>
-          <strong>{article.actualPlayTime.actual?.replace("Actual ", "") ?? "—"}</strong>
-          <small>מתוך {article.actualPlayTime.total?.replace("Total ", "") ?? "—"} זמן כולל</small>
+          <strong>{article.actualPlayTime.actual?.replace("Actual ", "") ?? "-"}</strong>
+          <small>מתוך {article.actualPlayTime.total?.replace("Total ", "") ?? "-"} זמן כולל</small>
         </div>
       )}
     </figure>

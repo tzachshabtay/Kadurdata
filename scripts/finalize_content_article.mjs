@@ -12,7 +12,8 @@ import {
   buildChecks,
   claimEntries,
 } from "./generate_content_article.mjs";
-import { buildReviewPacket } from "./content_language_review.mjs";
+import { buildReviewPacket, visibleSentenceEntries } from "./content_language_review.mjs";
+import { postprocessVisibleCopy } from "./postprocess_content_article.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -53,6 +54,31 @@ function rejectScaffoldText(authored) {
     "pending-numberless-hash",
   ]) {
     if (text.includes(marker)) throw new Error(`Authored package still contains scaffold text: ${marker}`);
+  }
+}
+
+function requirePostprocessedCopy(authored) {
+  const processed = postprocessVisibleCopy(authored);
+  if (
+    JSON.stringify(processed.editorial) !== JSON.stringify(authored.editorial)
+    || JSON.stringify(processed.analysisPlan?.graphics ?? []) !== JSON.stringify(authored.analysisPlan?.graphics ?? [])
+  ) {
+    throw new Error("Visible article copy has not passed content:postprocess; em dashes must be replaced before editorial and blind review.");
+  }
+  const visibleCopy = visibleSentenceEntries(authored.editorial, authored.analysisPlan)
+    .map((entry) => entry.text)
+    .join("\n");
+  for (const [pattern, guidance] of [
+    [/(?:מפת|מפות) הפעילות/u, "Use 'מפת חום' in graphics or describe the player's position 'על המגרש' in prose."],
+    [/שוו (?:יחד|ביחד)/u, "Use a complete Hebrew predicate for a combined value."],
+    [/(?:קיבל|קיבלה|קיבלו)[^.!?\n]{0,40}סיומים/u, "Players receive chances or opportunities; finishing is the action they perform."],
+  ]) {
+    if (pattern.test(visibleCopy)) throw new Error(`Visible article copy contains an editorially rejected phrase. ${guidance}`);
+  }
+  for (const graphic of authored.analysisPlan?.graphics ?? []) {
+    if (/\d/u.test(`${graphic.titleHe ?? ""} ${graphic.subtitleHe ?? ""}`)) {
+      throw new Error(`Graphic ${graphic.type ?? "unknown"} title or subtitle contains a number; rendered values must come from the component data.`);
+    }
   }
 }
 
@@ -174,6 +200,7 @@ async function main() {
   }
   rejectScaffoldText(authored);
   if (!authored.analysisPlan || !authored.editorial) throw new Error("Authored package must include analysisPlan and editorial.");
+  requirePostprocessedCopy(authored);
   requireCompleteReview(authored.editorialReview, "Editorial review");
   requireCompleteReview(authored.qualityReview, "Quality review");
   if (authored.qualityReview.issues?.length) throw new Error("Quality review still contains unresolved issues.");
