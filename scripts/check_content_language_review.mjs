@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { numberlessEntries, visibleSentenceEntries } from "./content_language_review.mjs";
+import { mentionsPlayerByFullOrIntroducedShortName } from "./generate_content_article.mjs";
 import { postprocessVisibleCopy } from "./postprocess_content_article.mjs";
 
 const editorial = {
@@ -36,5 +37,10 @@ assert.equal(postprocessed.analysisPlan.graphics[0].titleHe, "האגפים - ו�
 assert.equal(postprocessed.analysisPlan.graphics[0].subtitleHe, "מפות החום - לאורך כל דקות ההופעה");
 assert.match("במפת הפעילות", /(?:מפת|מפות) הפעילות/u);
 assert.match("מפות הפעילות", /(?:מפת|מפות) הפעילות/u);
+assert.equal(
+  mentionsPlayerByFullOrIntroducedShortName("פרץ כבש פעמיים", "דור פרץ קיבל את המצבים. פרץ כבש פעמיים", "דור פרץ"),
+  true,
+);
+assert.equal(mentionsPlayerByFullOrIntroducedShortName("פרץ כבש פעמיים", "פרץ כבש פעמיים", "דור פרץ"), false);
 
 console.log("Content language review regression checks passed.");

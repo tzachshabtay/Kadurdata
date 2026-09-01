@@ -1530,6 +1530,13 @@ function decisiveWindowScorerNames(mechanismContext) {
     .map((shooter) => shooter.playerNameHe);
 }
 
+function mentionsPlayerByFullOrIntroducedShortName(sectionCopy, articleCopy, fullName) {
+  if (sectionCopy.includes(fullName)) return true;
+  const nameParts = fullName.trim().split(/\s+/u);
+  if (nameParts.length < 2 || !articleCopy.includes(fullName)) return false;
+  return sectionCopy.includes(nameParts.slice(1).join(" "));
+}
+
 function chanceMechanismRepresentativeNames(mechanismContext) {
   return ["home", "away"].flatMap((side) => {
     const shooters = mechanismContext?.teams?.[side]?.leadingShooters ?? [];
@@ -1562,11 +1569,13 @@ function editorialStructureFailures(editorial, analysisPlan, mechanismContext) {
     }
   }
   if (analysisPlan.rankedInsights.some((insight) => insight.id === "decisive_window_mechanism")) {
+    const articleCopy = claimEntries(editorial).map((claim) => claim.text).join(" ");
     const decisiveCopy = editorial.sections
       .filter((section) => section.insightIds?.includes("decisive_window_mechanism"))
       .flatMap((section) => section.paragraphs.map((paragraph) => paragraph.text))
       .join(" ");
-    const missingScorers = decisiveWindowScorerNames(mechanismContext).filter((name) => !decisiveCopy.includes(name));
+    const missingScorers = decisiveWindowScorerNames(mechanismContext)
+      .filter((name) => !mentionsPlayerByFullOrIntroducedShortName(decisiveCopy, articleCopy, name));
     if (missingScorers.length) failures.push(`סעיף חלון ההכרעה אינו מסביר את מעורבות המסיימים המרכזיים: ${missingScorers.join(", ")}`);
   }
   if (analysisPlan.rankedInsights.some((insight) => insight.id === "chance_creation_mechanism")) {
@@ -2786,6 +2795,7 @@ export {
   buildArticleTags,
   buildChecks,
   claimEntries,
+  mentionsPlayerByFullOrIntroducedShortName,
 };
 
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

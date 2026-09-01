@@ -5,7 +5,10 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildReviewPacket } from "./content_language_review.mjs";
-import { AWKWARD_FOOTBALL_COPY_PATTERNS } from "./generate_content_article.mjs";
+import {
+  AWKWARD_FOOTBALL_COPY_PATTERNS,
+  mentionsPlayerByFullOrIntroducedShortName,
+} from "./generate_content_article.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -198,11 +201,13 @@ function validateArticle(article, filename) {
     if (!usedInSection) fail(`article does not explain the selected mechanism: ${insightId}`);
   }
   if (requiredMechanismInsightIds.includes("decisive_window_mechanism")) {
+    const articleCopy = claims(article).map((claim) => claim.text).join(" ");
     const decisiveCopy = article.editorial.sections
       .filter((section) => section.insightIds?.includes("decisive_window_mechanism"))
       .flatMap((section) => section.paragraphs.map((paragraph) => paragraph.text))
       .join(" ");
-    const missingScorers = decisiveWindowScorerNames(article.mechanismContext).filter((name) => !decisiveCopy.includes(name));
+    const missingScorers = decisiveWindowScorerNames(article.mechanismContext)
+      .filter((name) => !mentionsPlayerByFullOrIntroducedShortName(decisiveCopy, articleCopy, name));
     if (missingScorers.length) fail(`decisive-window scorers are missing from the article body: ${missingScorers.join(", ")}`);
   }
   if (requiredMechanismInsightIds.includes("chance_creation_mechanism")) {
