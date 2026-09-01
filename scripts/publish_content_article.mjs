@@ -9,6 +9,7 @@ import { buildReviewPacket } from "./content_language_review.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
+const supportedPipelineVersions = new Set([PIPELINE_VERSION, "legionnaire-weekly-v1"]);
 
 function readArguments() {
   const args = process.argv.slice(2);
@@ -40,7 +41,7 @@ async function main() {
   if (candidate.status !== "draft" || candidate.generation?.mode !== "codex_skill_candidate") {
     throw new Error("Only a finalized Codex-skill candidate can be published.");
   }
-  if (candidate.generation?.pipelineVersion !== PIPELINE_VERSION) {
+  if (!supportedPipelineVersions.has(candidate.generation?.pipelineVersion)) {
     throw new Error("Candidate was not finalized by the current skill version.");
   }
   if (candidate.approval?.status !== "pending") throw new Error("Candidate is not awaiting approval.");

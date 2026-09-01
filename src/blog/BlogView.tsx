@@ -8,11 +8,21 @@ import {
   Sparkles,
 } from "lucide-react";
 import { articles } from "../content/articles";
-import type { ArticleGraphicSpec, ArticleShot, ArticleTag, ContentArticle } from "../content/types";
+import {
+  isMatchReviewArticle,
+  type ArticleGraphicSpec,
+  type ArticleShot,
+  type ArticleTag,
+  type ContentArticle,
+  type LegionnaireArticleGraphicSpec,
+  type LegionnaireWeeklyArticle,
+  type MatchArticleGraphicSpec,
+  type MatchReviewArticle,
+} from "../content/types";
 import { renderSeasonHeatmap } from "../lib/seasonHeatmap";
 
 type BlogViewProps = {
-  onOpenMatch: (article: ContentArticle) => void;
+  onOpenMatch: (article: MatchReviewArticle) => void;
 };
 
 const hebrewDate = new Intl.DateTimeFormat("he-IL", {
@@ -54,7 +64,7 @@ function colorDistance(left: string, right: string) {
   );
 }
 
-function graphicTeamColors(article: ContentArticle) {
+function graphicTeamColors(article: MatchReviewArticle) {
   const home = article.teams.home.color || "#e9435d";
   const requestedAway = article.teams.away.color || "#2bbf9b";
   if (colorDistance(home, requestedAway) >= 100) return { home, away: requestedAway };
@@ -67,7 +77,7 @@ function goalLabel(shot: ArticleShot) {
   return `${shot.eventTime} · ${shot.playerNameHe}`;
 }
 
-function StoryScoreCard({ article }: { article: ContentArticle }) {
+function StoryScoreCard({ article }: { article: MatchReviewArticle }) {
   const { home, away } = article.teams;
   return (
     <div className="story-score-card" aria-label={`${home.nameHe} ${home.score}, ${away.nameHe} ${away.score}`}>
@@ -92,7 +102,7 @@ function StoryScoreCard({ article }: { article: ContentArticle }) {
   );
 }
 
-function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+function MatchFlowGraphic({ article, spec }: { article: MatchReviewArticle; spec: MatchArticleGraphicSpec }) {
   const { home, away } = article.teams;
   const colors = graphicTeamColors(article);
   const maxXg = Math.max(0.1, ...article.flowWindows.flatMap((window) => [window.home.xg, window.away.xg]));
@@ -144,7 +154,7 @@ function MatchFlowGraphic({ article, spec }: { article: ContentArticle; spec: Ar
   );
 }
 
-function HistoricalComparisonGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+function HistoricalComparisonGraphic({ article, spec }: { article: MatchReviewArticle; spec: MatchArticleGraphicSpec }) {
   const colors = graphicTeamColors(article);
   const teams = [
     { team: article.teams.home, history: article.historicalContext.teams.home, color: colors.home },
@@ -201,7 +211,7 @@ function HistoricalComparisonGraphic({ article, spec }: { article: ContentArticl
   );
 }
 
-function PlayerSpotlight({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+function PlayerSpotlight({ article, spec }: { article: MatchReviewArticle; spec: MatchArticleGraphicSpec }) {
   const player = article.players.find((item) => item.playerId === spec.focusPlayerId);
   if (!player) return null;
   const team = player.teamId === article.teams.home.teamId ? article.teams.home : article.teams.away;
@@ -227,7 +237,7 @@ function PlayerSpotlight({ article, spec }: { article: ContentArticle; spec: Art
   );
 }
 
-function ShotMap({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+function ShotMap({ article, spec }: { article: MatchReviewArticle; spec: MatchArticleGraphicSpec }) {
   const outcomeHe: Record<string, string> = { Goal: "שער", Saved: "נעצרה", Missed: "החטאה", Blocked: "נחסמה" };
   const colors = graphicTeamColors(article);
   return (
@@ -275,7 +285,7 @@ function ShotMap({ article, spec }: { article: ContentArticle; spec: ArticleGrap
   );
 }
 
-function TacticalHeatmapGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+function TacticalHeatmapGraphic({ article, spec }: { article: MatchReviewArticle; spec: MatchArticleGraphicSpec }) {
   const homeCanvas = useRef<HTMLCanvasElement>(null);
   const awayCanvas = useRef<HTMLCanvasElement>(null);
   const [loaded, setLoaded] = useState(false);
@@ -307,7 +317,89 @@ function TacticalHeatmapGraphic({ article, spec }: { article: ContentArticle; sp
   );
 }
 
+const legionnaireMetricLabels: Record<string, string> = {
+  minutes: "דקות",
+  touches: "נגיעות בכדור",
+  passes_into_final_third: "מסירות לשליש האחרון",
+  key_passes: "מסירות מפתח",
+  total_shots: "בעיטות",
+  expected_goals: "xG",
+  expected_assists: "xA",
+  ground_duels_won: "מאבקי קרקע מוצלחים",
+  tackles_won: "תיקולים מוצלחים",
+  ball_recovery: "חילוצי כדור",
+};
+
+function WeeklySummaryCard({ article }: { article: LegionnaireWeeklyArticle }) {
+  return (
+    <div className="story-score-card weekly-summary-card" aria-label="סיכום שבוע הלגיונרים">
+      <span className="score-card-label">השבוע במספרים</span>
+      <strong className="weekly-summary-title">{article.summary.playersWithMinutes} לגיונרים שיחקו</strong>
+      <div className="score-card-insight">
+        <span><small>הופעות</small><strong>{article.summary.appearances}</strong></span>
+        <span><small>פתחו בהרכב</small><strong>{article.summary.starts}</strong></span>
+        <span><small>דקות</small><strong>{numeric(article.summary.minutes)}</strong></span>
+      </div>
+    </div>
+  );
+}
+
+function LegionnaireGraphic({ article, spec }: { article: LegionnaireWeeklyArticle; spec: LegionnaireArticleGraphicSpec }) {
+  const players = spec.playerIds
+    .map((playerId) => article.summary.players.find((player) => player.playerId === playerId))
+    .filter((player): player is LegionnaireWeeklyArticle["summary"]["players"][number] => Boolean(player));
+  if (!players.length) return null;
+  const metricLabel = legionnaireMetricLabels[spec.metricCode] ?? spec.metricCode;
+
+  if (spec.type === "legionnaire_trend") {
+    return (
+      <figure className="story-graphic legionnaire-trend-graphic">
+        <figcaption><div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div></figcaption>
+        <div className="legionnaire-trend-grid">
+          {players.map((player) => {
+            const current = Number(player.per90[spec.metricCode] ?? 0);
+            const baseline = Number(player.baseline.per90[spec.metricCode] ?? 0);
+            const scale = Math.max(1, current, baseline);
+            return (
+              <section key={player.playerId}>
+                <header><strong>{player.nameHe}</strong><small>{player.teamName} · לכל 90 דקות</small></header>
+                <div className="legionnaire-trend-row"><span>השבוע</span><i><b style={{ width: `${current / scale * 100}%` }} /></i><strong>{numeric(current, 1)}</strong></div>
+                <div className="legionnaire-trend-row baseline"><span>{player.baseline.matchCount} משחקים קודמים</span><i><b style={{ width: `${baseline / scale * 100}%` }} /></i><strong>{numeric(baseline, 1)}</strong></div>
+              </section>
+            );
+          })}
+        </div>
+      </figure>
+    );
+  }
+
+  const values = players.map((player) => spec.type === "legionnaire_workload"
+    ? player.minutes
+    : Number(player.metrics[spec.metricCode] ?? 0));
+  const scale = Math.max(1, ...values);
+  return (
+    <figure className="story-graphic legionnaire-bars-graphic">
+      <figcaption><div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div></figcaption>
+      <div className="legionnaire-bars">
+        {players.map((player, index) => (
+          <section key={player.playerId}>
+            <div><strong>{player.nameHe}</strong><small>{player.teamName}</small></div>
+            <i><b style={{ width: `${values[index] / scale * 100}%` }} /></i>
+            <span><strong>{numeric(values[index], spec.metricCode.startsWith("expected_") ? 2 : 0)}</strong><small>{spec.type === "legionnaire_workload" ? "דקות" : metricLabel}</small></span>
+          </section>
+        ))}
+      </div>
+    </figure>
+  );
+}
+
 function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+  if (article.kind === "legionnaire_weekly") {
+    if (spec.type === "legionnaire_workload" || spec.type === "legionnaire_metric" || spec.type === "legionnaire_trend") {
+      return <LegionnaireGraphic article={article} spec={spec} />;
+    }
+    return null;
+  }
   if (spec.type === "match_flow") return <MatchFlowGraphic article={article} spec={spec} />;
   if (spec.type === "shot_map") return <ShotMap article={article} spec={spec} />;
   if (spec.type === "team_history") return <HistoricalComparisonGraphic article={article} spec={spec} />;
@@ -317,7 +409,9 @@ function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: Arti
 }
 
 function FactCheckPanel({ article }: { article: ContentArticle }) {
-  const visibleCheckIds = ["score-vs-events", "analysis-plan", "game-state-story", "number-discipline", "graphic-plan", "editorial-review", "numeric-claims"];
+  const visibleCheckIds = article.kind === "match_review"
+    ? ["score-vs-events", "analysis-plan", "game-state-story", "number-discipline", "graphic-plan", "editorial-review", "numeric-claims"]
+    : ["weekly-window", "deduplication", "analysis-plan", "sample-discipline", "graphic-plan", "editorial-review", "numeric-claims"];
   const visibleChecks = visibleCheckIds
     .map((id) => article.factCheck.checks.find((check) => check.id === id))
     .filter((check): check is ContentArticle["factCheck"]["checks"][number] => Boolean(check));
@@ -361,11 +455,13 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           && candidate.status === "draft"
           && candidate.approval?.status === "pending"
           && candidate.generation.mode === "codex_skill_candidate"
-          && candidate.generation.pipelineVersion === "match-review-v23"
+          && ["match-review-v23", "legionnaire-weekly-v1"].includes(candidate.generation.pipelineVersion)
           && candidate.factCheck.status === "passed"
           && candidate.qualityReview.status === "passed"
         ))
-        .sort((left, right) => Date.parse(right.match.scheduledAt) - Date.parse(left.match.scheduledAt))))
+        .sort((left, right) => Date.parse(
+          right.kind === "match_review" ? right.match.scheduledAt : right.period.end,
+        ) - Date.parse(left.kind === "match_review" ? left.match.scheduledAt : left.period.end))))
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setReviewCandidates([]);
@@ -388,7 +484,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
     ? filteredArticles[0]
     : selectedArticle;
   if (!article) return <div className="story-empty">{reviewMode && reviewCandidates === null ? "טוען טיוטות לבדיקה…" : reviewMode ? "אין טיוטות מאושרות לבדיקה מקומית." : "אין עדיין כתבות שעמדו בבדיקות הפרסום."}</div>;
-  const { editorial, match, teams } = article;
+  const { editorial } = article;
+  const articleDate = article.kind === "match_review" ? article.match.scheduledAt : article.period.end;
+  const archiveMeta = (item: ContentArticle) => item.kind === "match_review"
+    ? `${item.match.competitionNameHe} · ${hebrewDate.format(new Date(item.match.scheduledAt))}`
+    : `לגיונרים · ${hebrewDate.format(new Date(item.period.end))}`;
   const graphicsBySection = editorial.sections.map((section, index) => article.analysisPlan.graphics.filter((graphic) => (
     section.insightIds.includes(graphic.placementInsightId)
     && editorial.sections.findIndex((candidate) => candidate.insightIds.includes(graphic.placementInsightId)) === index
@@ -420,11 +520,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
       <article className="story-page">
       <header className="story-hero">
         <div className="story-hero-copy">
-          <div className="story-kicker"><Sparkles size={15} aria-hidden="true" /> הסיפור של המשחק</div>
+          <div className="story-kicker"><Sparkles size={15} aria-hidden="true" /> {article.kind === "match_review" ? "הסיפור של המשחק" : "השבוע של הלגיונרים"}</div>
           <p className="story-meta">
-            {match.competitionNameHe}
-            {match.roundNumber !== null && match.roundNumber !== undefined ? ` · מחזור ${match.roundNumber}` : ""}
-            {` · ${hebrewDate.format(new Date(match.scheduledAt))}`}
+            {article.kind === "match_review"
+              ? `${article.match.competitionNameHe}${article.match.roundNumber !== null && article.match.roundNumber !== undefined ? ` · מחזור ${article.match.roundNumber}` : ""} · ${hebrewDate.format(new Date(articleDate))}`
+              : `${article.period.labelHe} · עונת ${article.period.seasonName}`}
           </p>
           <h1>{editorial.headline}</h1>
           <p className="story-dek">{editorial.dek}</p>
@@ -435,16 +535,16 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           </div>
           <div className="story-byline">
             <span className="story-author-mark">KD</span>
-            <span><strong>מערכת כדורדאטה</strong><small>נוצר מנתוני המשחק · נבדק לפני פרסום</small></span>
+            <span><strong>מערכת כדורדאטה</strong><small>{article.kind === "match_review" ? "נוצר מנתוני המשחק" : "נוצר מנתוני השבוע"} · נבדק לפני פרסום</small></span>
           </div>
         </div>
-        <StoryScoreCard article={article} />
+        {isMatchReviewArticle(article) ? <StoryScoreCard article={article} /> : <WeeklySummaryCard article={article} />}
       </header>
 
       <div className="story-trust-strip">
         <span><CheckCircle2 size={16} aria-hidden="true" /> {article.factCheck.checks.length} בדיקות עובדתיות עברו</span>
         <span><Database size={16} aria-hidden="true" /> 365Scores דרך מאגר כדורדאטה</span>
-        <button type="button" onClick={() => onOpenMatch(article)}>לכל נתוני המשחק <ArrowLeft size={15} aria-hidden="true" /></button>
+        {isMatchReviewArticle(article) && <button type="button" onClick={() => onOpenMatch(article)}>לכל נתוני המשחק <ArrowLeft size={15} aria-hidden="true" /></button>}
       </div>
 
       <aside className="ai-disclaimer">
@@ -472,10 +572,12 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           <blockquote className="story-conclusion">{editorial.conclusion}</blockquote>
           <FactCheckPanel article={article} />
 
-          <footer className="story-footer-cta">
-            <div><span>רוצים לבדוק אותנו?</span><strong>כל שורת נתונים שמאחורי הכתבה מחכה בעמוד המשחק.</strong></div>
-            <button type="button" onClick={() => onOpenMatch(article)}>פתחו את {teams.home.nameHe}–{teams.away.nameHe} <ArrowLeft size={17} aria-hidden="true" /></button>
-          </footer>
+          {isMatchReviewArticle(article) && (
+            <footer className="story-footer-cta">
+              <div><span>רוצים לבדוק אותנו?</span><strong>כל שורת נתונים שמאחורי הכתבה מחכה בעמוד המשחק.</strong></div>
+              <button type="button" onClick={() => onOpenMatch(article)}>פתחו את {article.teams.home.nameHe}–{article.teams.away.nameHe} <ArrowLeft size={17} aria-hidden="true" /></button>
+            </footer>
+          )}
 
           {filteredArticles.length > 1 && (
             <section className="story-archive">
@@ -483,7 +585,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
               <h2>{activeTag ? `עוד תחת התגית ${activeTag.label}` : "כתבות אחרונות"}</h2>
               <div>{filteredArticles.filter((item) => item.slug !== article.slug).map((item) => (
                 <button key={item.slug} type="button" onClick={() => { setSelectedSlug(item.slug); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
-                  <small>{item.match.competitionNameHe} · {hebrewDate.format(new Date(item.match.scheduledAt))}</small>
+                  <small>{archiveMeta(item)}</small>
                   <strong>{item.editorial.headline}</strong>
                   <i>לקריאה <ArrowLeft size={14} aria-hidden="true" /></i>
                 </button>

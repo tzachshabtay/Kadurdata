@@ -315,7 +315,7 @@ export type ArticleInsight = {
   narrativeRole: "setup" | "turning_point" | "explanation" | "context" | "caveat";
 };
 
-export type ArticleGraphicSpec = {
+export type MatchArticleGraphicSpec = {
   type: "match_flow" | "shot_map" | "team_history" | "tactical_heatmap" | "player_focus";
   titleHe: string;
   subtitleHe: string;
@@ -325,7 +325,19 @@ export type ArticleGraphicSpec = {
   focusPlayerId: string;
 };
 
-export type ArticleAnalysisPlan = {
+export type LegionnaireArticleGraphicSpec = {
+  type: "legionnaire_workload" | "legionnaire_metric" | "legionnaire_trend";
+  titleHe: string;
+  subtitleHe: string;
+  placementInsightId: string;
+  evidenceIds: string[];
+  metricCode: string;
+  playerIds: string[];
+};
+
+export type ArticleGraphicSpec = MatchArticleGraphicSpec | LegionnaireArticleGraphicSpec;
+
+export type ArticleAnalysisPlan<TGraphic extends ArticleGraphicSpec = ArticleGraphicSpec> = {
   thesis: { claimHe: string; whyItMattersHe: string; evidenceIds: string[] };
   rankedInsights: ArticleInsight[];
   explanatoryModel: {
@@ -349,7 +361,7 @@ export type ArticleAnalysisPlan = {
     evidenceIds: string[];
   };
   narrativeArc: Array<{ headingIdeaHe: string; purposeHe: string; insightIds: string[] }>;
-  graphics: ArticleGraphicSpec[];
+  graphics: TGraphic[];
   coverageDecisions: Array<{
     category: "game_state" | "flow" | "quality" | "style" | "matchup" | "spatial" | "history" | "player";
     decision: "use" | "omit";
@@ -369,7 +381,39 @@ export type ArticleAnalysisPlan = {
   };
 };
 
-export type ContentArticle = {
+export type ArticleGeneration = {
+  mode: string;
+  analystModel: string | null;
+  writerModel: string | null;
+  model: string | null;
+  editorModel: string | null;
+  qualityModel: string | null;
+  pipelineVersion: string;
+};
+
+export type ArticleAuthorship = {
+  analystAgentId: string;
+  writerAgentId: string;
+  editorAgentId: string;
+  reviewerAgentId: string;
+};
+
+export type ArticleApproval = {
+  status: "pending" | "approved";
+  approvedAt: string | null;
+  note: string | null;
+};
+
+export type ArticleFactCheck = {
+  status: "passed" | "failed";
+  checkedAt: string;
+  checks: Array<{ id: string; label: string; status: "passed" | "failed"; detail: string }>;
+  evidenceCount: number;
+  claimCount: number;
+  sourceViews: string[];
+};
+
+export type MatchReviewArticle = {
   schemaVersion: number;
   slug: string;
   language: "he";
@@ -378,26 +422,9 @@ export type ContentArticle = {
   publishedAt: string | null;
   finalizedAt?: string;
   generatedAt: string;
-  generation: {
-    mode: string;
-    analystModel: string | null;
-    writerModel: string | null;
-    model: string | null;
-    editorModel: string | null;
-    qualityModel: string | null;
-    pipelineVersion: string;
-  };
-  authorship: {
-    analystAgentId: string;
-    writerAgentId: string;
-    editorAgentId: string;
-    reviewerAgentId: string;
-  };
-  approval?: {
-    status: "pending" | "approved";
-    approvedAt: string | null;
-    note: string | null;
-  };
+  generation: ArticleGeneration;
+  authorship: ArticleAuthorship;
+  approval?: ArticleApproval;
   match: {
     matchId: string;
     competitionId: string;
@@ -425,18 +452,82 @@ export type ContentArticle = {
   gameStateContext: Record<string, unknown>;
   mechanismContext: Record<string, unknown>;
   insightCandidates: Array<{ id: string; category: string; score: number; evidenceIds: string[]; context: unknown }>;
-  analysisPlan: ArticleAnalysisPlan;
+  analysisPlan: ArticleAnalysisPlan<MatchArticleGraphicSpec>;
   shots: ArticleShot[];
   editorialReview: ArticleEditorialReview;
   qualityReview: ArticleQualityReview;
   editorial: ArticleEditorial;
   evidence: ArticleEvidence[];
-  factCheck: {
-    status: "passed" | "failed";
-    checkedAt: string;
-    checks: Array<{ id: string; label: string; status: "passed" | "failed"; detail: string }>;
-    evidenceCount: number;
-    claimCount: number;
-    sourceViews: string[];
-  };
+  factCheck: ArticleFactCheck;
 };
+
+export type LegionnaireWeeklyMatch = {
+  matchId: string;
+  scheduledAt: string;
+  teamName: string;
+  opponentName: string;
+  minutes: number;
+  started: boolean;
+  scoreFor: number | null;
+  scoreAgainst: number | null;
+  metrics: Record<string, number>;
+  dataCompleteness: "full" | "basic";
+};
+
+export type LegionnaireWeeklyPlayer = {
+  playerId: string;
+  nameHe: string;
+  teamName: string;
+  competitionNameHe: string;
+  position: string | null;
+  appearances: number;
+  starts: number;
+  minutes: number;
+  metrics: Record<string, number>;
+  per90: Record<string, number>;
+  baseline: {
+    matchCount: number;
+    minutes: number;
+    per90: Record<string, number>;
+  };
+  matches: LegionnaireWeeklyMatch[];
+};
+
+export type LegionnaireWeeklyArticle = {
+  schemaVersion: number;
+  slug: string;
+  language: "he";
+  kind: "legionnaire_weekly";
+  status: "published" | "draft";
+  publishedAt: string | null;
+  finalizedAt?: string;
+  generatedAt: string;
+  generation: ArticleGeneration;
+  authorship: ArticleAuthorship;
+  approval?: ArticleApproval;
+  period: { start: string; end: string; labelHe: string; seasonName: string };
+  summary: {
+    eligiblePlayers: number;
+    playersWithMinutes: number;
+    appearances: number;
+    starts: number;
+    minutes: number;
+    fullStatAppearances: number;
+    basicOnlyAppearances: number;
+    players: LegionnaireWeeklyPlayer[];
+  };
+  tags: ArticleTag[];
+  aiDisclosure: string;
+  analysisPlan: ArticleAnalysisPlan<LegionnaireArticleGraphicSpec>;
+  editorialReview: ArticleEditorialReview;
+  qualityReview: ArticleQualityReview;
+  editorial: ArticleEditorial;
+  evidence: ArticleEvidence[];
+  factCheck: ArticleFactCheck;
+};
+
+export type ContentArticle = MatchReviewArticle | LegionnaireWeeklyArticle;
+
+export function isMatchReviewArticle(article: ContentArticle): article is MatchReviewArticle {
+  return article.kind === "match_review";
+}

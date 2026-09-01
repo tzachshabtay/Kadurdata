@@ -27,7 +27,10 @@ export const articles = Object.values(generatedModules)
     && article.status === "published"
     && article.approval?.status === "approved"
     && article.generation.mode === "codex_skill"
-    && article.generation.pipelineVersion === "match-review-v23"
+    && (
+      (article.kind === "match_review" && article.generation.pipelineVersion === "match-review-v23")
+      || (article.kind === "legionnaire_weekly" && article.generation.pipelineVersion === "legionnaire-weekly-v1")
+    )
     && hasPassedReview(article)
   ))
   .sort((left, right) => Date.parse(right.publishedAt ?? "") - Date.parse(left.publishedAt ?? ""));
