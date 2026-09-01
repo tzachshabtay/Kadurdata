@@ -29,7 +29,7 @@ export const articles = Object.values(generatedModules)
     && article.generation.mode === "codex_skill"
     && (
       (article.kind === "match_review" && article.generation.pipelineVersion === "match-review-v23")
-      || (article.kind === "legionnaire_weekly" && article.generation.pipelineVersion === "legionnaire-weekly-v1")
+      || (article.kind === "legionnaire_weekly" && article.generation.pipelineVersion === "legionnaire-weekly-v2")
     )
     && hasPassedReview(article)
   ))

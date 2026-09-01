@@ -9,7 +9,7 @@ import { buildReviewPacket } from "./content_language_review.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
-const supportedPipelineVersions = new Set([PIPELINE_VERSION, "legionnaire-weekly-v1"]);
+const supportedPipelineVersions = new Set([PIPELINE_VERSION, "legionnaire-weekly-v2"]);
 
 function readArguments() {
   const args = process.argv.slice(2);
@@ -55,6 +55,7 @@ async function main() {
     schemaVersion: 2,
     draftEditorial: null,
     editorial: candidate.editorial,
+    ...(Array.isArray(candidate.playerRecaps) ? { playerRecaps: candidate.playerRecaps } : {}),
     analysisPlan: candidate.analysisPlan,
   });
   if (

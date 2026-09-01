@@ -55,6 +55,7 @@ const volumeMetrics = [
   "interceptions",
   "clearances",
   "goalkeeper_saves",
+  "goals_conceded",
   "expected_goals_on_target_conceded",
   "expected_goals_prevented",
   "goals",
@@ -326,7 +327,15 @@ async function main() {
         dataCompleteness: Object.keys(match.metrics).length >= fullStatThreshold ? "full" : "basic",
       })),
     };
-  }).sort((left, right) => right.minutes - left.minutes || left.nameHe.localeCompare(right.nameHe, "he"));
+  }).sort((left, right) => {
+    const leftRating = Number(left.metrics.rating_365);
+    const rightRating = Number(right.metrics.rating_365);
+    const leftHasRating = Number.isFinite(leftRating);
+    const rightHasRating = Number.isFinite(rightRating);
+    if (leftHasRating !== rightHasRating) return rightHasRating ? 1 : -1;
+    if (leftHasRating && rightHasRating && rightRating !== leftRating) return rightRating - leftRating;
+    return right.minutes - left.minutes || left.nameHe.localeCompare(right.nameHe, "he");
+  });
 
   const appearances = players.reduce((sum, player) => sum + player.appearances, 0);
   const starts = players.reduce((sum, player) => sum + player.starts, 0);
@@ -415,6 +424,8 @@ async function main() {
       },
     },
     draftEditorial: null,
+    draftPlayerRecaps: [],
+    playerRecaps: [],
     editorial: null,
     editorialReview: null,
     qualityReview: null,

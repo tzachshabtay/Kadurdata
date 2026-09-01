@@ -23,6 +23,7 @@ function postprocessVisibleCopy(authored) {
   const processed = {
     ...authored,
     editorial: normalizeStrings(authored.editorial),
+    ...(Array.isArray(authored.playerRecaps) ? { playerRecaps: normalizeStrings(authored.playerRecaps) } : {}),
     analysisPlan: {
       ...authored.analysisPlan,
       graphics: (authored.analysisPlan?.graphics ?? []).map((graphic) => ({
@@ -57,6 +58,7 @@ async function main() {
   const authored = JSON.parse(await readFile(authoredPath, "utf8"));
   const processed = postprocessVisibleCopy(authored);
   const replacements = countEmDashes(authored.editorial)
+    + countEmDashes(authored.playerRecaps ?? [])
     + countEmDashes(authored.analysisPlan?.graphics ?? []);
   if (args.check && replacements > 0) {
     throw new Error(`Visible article copy still contains ${replacements} em dash character(s). Run content:postprocess before review.`);

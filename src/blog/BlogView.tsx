@@ -15,6 +15,7 @@ import {
   type ArticleTag,
   type ContentArticle,
   type LegionnaireArticleGraphicSpec,
+  type LegionnaireWeeklyPlayer,
   type LegionnaireWeeklyArticle,
   type MatchArticleGraphicSpec,
   type MatchReviewArticle,
@@ -37,6 +38,13 @@ function numeric(value: number | null | undefined, digits = 0) {
   return new Intl.NumberFormat("he-IL", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
+  }).format(value);
+}
+
+function weeklyRating(value: number) {
+  return new Intl.NumberFormat("he-IL", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -344,6 +352,139 @@ function WeeklySummaryCard({ article }: { article: LegionnaireWeeklyArticle }) {
   );
 }
 
+type WeeklyPlayerStat = { label: string; value: string };
+
+const weeklyPositionLabels: Record<string, string> = {
+  Goalkeeper: "שוער",
+  "Centre Back": "בלם",
+  "Left Back": "מגן שמאלי",
+  "Right Back": "מגן ימני",
+  "Defensive Midfield": "קשר אחורי",
+  "Central Midfield": "קשר מרכזי",
+  "Attacking Midfield": "קשר התקפי",
+  "Left Midfield": "קשר שמאלי",
+  "Right Midfield": "קשר ימני",
+  "Centre Forward": "חלוץ",
+  "Left Forward": "קיצוני שמאלי",
+  "Right Forward": "קיצוני ימני",
+};
+
+const weeklyStatLabels: Record<string, string> = {
+  appearances: "הופעות",
+  starts: "בהרכב",
+  match_result: "תוצאה",
+  pass_completion: "דיוק במסירה",
+  goals: "שערים",
+  assists: "בישולים",
+  touches: "נגיעות בכדור",
+  passes_completed: "מסירות מדויקות",
+  passes_into_final_third: "לשליש האחרון",
+  key_passes: "מסירות מפתח",
+  total_shots: "בעיטות",
+  shots_on_target: "למסגרת",
+  big_chances_missed: "מצבים גדולים שהוחמצו",
+  expected_goals: "xG",
+  expected_assists: "xA",
+  successful_dribbles: "דריבלים מוצלחים",
+  was_fouled: "עבירות שסחט",
+  ground_duels_won: "מאבקי קרקע",
+  aerial_duels_won: "מאבקי אוויר",
+  tackles_won: "תיקולים",
+  ball_recovery: "חילוצי כדור",
+  interceptions: "חטיפות",
+  clearances: "הרחקות",
+  goalkeeper_saves: "הצלות",
+  goals_conceded: "ספיגות",
+  expected_goals_prevented: "מניעת שערים",
+};
+
+function weeklyPlayerStats(player: LegionnaireWeeklyPlayer, statCodes: string[]): WeeklyPlayerStat[] {
+  const metric = (code: string) => Number.isFinite(Number(player.metrics[code])) ? Number(player.metrics[code]) : null;
+  const ratioValue = (wonCode: string, attemptedCode: string) => {
+    const won = metric(wonCode);
+    const attempted = metric(attemptedCode);
+    return won !== null && attempted !== null ? `${numeric(won)}/${numeric(attempted)}` : won !== null ? numeric(won) : null;
+  };
+  return statCodes.flatMap((code) => {
+    if (code === "appearances") return [{ label: weeklyStatLabels[code] ?? code, value: numeric(player.appearances) }];
+    if (code === "starts") return [{ label: weeklyStatLabels[code] ?? code, value: numeric(player.starts) }];
+    if (code === "match_result") {
+      const match = player.matches.length === 1 ? player.matches[0] : null;
+      return match && match.scoreFor !== null && match.scoreAgainst !== null
+        ? [{ label: weeklyStatLabels[code] ?? code, value: `${match.scoreFor}:${match.scoreAgainst}` }]
+        : [];
+    }
+    if (code === "pass_completion") {
+      const attempted = metric("passes_attempted");
+      const completed = metric("passes_completed");
+      return attempted && completed !== null
+        ? [{ label: weeklyStatLabels[code] ?? code, value: `${numeric(completed / attempted * 100)}%` }]
+        : [];
+    }
+    const ratio = code === "ground_duels_won"
+      ? ratioValue(code, "ground_duels_attempted")
+      : code === "aerial_duels_won"
+        ? ratioValue(code, "aerial_duels_attempted")
+        : code === "tackles_won"
+          ? ratioValue(code, "tackles_attempted")
+          : null;
+    if (ratio !== null) return [{ label: weeklyStatLabels[code] ?? code, value: ratio }];
+    const value = metric(code);
+    if (value === null) return [];
+    const digits = code.startsWith("expected_") ? 2 : 0;
+    return [{ label: weeklyStatLabels[code] ?? code, value: numeric(value, digits) }];
+  }).slice(0, 4);
+}
+
+function WeeklyPlayerRecaps({ article }: { article: LegionnaireWeeklyArticle }) {
+  const recapsByPlayerId = new Map(article.playerRecaps.map((recap) => [recap.playerId, recap]));
+  const players = [...article.summary.players].sort((left, right) => {
+    const leftRating = Number(left.metrics.rating_365);
+    const rightRating = Number(right.metrics.rating_365);
+    const leftHasRating = Number.isFinite(leftRating);
+    const rightHasRating = Number.isFinite(rightRating);
+    if (leftHasRating !== rightHasRating) return rightHasRating ? 1 : -1;
+    if (leftHasRating && rightHasRating && rightRating !== leftRating) return rightRating - leftRating;
+    return right.minutes - left.minutes || left.nameHe.localeCompare(right.nameHe, "he");
+  });
+  return (
+    <section className="weekly-player-recaps" aria-labelledby="weekly-player-recaps-title">
+      <header className="weekly-player-recaps-heading">
+        <span>כל מי ששיחק</span>
+        <h2 id="weekly-player-recaps-title">השבוע של כל אחד מהלגיונרים</h2>
+        <p>הסדר נקבע לפי הציון השבועי. שחקנים שלא קיבלו ציון מופיעים לאחר מכן.</p>
+      </header>
+      <div className="weekly-player-recap-list">
+        {players.map((player) => {
+          const recap = recapsByPlayerId.get(player.playerId);
+          if (!recap) return null;
+          const rating = Number(player.metrics.rating_365);
+          const hasRating = Number.isFinite(rating);
+          const stats = weeklyPlayerStats(player, recap.statCodes);
+          return (
+            <article className="weekly-player-recap" key={player.playerId}>
+              <header>
+                <div>
+                  <h3>{player.nameHe}</h3>
+                  <p>{[player.teamName, player.competitionNameHe, player.position ? weeklyPositionLabels[player.position] ?? player.position : null].filter(Boolean).join(" · ")}</p>
+                </div>
+                <span className={hasRating ? "weekly-player-rating" : "weekly-player-rating unavailable"}>
+                  <small>ציון שבועי</small><strong>{hasRating ? weeklyRating(rating) : "לא זמין"}</strong>
+                </span>
+              </header>
+              <div className="weekly-player-stat-grid">
+                <span><small>דקות</small><strong>{numeric(player.minutes)}</strong></span>
+                {stats.map((stat) => <span key={stat.label}><small>{stat.label}</small><strong>{stat.value}</strong></span>)}
+              </div>
+              <p className="weekly-player-recap-copy">{recap.text}</p>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function LegionnaireGraphic({ article, spec }: { article: LegionnaireWeeklyArticle; spec: LegionnaireArticleGraphicSpec }) {
   const players = spec.playerIds
     .map((playerId) => article.summary.players.find((player) => player.playerId === playerId))
@@ -411,7 +552,7 @@ function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: Arti
 function FactCheckPanel({ article }: { article: ContentArticle }) {
   const visibleCheckIds = article.kind === "match_review"
     ? ["score-vs-events", "analysis-plan", "game-state-story", "number-discipline", "graphic-plan", "editorial-review", "numeric-claims"]
-    : ["weekly-window", "deduplication", "analysis-plan", "sample-discipline", "graphic-plan", "editorial-review", "numeric-claims"];
+    : ["weekly-window", "deduplication", "analysis-plan", "sample-discipline", "player-coverage", "player-cards", "editorial-review", "numeric-claims"];
   const visibleChecks = visibleCheckIds
     .map((id) => article.factCheck.checks.find((check) => check.id === id))
     .filter((check): check is ContentArticle["factCheck"]["checks"][number] => Boolean(check));
@@ -455,7 +596,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           && candidate.status === "draft"
           && candidate.approval?.status === "pending"
           && candidate.generation.mode === "codex_skill_candidate"
-          && ["match-review-v23", "legionnaire-weekly-v1"].includes(candidate.generation.pipelineVersion)
+          && ["match-review-v23", "legionnaire-weekly-v2"].includes(candidate.generation.pipelineVersion)
           && candidate.factCheck.status === "passed"
           && candidate.qualityReview.status === "passed"
         ))
@@ -568,6 +709,8 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
               {graphicsBySection[index].map((graphic) => <PlannedGraphic article={article} key={`${graphic.type}:${graphic.placementInsightId}`} spec={graphic} />)}
             </div>
           ))}
+
+          {article.kind === "legionnaire_weekly" && <WeeklyPlayerRecaps article={article} />}
 
           <blockquote className="story-conclusion">{editorial.conclusion}</blockquote>
           <FactCheckPanel article={article} />

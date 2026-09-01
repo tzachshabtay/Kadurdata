@@ -488,6 +488,150 @@ input[type="search"]::-webkit-search-cancel-button {
   border-inline-start: 3px solid #0a6f56;
 }
 
+.weekly-player-recaps {
+  margin-top: 88px;
+}
+
+.weekly-player-recaps-heading {
+  max-width: 720px;
+  padding-bottom: 24px;
+  border-bottom: 3px solid #151b19;
+}
+
+.weekly-player-recaps-heading > span {
+  color: #0a6f56;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+.weekly-player-recaps-heading h2 {
+  margin-top: 7px;
+  font-size: clamp(30px, 3vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.weekly-player-recaps-heading p {
+  margin-top: 12px;
+  color: #6a716d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.weekly-player-recap-list {
+  display: grid;
+  gap: 26px;
+  margin-top: 30px;
+}
+
+.weekly-player-recap {
+  overflow: hidden;
+  border: 1px solid #d5cfc2;
+  border-radius: 8px;
+  background: #ebe7dc;
+}
+
+.weekly-player-recap > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid #d5cfc2;
+}
+
+.weekly-player-recap > header h3 {
+  color: #151b19;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.weekly-player-recap > header p {
+  margin-top: 6px;
+  color: #70756f;
+  font-size: 10px;
+}
+
+.weekly-player-rating {
+  display: flex;
+  min-width: 76px;
+  align-items: center;
+  flex-direction: column;
+  padding: 10px 13px;
+  color: #eff9f5;
+  border-radius: 5px;
+  background: #0a6f56;
+}
+
+.weekly-player-rating small,
+.weekly-player-rating strong {
+  display: block;
+}
+
+.weekly-player-rating small {
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.weekly-player-rating strong {
+  margin-top: 2px;
+  direction: ltr;
+  font-size: 22px;
+}
+
+.weekly-player-rating.unavailable {
+  color: #5d665f;
+  background: #d8d4ca;
+}
+
+.weekly-player-rating.unavailable strong {
+  font-size: 10px;
+}
+
+.weekly-player-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px 24px 0;
+  background: #d5cfc2;
+}
+
+.weekly-player-stat-grid > span {
+  min-height: 76px;
+  padding: 15px 12px;
+  background: #f2eee4;
+}
+
+.weekly-player-stat-grid small,
+.weekly-player-stat-grid strong {
+  display: block;
+}
+
+.weekly-player-stat-grid small {
+  min-height: 23px;
+  color: #717871;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.weekly-player-stat-grid strong {
+  margin-top: 4px;
+  color: #0a6f56;
+  direction: ltr;
+  font-size: 19px;
+}
+
+.weekly-player-recap-copy {
+  max-width: 710px;
+  margin: 0;
+  padding: 22px 24px 26px;
+  color: #353b37;
+  font-size: 16px;
+  line-height: 1.82;
+}
+
 .ai-disclaimer {
   display: flex;
   align-items: center;
@@ -1119,6 +1263,13 @@ input[type="search"]::-webkit-search-cancel-button {
   .story-rail li + li { border-inline-start: 0; }
   .story-section-group + .story-section-group { margin-top: 62px; }
   .story-copy-section p { font-size: 16px; line-height: 1.8; }
+  .weekly-player-recaps { margin-top: 66px; }
+  .weekly-player-recap > header { align-items: flex-start; padding: 19px 17px 15px; }
+  .weekly-player-recap > header h3 { font-size: 21px; }
+  .weekly-player-rating { min-width: 68px; }
+  .weekly-player-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 17px; }
+  .weekly-player-stat-grid > span:first-child { grid-column: auto; }
+  .weekly-player-recap-copy { padding: 20px 17px 23px; font-size: 15px; }
   .story-graphic { margin-inline: -16px; border-radius: 0; }
   .story-graphic figcaption { padding: 20px 18px; }
   .player-spotlight { grid-template-columns: 1fr; margin-inline: -16px; border-radius: 0; }

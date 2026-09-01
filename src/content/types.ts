@@ -493,6 +493,13 @@ export type LegionnaireWeeklyPlayer = {
   matches: LegionnaireWeeklyMatch[];
 };
 
+export type LegionnairePlayerRecap = {
+  playerId: string;
+  text: string;
+  evidenceIds: string[];
+  statCodes: string[];
+};
+
 export type LegionnaireWeeklyArticle = {
   schemaVersion: number;
   slug: string;
@@ -516,12 +523,14 @@ export type LegionnaireWeeklyArticle = {
     basicOnlyAppearances: number;
     players: LegionnaireWeeklyPlayer[];
   };
+  insightCandidates: Array<{ id: string; category: string; playerId: string; score: number; evidenceIds: string[]; context: unknown }>;
   tags: ArticleTag[];
   aiDisclosure: string;
   analysisPlan: ArticleAnalysisPlan<LegionnaireArticleGraphicSpec>;
   editorialReview: ArticleEditorialReview;
   qualityReview: ArticleQualityReview;
   editorial: ArticleEditorial;
+  playerRecaps: LegionnairePlayerRecap[];
   evidence: ArticleEvidence[];
   factCheck: ArticleFactCheck;
 };

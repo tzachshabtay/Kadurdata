@@ -36,7 +36,7 @@ function appendSentences(entries, location, text) {
   });
 }
 
-function visibleSentenceEntries(editorial, analysisPlan) {
+function visibleSentenceEntries(editorial, analysisPlan, playerRecaps = []) {
   const entries = [];
   appendSentences(entries, "editorial.headline", editorial?.headline);
   appendSentences(entries, "editorial.dek", editorial?.dek);
@@ -49,6 +49,9 @@ function visibleSentenceEntries(editorial, analysisPlan) {
   (editorial?.takeaways ?? []).forEach((takeaway, index) => {
     appendSentences(entries, `editorial.takeaways.${index}`, takeaway.text);
   });
+  playerRecaps.forEach((recap, index) => {
+    appendSentences(entries, `playerRecaps.${index}.text`, recap.text);
+  });
   appendSentences(entries, "editorial.conclusion", editorial?.conclusion);
   (analysisPlan?.graphics ?? []).forEach((graphic, index) => {
     appendSentences(entries, `analysisPlan.graphics.${index}.titleHe`, graphic.titleHe);
@@ -60,26 +63,49 @@ function visibleSentenceEntries(editorial, analysisPlan) {
 function removeNumbers(text) {
   return String(text)
     .replace(/\d+(?:[.,]\d+)?(?:\s*%|\s*xGOT|\s*xG|\s*xA)?/gi, "[מספר]")
+    .replace(/(?<![\u0590-\u05FF])[ובכלמ]?(?:אפס|אחת|אחד|שתיים|שניים|שתי|שני|שלוש|שלושה|שלושת|ארבע|ארבעה|ארבעת|חמש|חמישה|חמשת|שש|שישה|ששת|שבע|שבעה|שבעת|שמונה|שמונת|תשע|תשעה|תשעת|עשר|עשרה|עשרת)(?![\u0590-\u05FF])/g, (token) => {
+      const prefix = /^[ובכלמ]/u.test(token) ? token[0] : "";
+      return `${prefix}[מספר]`;
+    })
+    .replace(/\[מספר\](?:\s*[–—-]\s*\[מספר\])+/g, "[טווח מספרי]")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function removeNumbersLegacy(text) {
+  return String(text)
+    .replace(/\d+(?:[.,]\d+)?(?:\s*%|\s*xGOT|\s*xG|\s*xA)?/gi, "[מספר]")
     .replace(/(?<![\u0590-\u05FF])(?:אפס|אחת|אחד|שתיים|שניים|שתי|שני|שלוש|שלושה|שלושת|ארבע|ארבעה|ארבעת|חמש|חמישה|חמשת|שש|שישה|ששת|שבע|שבעה|שבעת|שמונה|שמונת|תשע|תשעה|תשעת|עשר|עשרה|עשרת)(?![\u0590-\u05FF])/g, "[מספר]")
     .replace(/\[מספר\](?:\s*[–—-]\s*\[מספר\])+/g, "[טווח מספרי]")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function numberlessEntries(editorial, analysisPlan) {
-  return visibleSentenceEntries(editorial, analysisPlan).map((entry) => ({
+function numberlessEntries(editorial, analysisPlan, playerRecaps = [], normalizationVersion = "v2") {
+  const normalize = normalizationVersion === "v1" ? removeNumbersLegacy : removeNumbers;
+  return visibleSentenceEntries(editorial, analysisPlan, playerRecaps).map((entry) => ({
     ...entry,
-    text: removeNumbers(entry.text),
+    text: normalize(entry.text),
   }));
 }
 
 function buildReviewPacket(authored) {
-  const sentences = visibleSentenceEntries(authored.editorial, authored.analysisPlan);
-  const withoutNumbers = numberlessEntries(authored.editorial, authored.analysisPlan);
+  const playerRecaps = Array.isArray(authored.playerRecaps) ? authored.playerRecaps : [];
+  const sentences = visibleSentenceEntries(authored.editorial, authored.analysisPlan, playerRecaps);
+  // Published match reviews were reviewed with the original normalization. Weekly v2
+  // packages opt into prefix-aware Hebrew normalization by carrying playerRecaps.
+  const normalizationVersion = Array.isArray(authored.playerRecaps) ? "v2" : "v1";
+  const withoutNumbers = numberlessEntries(authored.editorial, authored.analysisPlan, playerRecaps, normalizationVersion);
+  const finalCopy = Array.isArray(authored.playerRecaps)
+    ? { editorial: authored.editorial, playerRecaps }
+    : authored.editorial;
+  const draftCopy = Array.isArray(authored.draftPlayerRecaps)
+    ? { editorial: authored.draftEditorial, playerRecaps: authored.draftPlayerRecaps }
+    : authored.draftEditorial;
   return {
     schemaVersion: authored.schemaVersion,
-    draftHash: hashJson(authored.draftEditorial),
-    finalHash: hashJson(authored.editorial),
+    draftHash: hashJson(draftCopy),
+    finalHash: hashJson(finalCopy),
     numberlessHash: hashJson(withoutNumbers),
     sentences,
     numberlessCopy: withoutNumbers,
