@@ -334,7 +334,7 @@ input[type="search"]::-webkit-search-cancel-button {
 .score-card-result {
   display: flex;
   align-items: center;
-  direction: ltr;
+  direction: rtl;
   gap: 9px;
 }
 
@@ -369,7 +369,7 @@ input[type="search"]::-webkit-search-cancel-button {
   text-align: center;
 }
 .score-card-insight small { color: #8f9993; font-size: 9px; }
-.score-card-insight strong { margin-top: 7px; font-size: 15px; direction: ltr; }
+.score-card-insight strong { margin-top: 7px; font-size: 15px; direction: rtl; }
 
 .story-trust-strip {
   display: flex;
