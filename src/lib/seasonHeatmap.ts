@@ -64,8 +64,9 @@ function drawNormalized(context: CanvasRenderingContext2D, image: CanvasImageSou
   context.clearRect(0, 0, HEATMAP_WIDTH, HEATMAP_HEIGHT);
   context.save();
   if (isRtl) {
-    context.translate(HEATMAP_WIDTH, 0);
-    context.scale(-1, 1);
+    // Preserve each player's left/right flank while normalizing the attack toward the right.
+    context.translate(HEATMAP_WIDTH, HEATMAP_HEIGHT);
+    context.scale(-1, -1);
   }
   context.drawImage(image, 0, 0, HEATMAP_WIDTH, HEATMAP_HEIGHT);
   context.restore();
@@ -143,7 +144,7 @@ export async function calculateMatchAveragePositions(
     return {
       playerId,
       x: Math.max(6, Math.min(94, averageX * 100 / (HEATMAP_WIDTH - 1))),
-      y: Math.max(8, Math.min(92, 100 - averageY * 100 / (HEATMAP_HEIGHT - 1))),
+      y: Math.max(8, Math.min(92, averageY * 100 / (HEATMAP_HEIGHT - 1))),
     };
   });
 }

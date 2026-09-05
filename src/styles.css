@@ -2816,11 +2816,11 @@ html[dir="rtl"] .shot-player-filter select {
   border-radius: 50%;
 }
 
-.comparison-row {
+.match-comparison-row {
   margin-bottom: 18px;
 }
 
-.comparison-row > div:first-child {
+.match-comparison-values {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 42px;
   align-items: center;
@@ -2828,15 +2828,15 @@ html[dir="rtl"] .shot-player-filter select {
   margin-bottom: 7px;
 }
 
-.comparison-row strong {
+.match-comparison-row strong {
   font-size: 11px;
 }
 
-.comparison-row strong:last-child {
+.match-comparison-row strong:last-child {
   text-align: end;
 }
 
-.comparison-row span {
+.match-comparison-row span {
   color: var(--muted);
   font-size: 8px;
   font-weight: 800;
@@ -2844,7 +2844,7 @@ html[dir="rtl"] .shot-player-filter select {
   text-transform: uppercase;
 }
 
-.comparison-track {
+.match-comparison-track {
   display: flex;
   height: 5px;
   gap: 3px;
@@ -2853,24 +2853,24 @@ html[dir="rtl"] .shot-player-filter select {
   background: var(--panel-deep);
 }
 
-.comparison-track i {
+.match-comparison-track i {
   display: block;
   height: 100%;
 }
 
-.comparison-track .home {
+.match-comparison-track .home {
   margin-inline-start: auto;
 }
 
-.comparison-track .higher {
+.match-comparison-track .higher {
   background: var(--teal);
 }
 
-.comparison-track .lower {
+.match-comparison-track .lower {
   background: var(--coral);
 }
 
-.comparison-track .tie {
+.match-comparison-track .tie {
   background: var(--amber);
 }
 
