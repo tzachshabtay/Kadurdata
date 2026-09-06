@@ -443,38 +443,59 @@ begin
     group by target_player_id, match_id, team_id, field_name
     having count(distinct field_value) > 1
   )
-  select
-    canonical_player_id,
-    match_id,
-    team_id,
-    field_name,
-    conflicting_values
+  select jsonb_agg(
+    jsonb_build_object(
+      'canonical_player_id', conflict.canonical_player_id,
+      'match_id', conflict.match_id,
+      'team_id', conflict.team_id,
+      'field_name', conflict.field_name,
+      'conflicting_values', conflict.conflicting_values
+    ) order by
+      conflict.canonical_player_id,
+      conflict.match_id,
+      conflict.team_id,
+      conflict.field_name
+  ) as conflicts
   into invalid_merge
   from appearance_scalar_conflicts conflict
-  -- 365Scores games 4739175 and 4739168 currently map lineup member
-  -- 77435195 to athlete 220313 (Alon Demol) as a 90-minute Centre Back.
-  -- Stale fallback appearances stored Left Midfield before the provider
-  -- corrected those lineups. Keep this exception exact so any different or
-  -- new conflict still aborts.
+  -- Keep provider corrections scoped to their audited player, match, team,
+  -- field, and expected current value so any unrelated conflict still aborts.
   where not (
-    conflict.canonical_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
-    and conflict.match_id in (
-      '356ab865-890c-46f2-8e37-c4d3e6f8a578',
-      'c7d46de8-6626-46b8-87a4-832f4294e8b6'
+    (
+      -- Games 4739175 and 4739168 map lineup member 77435195 to athlete
+      -- 220313 (Alon Demol), currently a 90-minute Centre Back.
+      conflict.canonical_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
+      and conflict.match_id in (
+        '356ab865-890c-46f2-8e37-c4d3e6f8a578',
+        'c7d46de8-6626-46b8-87a4-832f4294e8b6'
+      )
+      and conflict.team_id = '44e32710-08d6-42b9-ac31-f8599db461cc'
+      and conflict.field_name = 'formation_position'
+      and conflict.conflicting_values = array['centre back', 'left midfield']::text[]
     )
-    and conflict.team_id = '44e32710-08d6-42b9-ac31-f8599db461cc'
-    and conflict.field_name = 'formation_position'
-    and conflict.conflicting_values = array['centre back', 'left midfield']::text[]
+    or (
+      -- Game 4739173 maps lineup member 77762956 to athlete 239111
+      -- (Liran Turgeman), currently an unused Defensive Midfield substitute.
+      conflict.canonical_player_id = '0ae4711f-20dc-4760-8c2d-13696bdf396a'
+      and conflict.match_id = 'ade8c73c-cce6-4cd0-b877-2522d711f6cc'
+      and conflict.team_id = '093dc3ca-a560-4512-b5af-8d029bbad5e0'
+      and (
+        (
+          conflict.field_name = 'position_name'
+          and conflict.conflicting_values = array['defender', 'midfielder']::text[]
+        )
+        or (
+          conflict.field_name = 'formation_position'
+          and conflict.conflicting_values @> array['defensive midfield']::text[]
+          and array_length(conflict.conflicting_values, 1) = 2
+        )
+      )
+    )
   )
-  limit 1;
+  having count(*) > 0;
   if found then
-    raise exception
-      'player identity merge % has conflicting appearance field % in match % for team %: %',
-      invalid_merge.canonical_player_id,
-      invalid_merge.field_name,
-      invalid_merge.match_id,
-      invalid_merge.team_id,
-      invalid_merge.conflicting_values;
+    raise exception 'player identity merges have conflicting appearance fields: %',
+      invalid_merge.conflicts;
   end if;
 
   with appearance_metric_values as (
@@ -578,8 +599,8 @@ begin
 end;
 $validation$;
 
--- Normalize the single audited provider correction before choosing the
--- collision survivor so the merged appearance is deterministic.
+-- Normalize the audited provider corrections before choosing collision
+-- survivors so the merged appearances are deterministic.
 update player_appearance_collision_members
 set position_name = 'Defender',
     formation_position = 'Centre Back',
@@ -591,6 +612,14 @@ where target_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
     'c7d46de8-6626-46b8-87a4-832f4294e8b6'
   )
   and team_id = '44e32710-08d6-42b9-ac31-f8599db461cc';
+
+update player_appearance_collision_members
+set position_name = 'Midfielder',
+    formation_position = 'Defensive Midfield',
+    shirt_number = null
+where target_player_id = '0ae4711f-20dc-4760-8c2d-13696bdf396a'
+  and match_id = 'ade8c73c-cce6-4cd0-b877-2522d711f6cc'
+  and team_id = '093dc3ca-a560-4512-b5af-8d029bbad5e0';
 
 insert into core.player_identity_redirects (
   old_player_id,
