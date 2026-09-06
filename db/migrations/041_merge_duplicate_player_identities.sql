@@ -451,13 +451,17 @@ begin
     conflicting_values
   into invalid_merge
   from appearance_scalar_conflicts conflict
-  -- 365Scores game 4739175 currently maps lineup member 77435195 to athlete
-  -- 220313 (Alon Demol) as a 90-minute Centre Back. A stale fallback
-  -- appearance stored Left Midfield before the provider corrected the lineup.
-  -- Keep this exception exact so any different or new conflict still aborts.
+  -- 365Scores games 4739175 and 4739168 currently map lineup member
+  -- 77435195 to athlete 220313 (Alon Demol) as a 90-minute Centre Back.
+  -- Stale fallback appearances stored Left Midfield before the provider
+  -- corrected those lineups. Keep this exception exact so any different or
+  -- new conflict still aborts.
   where not (
     conflict.canonical_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
-    and conflict.match_id = '356ab865-890c-46f2-8e37-c4d3e6f8a578'
+    and conflict.match_id in (
+      '356ab865-890c-46f2-8e37-c4d3e6f8a578',
+      'c7d46de8-6626-46b8-87a4-832f4294e8b6'
+    )
     and conflict.team_id = '44e32710-08d6-42b9-ac31-f8599db461cc'
     and conflict.field_name = 'formation_position'
     and conflict.conflicting_values = array['centre back', 'left midfield']::text[]
@@ -582,7 +586,10 @@ set position_name = 'Defender',
     minutes_played = 90,
     shirt_number = null
 where target_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
-  and match_id = '356ab865-890c-46f2-8e37-c4d3e6f8a578'
+  and match_id in (
+    '356ab865-890c-46f2-8e37-c4d3e6f8a578',
+    'c7d46de8-6626-46b8-87a4-832f4294e8b6'
+  )
   and team_id = '44e32710-08d6-42b9-ac31-f8599db461cc';
 
 insert into core.player_identity_redirects (
