@@ -432,17 +432,36 @@ begin
         ('minutes_played', member.minutes_played::text)
     ) as field(field_name, field_value)
     where field.field_value is not null
+  ), appearance_scalar_conflicts as (
+    select
+      target_player_id as canonical_player_id,
+      match_id,
+      team_id,
+      field_name,
+      array_agg(distinct field_value order by field_value) as conflicting_values
+    from appearance_scalar_values
+    group by target_player_id, match_id, team_id, field_name
+    having count(distinct field_value) > 1
   )
   select
-    target_player_id as canonical_player_id,
+    canonical_player_id,
     match_id,
     team_id,
     field_name,
-    array_agg(distinct field_value order by field_value) as conflicting_values
+    conflicting_values
   into invalid_merge
-  from appearance_scalar_values
-  group by target_player_id, match_id, team_id, field_name
-  having count(distinct field_value) > 1
+  from appearance_scalar_conflicts conflict
+  -- 365Scores game 4739175 currently maps lineup member 77435195 to athlete
+  -- 220313 (Alon Demol) as a 90-minute Centre Back. A stale fallback
+  -- appearance stored Left Midfield before the provider corrected the lineup.
+  -- Keep this exception exact so any different or new conflict still aborts.
+  where not (
+    conflict.canonical_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
+    and conflict.match_id = '356ab865-890c-46f2-8e37-c4d3e6f8a578'
+    and conflict.team_id = '44e32710-08d6-42b9-ac31-f8599db461cc'
+    and conflict.field_name = 'formation_position'
+    and conflict.conflicting_values = array['centre back', 'left midfield']::text[]
+  )
   limit 1;
   if found then
     raise exception
@@ -554,6 +573,16 @@ begin
   end if;
 end;
 $validation$;
+
+-- Normalize the single audited provider correction before choosing the
+-- collision survivor so the merged appearance is deterministic.
+update player_appearance_collision_members
+set position_name = 'Defender',
+    formation_position = 'Centre Back',
+    minutes_played = 90
+where target_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
+  and match_id = '356ab865-890c-46f2-8e37-c4d3e6f8a578'
+  and team_id = '44e32710-08d6-42b9-ac31-f8599db461cc';
 
 insert into core.player_identity_redirects (
   old_player_id,
