@@ -9,10 +9,37 @@ from scripts.sync_fotmob_loans import (
     primary_position,
     select_team_suggestion,
     source_team_key,
+    upsert_mapping,
 )
 
 
 class FotMobLoanTests(unittest.TestCase):
+    def test_mapping_replacement_is_opt_in_for_player_repairs(self) -> None:
+        class RecordingCursor:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def execute(self, query, parameters) -> None:
+                self.calls.append((query, parameters))
+
+        cursor = RecordingCursor()
+        mapping_args = ("source", "team", "external", "core.teams", "canonical", "Team")
+
+        upsert_mapping(cursor, *mapping_args)
+        upsert_mapping(
+            cursor,
+            "source",
+            "player",
+            "external",
+            "core.players",
+            "preferred",
+            "Player",
+            replace_canonical_id=True,
+        )
+
+        self.assertFalse(cursor.calls[0][1][-1])
+        self.assertTrue(cursor.calls[1][1][-1])
+
     def test_current_season_starts_in_july(self) -> None:
         self.assertEqual(current_season_start(date(2026, 8, 18)), date(2026, 7, 1))
         self.assertEqual(current_season_start(date(2026, 3, 1)), date(2025, 7, 1))

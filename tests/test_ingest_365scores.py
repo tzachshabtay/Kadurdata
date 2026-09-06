@@ -73,6 +73,7 @@ class CompetitionCatalogTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["source_event_id"], "14702029")
         self.assertEqual(rows[0]["player_source_id"], 7519)
+        self.assertEqual(rows[0]["athlete_id"], 7519)
         self.assertEqual(rows[0]["team_id"], 562)
         self.assertEqual(rows[0]["shot_x"], 80.0)
         self.assertEqual(rows[0]["shot_y"], 32.1)

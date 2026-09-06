@@ -34,7 +34,7 @@ class TransfermarktLoanTests(unittest.TestCase):
         self.assertEqual(selected["id"], "119")
 
     def test_reconciles_transfermarkt_player_name_variants(self) -> None:
-        self.assertEqual(canonical_player_name("Roy Nawi"), "roy navi")
+        self.assertEqual(canonical_player_name("Roy Navi"), "roy nawi")
         self.assertEqual(canonical_player_name("Itay Zafrani"), "itai zafrani")
         self.assertEqual(canonical_player_name("Idan Toklomati"), "idan toklomaty")
         self.assertEqual(canonical_player_name("Gabi Kanichowsky"), "gabi kanikovski")

@@ -8,6 +8,7 @@ import csv
 import json
 import os
 import re
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -16,6 +17,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from player_identity import normalized_player_name
 from player_stat_values import rating_value
 from team_stat_values import parse_team_stat_value, team_stat_value_type
 
@@ -29,6 +31,7 @@ COUNTRY_ISRAEL = {"name": "Israel", "iso2": "IL", "iso3": "ISR"}
 COMPETITION_SOURCE_ID = "42"
 COMPETITION_NAME = "Israeli Premier League"
 STAT_BATCH_SIZE = 1000
+LINEUP_PLAYER_ID_PREFIX = "lineup:"
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -585,8 +588,36 @@ def get_or_create_metric(cur: psycopg.Cursor, code: str, subject_type: str, valu
     return row["id"]
 
 
+def lineup_player_source_id(lineup_member_id: Any) -> Optional[str]:
+    value = empty_to_none(lineup_member_id)
+    return f"{LINEUP_PLAYER_ID_PREFIX}{value}" if value else None
+
+
+def is_lineup_player_source_id(value: str) -> bool:
+    return value.startswith(LINEUP_PLAYER_ID_PREFIX)
+
+
 def source_player_id(row: dict[str, str]) -> Optional[str]:
-    return empty_to_none(row.get("athlete_id")) or empty_to_none(row.get("lineup_member_id"))
+    athlete_id = empty_to_none(row.get("athlete_id"))
+    if athlete_id:
+        return athlete_id
+    return lineup_player_source_id(row.get("lineup_member_id"))
+
+
+def shot_player_source_id(row: dict[str, str]) -> Optional[str]:
+    athlete_id = empty_to_none(row.get("athlete_id"))
+    if athlete_id:
+        return athlete_id
+
+    player_id = empty_to_none(row.get("player_source_id"))
+    lineup_member_id = empty_to_none(row.get("lineup_member_id"))
+    if lineup_member_id and (
+        player_id is None
+        or player_id == lineup_member_id
+        or player_id == lineup_player_source_id(lineup_member_id)
+    ):
+        return lineup_player_source_id(lineup_member_id)
+    return player_id
 
 
 def upsert_match(
@@ -940,10 +971,231 @@ def valid_player_rows(rows: list[dict[str, str]], indexes: dict[str, Any]) -> li
     return valid
 
 
+def _normalized_identity_evidence_value(value: Any) -> Optional[str]:
+    text = empty_to_none(value)
+    if text is None:
+        return None
+    normalized = normalized_player_name(text)
+    return normalized or None
+
+
+def _strong_same_match_duplicate_evidence(
+    athlete_row: dict[str, Any],
+    lineup_row: dict[str, Any],
+) -> bool:
+    """Return whether two same-match rows are an exact athlete/lineup split."""
+
+    try:
+        athlete_jersey = to_int(athlete_row.get("jersey_number"))
+        lineup_jersey = to_int(lineup_row.get("jersey_number"))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if athlete_jersey is None or lineup_jersey is None or athlete_jersey != lineup_jersey:
+        return False
+
+    athlete_status = _normalized_identity_evidence_value(
+        athlete_row.get("lineup_status_text")
+        if athlete_row.get("lineup_status_text") is not None
+        else athlete_row.get("lineup_status")
+    )
+    lineup_status = _normalized_identity_evidence_value(
+        lineup_row.get("lineup_status_text")
+        if lineup_row.get("lineup_status_text") is not None
+        else lineup_row.get("lineup_status")
+    )
+    if athlete_status is None or lineup_status is None or athlete_status != lineup_status:
+        return False
+
+    athlete_minutes = to_float(athlete_row.get("stat_minutes_value"))
+    lineup_minutes = to_float(lineup_row.get("stat_minutes_value"))
+    if athlete_minutes is None or lineup_minutes is None or athlete_minutes != lineup_minutes:
+        return False
+
+    for field in ("position_name", "formation_name"):
+        athlete_value = _normalized_identity_evidence_value(athlete_row.get(field))
+        lineup_value = _normalized_identity_evidence_value(lineup_row.get(field))
+        if athlete_value is not None and lineup_value is not None and athlete_value != lineup_value:
+            return False
+
+    return True
+
+
+def _has_strong_same_match_identity_evidence(rows: list[dict[str, Any]]) -> bool:
+    """Require every fallback ID in a colliding identity to match one athlete."""
+
+    source_ids = {item["source_player_id"] for item in rows}
+    athlete_source_ids = {
+        source_player_id_value
+        for source_player_id_value in source_ids
+        if not is_lineup_player_source_id(source_player_id_value)
+    }
+    lineup_source_ids = source_ids - athlete_source_ids
+    if len(athlete_source_ids) != 1 or not lineup_source_ids:
+        return False
+
+    athlete_source_id = next(iter(athlete_source_ids))
+    match_rows: dict[Any, dict[str, list[dict[str, Any]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for item in rows:
+        match_rows[item.get("match_id")][item["source_player_id"]].append(item["row"])
+
+    evidenced_lineup_source_ids: set[str] = set()
+    for match_id, source_rows in match_rows.items():
+        if len(source_rows) <= 1:
+            continue
+        if match_id is None or athlete_source_id not in source_rows:
+            return False
+
+        athlete_rows = source_rows[athlete_source_id]
+        for lineup_source_id, lineup_rows in source_rows.items():
+            if lineup_source_id == athlete_source_id:
+                continue
+            if lineup_source_id not in lineup_source_ids:
+                return False
+            if not all(
+                _strong_same_match_duplicate_evidence(athlete_row, lineup_row)
+                for athlete_row in athlete_rows
+                for lineup_row in lineup_rows
+            ):
+                return False
+            evidenced_lineup_source_ids.add(lineup_source_id)
+
+    return evidenced_lineup_source_ids == lineup_source_ids
+
+
+def plan_player_identity_resolution(
+    rows: list[dict[str, Any]],
+    existing_mappings: dict[str, Any],
+    scoped_candidates: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Plan conservative aliases within one team-season identity scope.
+
+    A lineup-only identifier may follow a single exact-name candidate or the one
+    athlete identifier in its team. Same-match collisions additionally require
+    exact lineup evidence. Athlete identifiers only follow an existing candidate
+    when that candidate has no athlete identifier yet. Conflicting canonical
+    candidates and multiple athlete identifiers are left separate.
+    """
+
+    identity_groups: dict[tuple[Any, str], set[str]] = defaultdict(set)
+    rows_by_identity: dict[tuple[Any, str], list[dict[str, Any]]] = defaultdict(list)
+    match_identity_groups: dict[tuple[Any, str, Any], set[str]] = defaultdict(set)
+    all_source_ids: set[str] = set()
+    for item in rows:
+        source_player_id_value = item["source_player_id"]
+        all_source_ids.add(source_player_id_value)
+        name_key = normalized_player_name(item["row"].get("player_name") or "")
+        if name_key:
+            identity = (item["team_id"], name_key)
+            identity_groups[identity].add(source_player_id_value)
+            rows_by_identity[identity].append(item)
+            match_identity_groups[(*identity, item.get("match_id"))].add(source_player_id_value)
+
+    candidates_by_identity: dict[tuple[Any, str], dict[Any, dict[str, Optional[bool]]]] = defaultdict(
+        lambda: defaultdict(dict)
+    )
+    for candidate in scoped_candidates:
+        name_key = normalized_player_name(candidate.get("player_name") or "")
+        canonical_id = candidate.get("canonical_id")
+        source_entity_id = empty_to_none(candidate.get("source_entity_id"))
+        if not name_key or canonical_id is None or source_entity_id is None:
+            continue
+        lineup_fallback = candidate.get("is_lineup_fallback")
+        if lineup_fallback is None and is_lineup_player_source_id(source_entity_id):
+            lineup_fallback = True
+        candidates_by_identity[(candidate.get("team_id"), name_key)][canonical_id][
+            source_entity_id
+        ] = lineup_fallback
+
+    canonical_proposals: dict[str, set[Any]] = defaultdict(set)
+    representative_proposals: dict[str, set[str]] = defaultdict(set)
+    ambiguous_match_identities = {
+        (team_id, name_key)
+        for (team_id, name_key, _), match_source_ids in match_identity_groups.items()
+        if len(match_source_ids) > 1
+    }
+    for identity, source_ids in identity_groups.items():
+        has_unexplained_match_collision = (
+            identity in ambiguous_match_identities
+            and not _has_strong_same_match_identity_evidence(rows_by_identity[identity])
+        )
+        if has_unexplained_match_collision:
+            continue
+
+        canonical_sources = {
+            canonical_id: dict(candidate_source_ids)
+            for canonical_id, candidate_source_ids in candidates_by_identity.get(identity, {}).items()
+        }
+        for source_player_id_value in source_ids:
+            canonical_id = existing_mappings.get(source_player_id_value)
+            if canonical_id is not None:
+                canonical_sources.setdefault(canonical_id, {})[source_player_id_value] = (
+                    is_lineup_player_source_id(source_player_id_value)
+                )
+
+        athlete_source_ids = {
+            source_player_id_value
+            for source_player_id_value in source_ids
+            if not is_lineup_player_source_id(source_player_id_value)
+        }
+        lineup_source_ids = source_ids - athlete_source_ids
+
+        if len(canonical_sources) == 1:
+            canonical_id = next(iter(canonical_sources))
+            mapped_athlete_sources = {
+                candidate_source_id
+                for candidate_sources in canonical_sources.values()
+                for candidate_source_id, lineup_fallback in candidate_sources.items()
+                # Legacy mappings did not record whether their raw numeric ID
+                # came from athlete_id or lineup_member_id. Treat that unknown
+                # provenance as a possible athlete so a different athlete ID
+                # cannot be folded into it on name alone.
+                if lineup_fallback is not True
+            }
+            known_athlete_sources = athlete_source_ids | mapped_athlete_sources
+            if not athlete_source_ids or len(known_athlete_sources) <= 1:
+                for lineup_source_id in lineup_source_ids:
+                    if lineup_source_id not in existing_mappings:
+                        canonical_proposals[lineup_source_id].add(canonical_id)
+
+            if len(athlete_source_ids) == 1:
+                athlete_source_id = next(iter(athlete_source_ids))
+                if athlete_source_id not in existing_mappings and not mapped_athlete_sources:
+                    canonical_proposals[athlete_source_id].add(canonical_id)
+            continue
+
+        if canonical_sources:
+            continue
+
+        if len(athlete_source_ids) == 1:
+            representative_source_id = next(iter(athlete_source_ids))
+        elif not athlete_source_ids and lineup_source_ids:
+            representative_source_id = min(lineup_source_ids)
+        else:
+            continue
+
+        for lineup_source_id in lineup_source_ids:
+            representative_proposals[lineup_source_id].add(representative_source_id)
+
+    resolved_canonical_ids = dict(existing_mappings)
+    for source_player_id_value, proposals in canonical_proposals.items():
+        if source_player_id_value not in resolved_canonical_ids and len(proposals) == 1:
+            resolved_canonical_ids[source_player_id_value] = next(iter(proposals))
+
+    representatives = {source_player_id_value: source_player_id_value for source_player_id_value in all_source_ids}
+    for source_player_id_value, proposals in representative_proposals.items():
+        if source_player_id_value not in resolved_canonical_ids and len(proposals) == 1:
+            representatives[source_player_id_value] = next(iter(proposals))
+
+    return resolved_canonical_ids, representatives
+
+
 def ensure_players(
     cur: psycopg.Cursor,
     source_id: str,
     israel_country_id: str,
+    season_id: str,
     rows: list[dict[str, Any]],
 ) -> dict[str, str]:
     unique_players: dict[str, dict[str, Any]] = {}
@@ -954,42 +1206,127 @@ def ensure_players(
             {
                 "source_player_id": item["source_player_id"],
                 "name": row["player_name"],
+                "name_key": normalized_player_name(row["player_name"]),
                 "country_id": to_int(row.get("country_id")),
                 "position_name": row.get("position_name"),
+                "is_lineup_fallback": is_lineup_player_source_id(item["source_player_id"]),
             },
         )
     if not unique_players:
         return {}
+
+    source_player_ids = sorted(unique_players)
+    cur.execute(
+        """
+        select source_entity_id, canonical_id
+        from source.source_entity_ids
+        where source_id = %s
+          and entity_type = 'player'
+          and source_entity_id = any(%s)
+        """,
+        (source_id, source_player_ids),
+    )
+    existing_mappings = {
+        row["source_entity_id"]: row["canonical_id"]
+        for row in cur.fetchall()
+    }
+
+    team_ids = sorted({item["team_id"] for item in rows}, key=str)
+    cur.execute(
+        """
+        select distinct
+          pma.team_id,
+          coalesce(m.source_name, p.display_name) as player_name,
+          m.canonical_id,
+          m.source_entity_id,
+          (m.metadata ->> 'lineup_fallback')::boolean as is_lineup_fallback
+        from source.source_entity_ids m
+        join core.players p on p.id = m.canonical_id
+        join core.player_match_appearances pma on pma.player_id = p.id
+        join core.matches candidate_match on candidate_match.id = pma.match_id
+        join core.seasons candidate_season on candidate_season.id = candidate_match.season_id
+        where m.source_id = %s
+          and m.entity_type = 'player'
+          and pma.team_id = any(%s)
+          and candidate_season.name = (
+            select selected_season.name
+            from core.seasons selected_season
+            where selected_season.id = %s
+          )
+        """,
+        (source_id, team_ids, season_id),
+    )
+    resolved_canonical_ids, representatives = plan_player_identity_resolution(
+        rows,
+        existing_mappings,
+        cur.fetchall(),
+    )
 
     cur.execute(
         """
         create temp table if not exists player_stage (
           source_player_id text primary key,
           name text not null,
+          name_key text not null,
           country_id integer,
-          position_name text
+          position_name text,
+          is_lineup_fallback boolean not null,
+          resolved_canonical_id uuid,
+          representative_source_player_id text not null
         ) on commit preserve rows
         """
     )
     cur.execute("truncate player_stage")
-    with cur.copy("copy player_stage (source_player_id, name, country_id, position_name) from stdin") as copy:
+    with cur.copy(
+        """
+        copy player_stage (
+          source_player_id, name, name_key, country_id, position_name,
+          is_lineup_fallback, resolved_canonical_id, representative_source_player_id
+        ) from stdin
+        """
+    ) as copy:
         for item in unique_players.values():
-            copy.write_row((item["source_player_id"], item["name"], item["country_id"], item["position_name"]))
+            source_player_id_value = item["source_player_id"]
+            copy.write_row(
+                (
+                    source_player_id_value,
+                    item["name"],
+                    item["name_key"],
+                    item["country_id"],
+                    item["position_name"],
+                    item["is_lineup_fallback"],
+                    resolved_canonical_ids.get(source_player_id_value),
+                    representatives[source_player_id_value],
+                )
+            )
 
     cur.execute(
         """
-        update core.players p
-        set display_name = s.name,
-            primary_position = coalesce(s.position_name, p.primary_position),
-            country_id = case when s.country_id = 6 then coalesce(p.country_id, %s) else p.country_id end,
-            metadata = p.metadata || jsonb_strip_nulls(jsonb_build_object('source_country_id', s.country_id))
-        from source.source_entity_ids m
-        join player_stage s on s.source_player_id = m.source_entity_id
-        where m.source_id = %s
-          and m.entity_type = 'player'
-          and p.id = m.canonical_id
+        insert into source.source_entity_ids (
+          source_id, entity_type, source_entity_id, canonical_table, canonical_id,
+          source_name, source_slug, metadata, last_seen_at
+        )
+        select
+          %s,
+          'player',
+          s.source_player_id,
+          'core.players',
+          s.resolved_canonical_id,
+          s.name,
+          replace(s.name_key, ' ', '_'),
+          jsonb_build_object('lineup_fallback', s.is_lineup_fallback),
+          now()
+        from player_stage s
+        where s.resolved_canonical_id is not null
+        on conflict (source_id, entity_type, source_entity_id) do update
+          set canonical_table = excluded.canonical_table,
+              canonical_id = excluded.canonical_id,
+              source_name = excluded.source_name,
+              source_slug = excluded.source_slug,
+              metadata = source.source_entity_ids.metadata || excluded.metadata,
+              last_seen_at = now()
         """,
-        (israel_country_id, source_id),
+        (source_id,),
     )
     cur.execute(
         """
@@ -1001,6 +1338,7 @@ def ensure_players(
            and m.entity_type = 'player'
            and m.source_entity_id = s.source_player_id
           where m.id is null
+            and s.representative_source_player_id = s.source_player_id
         ),
         inserted as (
           insert into core.players (display_name, country_id, primary_position, metadata)
@@ -1010,14 +1348,16 @@ def ensure_players(
             position_name,
             jsonb_build_object(
               'source_country_id', country_id,
-              'source_player_id', source_player_id
+              'source_player_id', source_player_id,
+              'lineup_fallback', is_lineup_fallback,
+              'source_name_key', name_key
             )
           from new_players
           returning id, display_name, metadata
         )
         insert into source.source_entity_ids (
           source_id, entity_type, source_entity_id, canonical_table, canonical_id,
-          source_name, last_seen_at
+          source_name, source_slug, metadata, last_seen_at
         )
         select
           %s,
@@ -1026,15 +1366,78 @@ def ensure_players(
           'core.players',
           id,
           display_name,
+          replace(metadata->>'source_name_key', ' ', '_'),
+          jsonb_build_object(
+            'lineup_fallback', (metadata->>'lineup_fallback')::boolean
+          ),
           now()
         from inserted
         on conflict (source_id, entity_type, source_entity_id) do update
           set canonical_table = excluded.canonical_table,
               canonical_id = excluded.canonical_id,
               source_name = excluded.source_name,
+              source_slug = excluded.source_slug,
+              metadata = source.source_entity_ids.metadata || excluded.metadata,
               last_seen_at = now()
         """,
         (source_id, israel_country_id, source_id),
+    )
+    cur.execute(
+        """
+        insert into source.source_entity_ids (
+          source_id, entity_type, source_entity_id, canonical_table, canonical_id,
+          source_name, source_slug, metadata, last_seen_at
+        )
+        select
+          %s,
+          'player',
+          s.source_player_id,
+          'core.players',
+          target.canonical_id,
+          s.name,
+          replace(s.name_key, ' ', '_'),
+          jsonb_build_object('lineup_fallback', s.is_lineup_fallback),
+          now()
+        from player_stage s
+        join source.source_entity_ids target
+          on target.source_id = %s
+         and target.entity_type = 'player'
+         and target.source_entity_id = s.representative_source_player_id
+        where s.source_player_id <> s.representative_source_player_id
+        on conflict (source_id, entity_type, source_entity_id) do update
+          set canonical_table = excluded.canonical_table,
+              canonical_id = excluded.canonical_id,
+              source_name = excluded.source_name,
+              source_slug = excluded.source_slug,
+              metadata = source.source_entity_ids.metadata || excluded.metadata,
+              last_seen_at = now()
+        """,
+        (source_id, source_id),
+    )
+    cur.execute(
+        """
+        with preferred_source as (
+          select distinct on (m.canonical_id)
+            m.canonical_id,
+            s.name,
+            s.country_id,
+            s.position_name,
+            s.is_lineup_fallback
+          from source.source_entity_ids m
+          join player_stage s on s.source_player_id = m.source_entity_id
+          where m.source_id = %s
+            and m.entity_type = 'player'
+          order by m.canonical_id, s.is_lineup_fallback, s.source_player_id
+        )
+        update core.players p
+        set display_name = case when s.is_lineup_fallback then p.display_name else s.name end,
+            primary_position = coalesce(s.position_name, p.primary_position),
+            country_id = case when s.country_id = 6 then coalesce(p.country_id, %s) else p.country_id end,
+            metadata = p.metadata || jsonb_strip_nulls(jsonb_build_object('source_country_id', s.country_id))
+        from preferred_source s
+        where p.id = s.canonical_id
+        """,
+        (source_id, israel_country_id),
     )
     cur.execute(
         """
@@ -1177,6 +1580,24 @@ def ensure_appearances(
     )
     cur.execute(
         """
+        delete from obs.player_appearance_observations legacy
+        using appearance_stage staged
+        join obs.player_appearance_observations fresh
+          on fresh.source_id = %s
+         and fresh.source_match_id = staged.source_match_id
+         and fresh.source_player_id = staged.source_player_id
+        where staged.source_player_id like %s
+          and legacy.source_id = fresh.source_id
+          and legacy.source_match_id = fresh.source_match_id
+          and legacy.source_player_id = substring(staged.source_player_id from %s)
+          and legacy.appearance_id = fresh.appearance_id
+          and legacy.player_id = fresh.player_id
+          and legacy.id <> fresh.id
+        """,
+        (source_id, f"{LINEUP_PLAYER_ID_PREFIX}%", len(LINEUP_PLAYER_ID_PREFIX) + 1),
+    )
+    cur.execute(
+        """
         select
           s.source_match_id,
           s.source_player_id,
@@ -1311,7 +1732,7 @@ def load_player_rows(
     valid_rows = valid_player_rows(rows, indexes)
     metric_specs = collect_player_stat_metric_specs([item["row"] for item in valid_rows])
     ensure_metrics(cur, metric_specs)
-    player_ids = ensure_players(cur, source_id, israel_country_id, valid_rows)
+    player_ids = ensure_players(cur, source_id, israel_country_id, season_id, valid_rows)
     appearance_ids = ensure_appearances(cur, source_id, valid_rows, player_ids)
     stat_batch: list[tuple[str, str, dict[str, float]]] = []
     written_stats = 0
@@ -1383,7 +1804,7 @@ def load_shot_events(
         {
             value
             for row in rows
-            if (value := empty_to_none(row.get("player_source_id"))) is not None
+            if (value := shot_player_source_id(row)) is not None
         }
     )
     player_ids: dict[str, str] = {}
@@ -1408,7 +1829,7 @@ def load_shot_events(
         match_id = indexes["matches"].get(row.get("game_id"))
         if not match_id:
             continue
-        source_player_id_value = empty_to_none(row.get("player_source_id"))
+        source_player_id_value = shot_player_source_id(row)
         params.append(
             (
                 source_id,

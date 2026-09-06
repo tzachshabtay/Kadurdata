@@ -17,10 +17,18 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 try:
-    from scripts.player_identity import canonical_player_name
+    from scripts.player_identity import (
+        canonical_player_name,
+        preferred_player_name_index,
+        resolve_preferred_player_id,
+    )
     from scripts.sync_fotmob_loans import candidate_teams, normalized_name, unique_name_index, upsert_mapping
 except ModuleNotFoundError:
-    from player_identity import canonical_player_name
+    from player_identity import (
+        canonical_player_name,
+        preferred_player_name_index,
+        resolve_preferred_player_id,
+    )
     from sync_fotmob_loans import candidate_teams, normalized_name, unique_name_index, upsert_mapping
 
 
@@ -83,13 +91,6 @@ def parse_args() -> argparse.Namespace:
 def normalized_team_name(value: str) -> str:
     tokens = normalized_name(value).split()
     return " ".join(token for token in tokens if token not in {"fc", "sc", "afc", "cf"})
-
-
-def unique_player_name_index(rows: list[dict[str, Any]]) -> dict[str, Optional[str]]:
-    grouped: dict[str, list[str]] = {}
-    for row in rows:
-        grouped.setdefault(canonical_player_name(str(row["display_name"])), []).append(str(row["id"]))
-    return {name: ids[0] if len(set(ids)) == 1 else None for name, ids in grouped.items()}
 
 
 def team_search_terms(value: str) -> list[str]:
@@ -449,7 +450,11 @@ def main() -> int:
             team_rows = list(cur.execute("select id::text, name from core.teams").fetchall())
             player_rows = list(cur.execute("select id::text, display_name from core.players").fetchall())
             team_by_name = unique_name_index(team_rows, "name", "id")
-            player_by_name = unique_player_name_index(player_rows)
+            player_by_name = preferred_player_name_index(player_rows)
+            player_name_by_id = {
+                str(player_row["id"]): str(player_row["display_name"])
+                for player_row in player_rows
+            }
             team_mapping = {
                 str(row["source_entity_id"]): str(row["canonical_id"])
                 for row in cur.execute(
@@ -479,7 +484,13 @@ def main() -> int:
                 source_player_id = str(loan["source_player_id"])
                 player_name = str(loan["player_name"])
                 player_key = canonical_player_name(player_name)
-                canonical_id = player_mapping.get(source_player_id) or player_by_name.get(player_key)
+                canonical_id, repair_mapping = resolve_preferred_player_id(
+                    source_player_id,
+                    player_name,
+                    player_mapping,
+                    player_by_name,
+                    player_name_by_id,
+                )
                 metadata = {"formation_position": loan.get("formation_position"), "transfermarkt_loan_import": True}
                 if canonical_id is None:
                     row = cur.execute(
@@ -488,6 +499,7 @@ def main() -> int:
                     ).fetchone()
                     canonical_id = str(row["id"])
                     player_by_name[player_key] = canonical_id
+                    player_name_by_id[canonical_id] = player_name
                 else:
                     cur.execute(
                         """
@@ -499,7 +511,16 @@ def main() -> int:
                         """,
                         (loan.get("player_name_he"), loan.get("primary_position"), json.dumps(metadata), canonical_id),
                     )
-                upsert_mapping(cur, source_id, "player", source_player_id, "core.players", canonical_id, player_name)
+                upsert_mapping(
+                    cur,
+                    source_id,
+                    "player",
+                    source_player_id,
+                    "core.players",
+                    canonical_id,
+                    player_name,
+                    replace_canonical_id=repair_mapping,
+                )
                 player_mapping[source_player_id] = canonical_id
                 return canonical_id
 

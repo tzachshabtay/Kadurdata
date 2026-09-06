@@ -18,10 +18,18 @@ from urllib.request import Request, urlopen
 
 try:
     from scripts.ingest_fotmob import page_props
-    from scripts.player_identity import canonical_player_name
+    from scripts.player_identity import (
+        canonical_player_name,
+        preferred_player_name_index,
+        resolve_preferred_player_id,
+    )
 except ModuleNotFoundError:
     from ingest_fotmob import page_props
-    from player_identity import canonical_player_name
+    from player_identity import (
+        canonical_player_name,
+        preferred_player_name_index,
+        resolve_preferred_player_id,
+    )
 
 
 BASE_URL = "https://www.fotmob.com"
@@ -289,6 +297,7 @@ def upsert_mapping(
     canonical_table: str,
     canonical_id: str,
     source_name: str,
+    replace_canonical_id: bool = False,
 ) -> None:
     cur.execute(
         """
@@ -299,11 +308,22 @@ def upsert_mapping(
         values (%s, %s, %s, %s, %s, %s, 1, 'auto')
         on conflict (source_id, entity_type, source_entity_id) do update
           set canonical_table = excluded.canonical_table,
-              canonical_id = coalesce(mapping.canonical_id, excluded.canonical_id),
+              canonical_id = case
+                when %s then excluded.canonical_id
+                else coalesce(mapping.canonical_id, excluded.canonical_id)
+              end,
               source_name = excluded.source_name,
               last_seen_at = now()
         """,
-        (source_id, entity_type, source_entity_id, canonical_table, canonical_id, source_name),
+        (
+            source_id,
+            entity_type,
+            source_entity_id,
+            canonical_table,
+            canonical_id,
+            source_name,
+            replace_canonical_id,
+        ),
     )
 
 
@@ -401,15 +421,10 @@ def main() -> int:
             team_rows = list(cur.execute("select id::text, name from core.teams").fetchall())
             player_rows = list(cur.execute("select id::text, display_name from core.players").fetchall())
             team_by_name = unique_name_index(team_rows, "name", "id")
-            player_groups: dict[str, list[str]] = {}
-            for player_row in player_rows:
-                player_groups.setdefault(
-                    canonical_player_name(str(player_row["display_name"])),
-                    [],
-                ).append(str(player_row["id"]))
-            player_by_name = {
-                name: ids[0] if len(set(ids)) == 1 else None
-                for name, ids in player_groups.items()
+            player_by_name = preferred_player_name_index(player_rows)
+            player_name_by_id = {
+                str(player_row["id"]): str(player_row["display_name"])
+                for player_row in player_rows
             }
             team_mapping = {
                 str(row["source_entity_id"]): str(row["canonical_id"])
@@ -452,7 +467,13 @@ def main() -> int:
                 source_player_id = str(player_data["source_player_id"])
                 player_name = str(player_data["player_name"])
                 player_key = canonical_player_name(player_name)
-                canonical_id = player_mapping.get(source_player_id) or player_by_name.get(player_key)
+                canonical_id, repair_mapping = resolve_preferred_player_id(
+                    source_player_id,
+                    player_name,
+                    player_mapping,
+                    player_by_name,
+                    player_name_by_id,
+                )
                 metadata = {
                     "formation_position": player_data.get("formation_position"),
                     f"fotmob_{import_kind}_import": True,
@@ -469,6 +490,7 @@ def main() -> int:
                     ).fetchone()
                     canonical_id = str(row["id"])
                     player_by_name[player_key] = canonical_id
+                    player_name_by_id[canonical_id] = player_name
                 else:
                     cur.execute(
                         """
@@ -479,7 +501,16 @@ def main() -> int:
                         """,
                         (player_data.get("primary_position"), json.dumps(metadata), canonical_id),
                     )
-                upsert_mapping(cur, fotmob_source_id, "player", source_player_id, "core.players", canonical_id, player_name)
+                upsert_mapping(
+                    cur,
+                    fotmob_source_id,
+                    "player",
+                    source_player_id,
+                    "core.players",
+                    canonical_id,
+                    player_name,
+                    replace_canonical_id=repair_mapping,
+                )
                 player_mapping[source_player_id] = canonical_id
                 return canonical_id
 

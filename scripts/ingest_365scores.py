@@ -880,6 +880,7 @@ def flatten_shot_events(details: Dict[int, Dict[str, Any]]) -> List[Dict[str, An
                     "team_id": team.get("id"),
                     "team_side": "home" if team.get("id") == home.get("id") else "away" if team.get("id") == away.get("id") else None,
                     "player_source_id": member.get("athleteId") or lineup_member_id,
+                    "athlete_id": member.get("athleteId"),
                     "lineup_member_id": lineup_member_id,
                     "player_name": member.get("name"),
                     "event_time": event.get("time"),
