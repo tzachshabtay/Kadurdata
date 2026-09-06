@@ -77,6 +77,12 @@ def candidate(
 
 
 class PlayerIdentityLoadingTests(unittest.TestCase):
+    def test_non_positive_shirt_numbers_are_treated_as_missing(self) -> None:
+        self.assertIsNone(loader.positive_int(None))
+        self.assertIsNone(loader.positive_int("-1"))
+        self.assertIsNone(loader.positive_int(0))
+        self.assertEqual(loader.positive_int("17.0"), 17)
+
     def test_preserves_athlete_ids_and_namespaces_lineup_fallbacks(self) -> None:
         self.assertEqual(
             loader.source_player_id({"athlete_id": "123", "lineup_member_id": "456"}),

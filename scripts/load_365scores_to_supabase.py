@@ -69,6 +69,11 @@ def to_int(value: Any) -> Optional[int]:
     return int(float(text))
 
 
+def positive_int(value: Any) -> Optional[int]:
+    parsed = to_int(value)
+    return parsed if parsed is not None and parsed > 0 else None
+
+
 def to_float(value: Any) -> Optional[float]:
     text = empty_to_none(value)
     if text is None:
@@ -747,7 +752,7 @@ def upsert_appearance(
             team_id,
             opponent_team_id,
             row.get("team_side"),
-            to_int(row.get("jersey_number")),
+            positive_int(row.get("jersey_number")),
             row.get("lineup_status_text"),
             row.get("position_name"),
             row.get("formation_name"),
@@ -1505,7 +1510,7 @@ def ensure_appearances(
                     item["team_id"],
                     item["opponent_team_id"],
                     row.get("team_side"),
-                    to_int(row.get("jersey_number")),
+                    positive_int(row.get("jersey_number")),
                     row.get("lineup_status_text"),
                     row.get("position_name"),
                     row.get("formation_name"),

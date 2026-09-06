@@ -425,7 +425,7 @@ begin
       values
         ('opponent_team_id', member.opponent_team_id::text),
         ('side', nullif(lower(btrim(member.side)), '')),
-        ('shirt_number', member.shirt_number::text),
+        ('shirt_number', case when member.shirt_number > 0 then member.shirt_number::text end),
         ('lineup_status', nullif(lower(btrim(member.lineup_status)), '')),
         ('position_name', nullif(lower(btrim(member.position_name)), '')),
         ('formation_position', nullif(lower(btrim(member.formation_position)), '')),
@@ -579,7 +579,8 @@ $validation$;
 update player_appearance_collision_members
 set position_name = 'Defender',
     formation_position = 'Centre Back',
-    minutes_played = 90
+    minutes_played = 90,
+    shirt_number = null
 where target_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
   and match_id = '356ab865-890c-46f2-8e37-c4d3e6f8a578'
   and team_id = '44e32710-08d6-42b9-ac31-f8599db461cc';
@@ -658,7 +659,7 @@ with ranked_metadata as (
     (array_agg(side order by member_rank)
       filter (where nullif(trim(side), '') is not null))[1] as side,
     (array_agg(shirt_number order by member_rank)
-      filter (where shirt_number is not null))[1] as shirt_number,
+      filter (where shirt_number > 0))[1] as shirt_number,
     (array_agg(lineup_status order by member_rank)
       filter (where nullif(trim(lineup_status), '') is not null))[1] as lineup_status,
     (array_agg(position_name order by member_rank)
