@@ -243,9 +243,12 @@ create temporary table player_appearance_projection on commit drop as
 with stat_quality as (
   select
     stats.appearance_id,
-    max(jsonb_object_length(jsonb_strip_nulls(
-      to_jsonb(stats) - array['source_id', 'appearance_id', 'metric_count', 'observed_at']
-    ))) as stat_metric_count,
+    max((
+      select count(*)
+      from jsonb_object_keys(jsonb_strip_nulls(
+        to_jsonb(stats) - array['source_id', 'appearance_id', 'metric_count', 'observed_at']
+      ))
+    )) as stat_metric_count,
     max(stats.observed_at) as stat_observed_at
   from obs.player_match_stats stats
   group by stats.appearance_id
@@ -689,7 +692,10 @@ with stat_rows as (
     row_number() over (
       partition by stats.survivor_appearance_id, stats.source_id, metric.key
       order by
-        jsonb_object_length(stats.metric_values) desc,
+        (
+          select count(*)
+          from jsonb_object_keys(stats.metric_values)
+        ) desc,
         stats.observed_at desc,
         (stats.appearance_id = stats.survivor_appearance_id) desc,
         stats.appearance_id
@@ -709,7 +715,10 @@ with stat_rows as (
     jsonb_build_object(
       'source_id', stat_group.source_id,
       'appearance_id', stat_group.survivor_appearance_id,
-      'metric_count', jsonb_object_length(coalesce(metric.metric_values, '{}'::jsonb)),
+      'metric_count', (
+        select count(*)
+        from jsonb_object_keys(coalesce(metric.metric_values, '{}'::jsonb))
+      ),
       'observed_at', stat_group.observed_at
     ) || coalesce(metric.metric_values, '{}'::jsonb) as data
   from stat_groups stat_group
