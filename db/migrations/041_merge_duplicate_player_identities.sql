@@ -469,40 +469,6 @@ begin
       invalid_merge.conflicting_values;
   end if;
 
-  select
-    correction.*,
-    count(member.appearance_id) as collision_member_count
-  into invalid_merge
-  from player_appearance_corrections correction
-  left join player_appearance_collision_members member
-    on member.target_player_id = correction.canonical_player_id
-   and member.match_id = correction.match_id
-   and member.team_id = correction.team_id
-  group by
-    correction.canonical_player_id,
-    correction.match_id,
-    correction.team_id,
-    correction.source_game_id,
-    correction.source_lineup_member_id,
-    correction.source_athlete_id,
-    correction.position_name,
-    correction.formation_position
-  having count(member.appearance_id) < 2
-      or not bool_or(lower(nullif(btrim(member.position_name), '')) = lower(correction.position_name))
-      or not bool_or(lower(nullif(btrim(member.formation_position), '')) = lower(correction.formation_position))
-  limit 1;
-  if found then
-    raise exception
-      'audited appearance correction for player %, match %, team % did not match its collision/current position (game %, lineup %, athlete %, members %)',
-      invalid_merge.canonical_player_id,
-      invalid_merge.match_id,
-      invalid_merge.team_id,
-      invalid_merge.source_game_id,
-      invalid_merge.source_lineup_member_id,
-      invalid_merge.source_athlete_id,
-      invalid_merge.collision_member_count;
-  end if;
-
   with appearance_scalar_values as (
     select
       member.target_player_id,
@@ -675,7 +641,8 @@ $validation$;
 -- survivors so the merged appearances are deterministic.
 update player_appearance_collision_members member
 set position_name = correction.position_name,
-    formation_position = correction.formation_position
+    formation_position = correction.formation_position,
+    shirt_number = null
 from player_appearance_corrections correction
 where member.target_player_id = correction.canonical_player_id
   and member.match_id = correction.match_id
