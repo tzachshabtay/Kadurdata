@@ -319,6 +319,62 @@ create unique index player_appearance_collision_members_id_idx
 create index player_appearance_collision_members_survivor_idx
   on player_appearance_collision_members (survivor_appearance_id);
 
+-- Some early 2026/27 lineup snapshots assigned one member's position slot to
+-- another member. Each correction below was checked against a current
+-- 365Scores game payload that directly links the listed lineup member ID to
+-- the listed athlete ID. This is identity evidence independent of the stale
+-- position labels, while keeping every exception bounded to one appearance.
+create temporary table player_appearance_corrections (
+  canonical_player_id uuid not null,
+  match_id uuid not null,
+  team_id uuid not null,
+  source_game_id bigint not null,
+  source_lineup_member_id bigint not null,
+  source_athlete_id bigint not null,
+  position_name text not null,
+  formation_position text not null,
+  primary key (canonical_player_id, match_id, team_id)
+) on commit drop;
+
+insert into player_appearance_corrections (
+  canonical_player_id,
+  match_id,
+  team_id,
+  source_game_id,
+  source_lineup_member_id,
+  source_athlete_id,
+  position_name,
+  formation_position
+)
+values
+  ('07cd056b-99fd-4c2d-87fc-f58999bbeaaf', '356ab865-890c-46f2-8e37-c4d3e6f8a578', '44e32710-08d6-42b9-ac31-f8599db461cc', 4739175, 77435195, 220313, 'Defender', 'Centre Back'),
+  ('07cd056b-99fd-4c2d-87fc-f58999bbeaaf', 'c7d46de8-6626-46b8-87a4-832f4294e8b6', '44e32710-08d6-42b9-ac31-f8599db461cc', 4739168, 77435195, 220313, 'Defender', 'Centre Back'),
+  ('0ae4711f-20dc-4760-8c2d-13696bdf396a', 'ade8c73c-cce6-4cd0-b877-2522d711f6cc', '093dc3ca-a560-4512-b5af-8d029bbad5e0', 4739173, 77762956, 239111, 'Midfielder', 'Defensive Midfield'),
+  ('0d60702e-5951-45ed-8f6f-2ecfde3d9029', 'a2e0e8f1-f6d4-42a3-801d-a3538f99fef4', '004a9ce9-406c-4230-9fca-ea1d81ade4c1', 4807670, 78340015, 244999, 'Midfielder', 'Defensive Midfield'),
+  ('2466b734-b9c0-475b-84a1-33537172e9e1', '99e75874-c743-47fd-be1e-08113fa3cbf5', '6640b7fd-4f19-4874-a759-5ec8e8c9f21f', 4739166, 77656800, 230669, 'Attacker', 'Left Forward'),
+  ('26eb3d0b-d81c-4eba-9cbc-ca2de7fbd20f', '120ebe6b-7549-412d-a4fc-512d38a91397', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739171, 1209126, 52753, 'Midfielder', 'Attacking Midfield'),
+  ('26eb3d0b-d81c-4eba-9cbc-ca2de7fbd20f', '27f6d3d0-a5f8-44ce-aa08-5461d3086054', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739163, 1209126, 52753, 'Midfielder', 'Attacking Midfield'),
+  ('2a324448-0db4-408b-94c5-2817dc69b432', '120ebe6b-7549-412d-a4fc-512d38a91397', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739171, 64904217, 106534, 'Attacker', 'Centre Forward'),
+  ('2a324448-0db4-408b-94c5-2817dc69b432', '27f6d3d0-a5f8-44ce-aa08-5461d3086054', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739163, 64904217, 106534, 'Attacker', 'Centre Forward'),
+  ('306e0bac-9aa4-4a34-8c8a-e71c2c06e57f', '120ebe6b-7549-412d-a4fc-512d38a91397', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739171, 78924965, 245439, 'Defender', 'Right Back'),
+  ('306e0bac-9aa4-4a34-8c8a-e71c2c06e57f', '27f6d3d0-a5f8-44ce-aa08-5461d3086054', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739163, 78924965, 245439, 'Defender', 'Right Back'),
+  ('3ba609df-abc2-464d-a95a-c6e6f2359d0f', '99e75874-c743-47fd-be1e-08113fa3cbf5', '6640b7fd-4f19-4874-a759-5ec8e8c9f21f', 4739166, 72686304, 159923, 'Defender', 'Left Back'),
+  ('40bb4888-a2b6-4b04-b671-b36595c14551', 'a2e0e8f1-f6d4-42a3-801d-a3538f99fef4', 'd02d8b44-c223-45ba-b896-af5d3722634a', 4807670, 50483047, 102325, 'Defender', 'Centre Back'),
+  ('68c8575e-67e6-4746-ae3f-9aee9cb29ba3', '8694ea1d-0d2c-47e4-a5fd-03df27ed0a8b', 'b2efcced-a9b6-454e-b984-08040fae6044', 4739172, 78924711, 245404, 'Defender', 'Right Back'),
+  ('715f1298-cb2e-40fc-8232-1e313f03a8bd', '8694ea1d-0d2c-47e4-a5fd-03df27ed0a8b', '035caa29-5f2d-4c46-ae3e-5de9ad09e4c0', 4739172, 78924715, 245403, 'Midfielder', 'Defensive Midfield'),
+  ('7bb0a811-4734-4d39-81ee-ac20375d5938', '99e75874-c743-47fd-be1e-08113fa3cbf5', '7f61b4a3-7091-4c6e-84c5-172c69e08fce', 4739166, 78925472, 245405, 'Midfielder', 'Central Midfield'),
+  ('8acfa69c-0e83-4da4-a25a-4bb34e0f7a44', '99e75874-c743-47fd-be1e-08113fa3cbf5', '6640b7fd-4f19-4874-a759-5ec8e8c9f21f', 4739166, 77609410, 228120, 'Midfielder', 'Central Midfield'),
+  ('ba8490a4-8056-48a3-8a92-43a7b0a9369d', '99e75874-c743-47fd-be1e-08113fa3cbf5', '7f61b4a3-7091-4c6e-84c5-172c69e08fce', 4739166, 64724922, 106523, 'Attacker', 'Centre Forward'),
+  ('ba8490a4-8056-48a3-8a92-43a7b0a9369d', 'f9d2b783-c5f8-4346-8342-faa30da43887', '7f61b4a3-7091-4c6e-84c5-172c69e08fce', 4739167, 64724922, 106523, 'Attacker', 'Centre Forward'),
+  ('c1a4e318-703b-4ab4-84a6-29c9607514c0', '99e75874-c743-47fd-be1e-08113fa3cbf5', '7f61b4a3-7091-4c6e-84c5-172c69e08fce', 4739166, 908096, 38047, 'Goalkeeper', 'Goalkeeper'),
+  ('c1a4e318-703b-4ab4-84a6-29c9607514c0', 'f9d2b783-c5f8-4346-8342-faa30da43887', '7f61b4a3-7091-4c6e-84c5-172c69e08fce', 4739167, 908096, 38047, 'Goalkeeper', 'Goalkeeper'),
+  ('d2c8c036-a489-4b84-ad9b-99ffb3ec9be7', '120ebe6b-7549-412d-a4fc-512d38a91397', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739171, 78924967, 245437, 'Midfielder', 'Central Midfield'),
+  ('d2c8c036-a489-4b84-ad9b-99ffb3ec9be7', '27f6d3d0-a5f8-44ce-aa08-5461d3086054', '454a6e07-09e8-4d0e-adc3-10818163e0da', 4739163, 78924967, 245437, 'Midfielder', 'Central Midfield'),
+  ('d43fd89c-08ef-4c86-bf8e-d22e0b453904', 'abca44d3-44f7-4efa-aa31-3260ded7583d', 'a3de4ba2-63b7-475e-9975-8f2bb118d546', 4807669, 53025848, 83718, 'Defender', 'Left Back'),
+  ('d8a84f1c-dd1f-4da6-9ad4-3fdabaf07a06', 'e3372ba5-1fed-4d05-bdab-a2bb66c70afc', '90fd8f4a-b40a-48d9-ae96-fd6c6e47a896', 4739174, 77435285, 226000, 'Midfielder', 'Central Midfield'),
+  ('e9b76686-8b6e-4d2f-8514-f61080d5a40d', 'ade8c73c-cce6-4cd0-b877-2522d711f6cc', '67611ed2-57da-40b1-a651-10eb54dcdeac', 4739173, 77656801, 230779, 'Defender', 'Right Back'),
+  ('f91671e6-56a3-480d-8952-e289e8e1e61d', 'ade8c73c-cce6-4cd0-b877-2522d711f6cc', '67611ed2-57da-40b1-a651-10eb54dcdeac', 4739173, 78924556, 245419, 'Defender', 'Centre Back');
+
 do $validation$
 declare
   invalid_merge record;
@@ -458,39 +514,21 @@ begin
   ) as conflicts
   into invalid_merge
   from appearance_scalar_conflicts conflict
-  -- Keep provider corrections scoped to their audited player, match, team,
-  -- field, and expected current value so any unrelated conflict still aborts.
+  left join player_appearance_corrections correction
+    on correction.canonical_player_id = conflict.canonical_player_id
+   and correction.match_id = conflict.match_id
+   and correction.team_id = conflict.team_id
+  -- Only position fields can use an audited correction. The provider's
+  -- current value must be one of exactly two observed values; opponent, side,
+  -- shirt, lineup status, minutes, and every unlisted conflict remain fatal.
   where not (
-    (
-      -- Games 4739175 and 4739168 map lineup member 77435195 to athlete
-      -- 220313 (Alon Demol), currently a 90-minute Centre Back.
-      conflict.canonical_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
-      and conflict.match_id in (
-        '356ab865-890c-46f2-8e37-c4d3e6f8a578',
-        'c7d46de8-6626-46b8-87a4-832f4294e8b6'
-      )
-      and conflict.team_id = '44e32710-08d6-42b9-ac31-f8599db461cc'
-      and conflict.field_name = 'formation_position'
-      and conflict.conflicting_values = array['centre back', 'left midfield']::text[]
-    )
-    or (
-      -- Game 4739173 maps lineup member 77762956 to athlete 239111
-      -- (Liran Turgeman), currently an unused Defensive Midfield substitute.
-      conflict.canonical_player_id = '0ae4711f-20dc-4760-8c2d-13696bdf396a'
-      and conflict.match_id = 'ade8c73c-cce6-4cd0-b877-2522d711f6cc'
-      and conflict.team_id = '093dc3ca-a560-4512-b5af-8d029bbad5e0'
-      and (
-        (
-          conflict.field_name = 'position_name'
-          and conflict.conflicting_values = array['defender', 'midfielder']::text[]
-        )
-        or (
-          conflict.field_name = 'formation_position'
-          and conflict.conflicting_values @> array['defensive midfield']::text[]
-          and array_length(conflict.conflicting_values, 1) = 2
-        )
-      )
-    )
+    correction.canonical_player_id is not null
+    and conflict.field_name in ('position_name', 'formation_position')
+    and array_length(conflict.conflicting_values, 1) = 2
+    and case conflict.field_name
+      when 'position_name' then lower(correction.position_name)
+      when 'formation_position' then lower(correction.formation_position)
+    end = any(conflict.conflicting_values)
   )
   having count(*) > 0;
   if found then
@@ -601,25 +639,14 @@ $validation$;
 
 -- Normalize the audited provider corrections before choosing collision
 -- survivors so the merged appearances are deterministic.
-update player_appearance_collision_members
-set position_name = 'Defender',
-    formation_position = 'Centre Back',
-    minutes_played = 90,
+update player_appearance_collision_members member
+set position_name = correction.position_name,
+    formation_position = correction.formation_position,
     shirt_number = null
-where target_player_id = '07cd056b-99fd-4c2d-87fc-f58999bbeaaf'
-  and match_id in (
-    '356ab865-890c-46f2-8e37-c4d3e6f8a578',
-    'c7d46de8-6626-46b8-87a4-832f4294e8b6'
-  )
-  and team_id = '44e32710-08d6-42b9-ac31-f8599db461cc';
-
-update player_appearance_collision_members
-set position_name = 'Midfielder',
-    formation_position = 'Defensive Midfield',
-    shirt_number = null
-where target_player_id = '0ae4711f-20dc-4760-8c2d-13696bdf396a'
-  and match_id = 'ade8c73c-cce6-4cd0-b877-2522d711f6cc'
-  and team_id = '093dc3ca-a560-4512-b5af-8d029bbad5e0';
+from player_appearance_corrections correction
+where member.target_player_id = correction.canonical_player_id
+  and member.match_id = correction.match_id
+  and member.team_id = correction.team_id;
 
 insert into core.player_identity_redirects (
   old_player_id,
