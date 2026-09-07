@@ -4,9 +4,11 @@
 
 Use the most recent seven fully completed calendar days in Israel. Query the current foreign-club season, then collect every appearance by an Israeli legionnaire in the window. Deduplicate the same fixture when two imported competition records describe it.
 
-Report how many players appeared, how many appearances they made, and the total recorded minutes. Separate full-stat appearances from rows that contain only minutes/goals/assists so missing detail is not mistaken for zero activity.
+Record how many players appeared, how many appearances they made, and the total recorded minutes. These football totals may appear in the weekly overview. Separate full-stat appearances from basic-only rows in the internal audit and completion report so missing detail is not mistaken for zero activity; do not narrate this split in the article.
 
 ## Analysis
+
+Lead the overview, takeaways, and conclusion with football findings from the player recaps. Do not tell readers how many rows have detailed data, how many players passed a sample threshold, why every player is included, or how the editorial team selected comparisons. For example, replace "24 appearances have full stats and four have basic data" with an evidence-backed account of who created, shot, defended, or saved. Basic-only recaps should simply state the supported match facts. Before signing off, the Hebrew editor and blind reviewer must check every visible section for process commentary, including the dek and summary bullets, not only the player paragraphs.
 
 The weekly article is a complete, player-by-player report. It must include every legionnaire who recorded at least one minute in the reporting window. Sort player blocks by the weekly minutes-weighted `rating_365` from highest to lowest; players without a rating come last, ordered by minutes and then Hebrew name. Never drop a player because the detailed provider feed is incomplete.
 

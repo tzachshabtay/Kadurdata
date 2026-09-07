@@ -28,6 +28,7 @@ The writer, editor, and reviewer must be fresh-context agents. Do not collapse t
 ## Common quality gates
 
 - One coherent thesis comes before the list of numbers.
+- Write the headline, dek, overview, takeaways, conclusion, and player recaps for football readers. Describe what players did and why it matters; keep collection completeness, coverage decisions, sample-eligibility counts, review procedures, and explanations of how the article was assembled in the internal evidence and review records. Preserve the required AI disclosure and concise qualifications needed to interpret a specific claim honestly.
 - Every paragraph must advance the thesis with a finding, an explanation, and a consequence.
 - Prefer high-volume measures and role/style evidence. A goal or assist is context, not proof of a trend.
 - Compare like-for-like time windows and normalize player volume per 90 minutes when minutes differ materially.
