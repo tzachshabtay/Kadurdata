@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildReviewPacket } from "./content_language_review.mjs";
+import { assertWeeklyEligibility } from "./legionnaire_eligibility.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pipelineVersion = "legionnaire-weekly-v2";
@@ -60,6 +61,7 @@ async function main() {
   const source = JSON.parse(await readFile(sourcePath, "utf8"));
   const authored = JSON.parse(await readFile(authoredPath, "utf8"));
   if (source.kind !== "legionnaire_weekly" || source.schemaVersion !== 1) throw new Error("Unsupported weekly source schema.");
+  assertWeeklyEligibility(source);
   if (authored.schemaVersion !== 2 || !authored.editorial || !authored.draftEditorial || !Array.isArray(authored.draftPlayerRecaps) || !Array.isArray(authored.playerRecaps)) throw new Error("Authored copy is incomplete.");
 
   const roleIds = Object.values(authored.authorship ?? {});
@@ -184,6 +186,7 @@ async function main() {
   ];
   const checkedAt = new Date().toISOString();
   const factChecks = [
+    { id: "appearance-eligibility", label: "הופעות במועדונים בחו״ל", status: "passed", detail: "שיוך המסגרת והעונה אומת לכל הופעה" },
     { id: "weekly-window", label: "חלון שבועי מלא", status: "passed", detail: `${source.period.start} עד ${source.period.end}` },
     { id: "deduplication", label: "כפילויות משחקים הוסרו", status: "passed", detail: `${source.dataAudit.duplicateMatchIdsRemoved.length} רשומות כפולות הוסרו` },
     { id: "analysis-plan", label: "תזה ותכנית ניתוח", status: "passed", detail: "כל סעיף מקושר לתובנה שנבחרה מראש" },

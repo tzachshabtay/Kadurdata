@@ -6,6 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { PIPELINE_VERSION } from "./generate_content_article.mjs";
 import { buildReviewPacket } from "./content_language_review.mjs";
+import { assertWeeklyEligibility } from "./legionnaire_eligibility.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -38,6 +39,7 @@ async function main() {
 
   const candidatePath = path.resolve(projectRoot, args.candidatePath);
   const candidate = JSON.parse(await readFile(candidatePath, "utf8"));
+  assertWeeklyEligibility(candidate);
   if (candidate.status !== "draft" || candidate.generation?.mode !== "codex_skill_candidate") {
     throw new Error("Only a finalized Codex-skill candidate can be published.");
   }

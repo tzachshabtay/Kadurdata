@@ -4,6 +4,8 @@
 
 Use the most recent seven fully completed calendar days in Israel. Query the current foreign-club season, then collect every appearance by an Israeli legionnaire in the window. Deduplicate the same fixture when two imported competition records describe it.
 
+Verify eligibility from each appearance's actual competition and season, not just the player's seasonal legionnaire census membership. Exclude domestic and national-team matches, including matches played after a return to Israel. Apply the same foreign-club/current-season filter before selecting historical baselines. Preserve verified competition/season identifiers on each appearance and review excluded rows; finalization and publication must reject unverified or ineligible appearances. A qualifying foreign-club appearance before a midweek return to Israel still counts.
+
 Record how many players appeared, how many appearances they made, and the total recorded minutes. These football totals may appear in the weekly overview. Separate full-stat appearances from basic-only rows in the internal audit and completion report so missing detail is not mistaken for zero activity; do not narrate this split in the article.
 
 ## Analysis

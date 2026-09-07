@@ -16,6 +16,8 @@ Create Hebrew football journalism from Kadurdata's own data. Do not call a paid 
 
 ## Mandatory roles
 
+Use GPT-6 Astra (`gpt-6-astra`) for all four roles below. Set the model explicitly when creating each role agent and record the actual model in the authored package; do not silently substitute GPT-5.6.
+
 Use four distinct real Codex agent contexts and record their IDs:
 
 1. analyst: selects the thesis and evidence;

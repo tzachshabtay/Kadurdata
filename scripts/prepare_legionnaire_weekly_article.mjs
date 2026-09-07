@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { filterLegionnaireHistory } from "./legionnaire_eligibility.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbenchRoot = path.join(projectRoot, ".content-workbench");
@@ -123,6 +124,11 @@ function groupAppearances(rows, playerNameById, lineupByAppearanceId) {
         nameHe: playerNameById.get(row.player_id) ?? row.display_name,
         appearanceId: row.appearance_id,
         matchId: row.match_id,
+        seasonId: row.season_id,
+        seasonName: row.season_name,
+        competitionId: row.competition_id,
+        competitionScope: row.competition_scope,
+        competitionNameHe: row.competition_name,
         scheduledAt: row.scheduled_at,
         teamName: row.team_name,
         opponentName: row.opponent_team_name,
@@ -268,14 +274,21 @@ async function main() {
   const playerNameById = new Map(census.map((player) => [player.player_id, player.display_name_he || player.display_name]));
   const censusByPlayerId = new Map(census.map((player) => [player.player_id, player]));
 
-  const historyRows = await selectAll((from, to) => client
+  const rawHistoryRows = await selectAll((from, to) => client
     .from("api_player_history")
-    .select("player_id,display_name,appearance_id,match_id,scheduled_at,team_name,opponent_team_name,side,minutes_played,home_score,away_score,metric_code,value_numeric")
+    .select("player_id,display_name,appearance_id,match_id,season_id,competition_id,scheduled_at,team_name,opponent_team_name,side,minutes_played,home_score,away_score,metric_code,value_numeric")
     .in("player_id", playerIds)
     .gte("scheduled_at", queryStart)
     .lt("scheduled_at", queryEnd)
     .order("scheduled_at")
     .range(from, to));
+
+  const [eligibilitySeasons, eligibilityCompetitions] = await Promise.all([
+    selectAll((from, to) => client.from("api_seasons").select("season_id,season_name,competition_id").range(from, to)),
+    selectAll((from, to) => client.from("api_competitions").select("competition_id,name,name_he,scope").range(from, to)),
+  ]);
+  const eligibility = filterLegionnaireHistory(rawHistoryRows, eligibilitySeasons, eligibilityCompetitions, seasonName);
+  const historyRows = eligibility.rows;
 
   const appearanceIds = [...new Set(historyRows.map((row) => row.appearance_id))];
   const lineupRows = appearanceIds.length ? await selectAll((from, to) => client
@@ -302,7 +315,7 @@ async function main() {
       playerId,
       nameHe: playerNameById.get(playerId),
       teamName: playerMatches.at(-1)?.teamName ?? censusPlayer?.team_name ?? "",
-      competitionNameHe: censusPlayer?.competition_name_he || censusPlayer?.competition_name || "",
+      competitionNameHe: playerMatches.at(-1)?.competitionNameHe ?? "",
       position: censusPlayer?.specific_position || censusPlayer?.primary_position || null,
       appearances: playerMatches.length,
       starts: playerMatches.filter((match) => match.started).length,
@@ -316,6 +329,10 @@ async function main() {
       },
       matches: playerMatches.map((match) => ({
         matchId: match.matchId,
+        seasonId: match.seasonId,
+        seasonName: match.seasonName,
+        competitionId: match.competitionId,
+        competitionScope: match.competitionScope,
         scheduledAt: match.scheduledAt,
         teamName: match.teamName,
         opponentName: match.opponentName,
@@ -393,6 +410,9 @@ async function main() {
     evidence,
     insightCandidates: insightCandidates(players),
     dataAudit: {
+      eligibilityVersion: 1,
+      rawHistoryRows: rawHistoryRows.length,
+      excludedAppearances: eligibility.excludedAppearances,
       queriedHistoryRows: historyRows.length,
       duplicateMatchIdsRemoved: grouped.duplicateMatchIdsRemoved,
       fullStatAppearances,
