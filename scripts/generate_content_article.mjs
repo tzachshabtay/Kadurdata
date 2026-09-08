@@ -6,6 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
+import { shotsOnTargetSummary, shotsOnTargetDetail } from "./content_shot_reconciliation.mjs";
 import {
   buildGameStateContext,
   buildHistoricalAuditContext,
@@ -629,7 +630,7 @@ function shotSummary(shots, teamId) {
   return {
     count: relevant.length,
     goals: relevant.filter((shot) => shot.outcome === "Goal").length,
-    onTarget: relevant.filter((shot) => shot.outcome === "Goal" || shot.outcome === "Saved").length,
+    onTarget: shotsOnTargetSummary(shots, teamId).count,
     xg: round(relevant.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
     xgot: round(relevant.reduce((sum, shot) => sum + Number(shot.xgot ?? 0), 0)),
   };
@@ -784,6 +785,17 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
   ];
   return [
     evidenceItem("match.result", "תוצאת המשחק", "api_matches", 1, [home.score, away.score], { home: { teamNameHe: home.nameHe, score: home.score }, away: { teamNameHe: away.nameHe, score: away.score } }),
+    ...[home, away].flatMap((team) => {
+      const summary = shotsOnTargetSummary(shots, team.teamId);
+      return summary.goalLineBlocks.length ? [evidenceItem(
+        `shots.goal_line_blocks.${team.teamId}`,
+        "בעיטות למסגרת שנחסמו מקו השער",
+        "verified_primary_match_report",
+        summary.goalLineBlocks.length,
+        [summary.count, summary.goalsAndSaves, summary.goalLineBlocks.length, ...summary.goalLineBlocks.map((entry) => entry.minute)],
+        { teamId: team.teamId, teamNameHe: team.nameHe, ...summary },
+      )] : [];
+    }),
     evidenceItem("match.opening_goal", "שער הפתיחה", "api_match_shots", firstGoal ? 1 : 0, firstGoal ? [firstGoal.minute, firstGoal.xg] : [], firstGoal ? {
       teamId: firstGoal.team_id,
       teamNameHe: firstGoal.team_name_he ?? firstGoal.team_name,
@@ -2157,14 +2169,16 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     && qualityReview.numberlessReview?.status === "passed"
     && qualityReview.numberlessReview.articleStillCoherent
     && qualityReview.numberlessReview.issues.length === 0);
+  const homeOnTarget = shotsOnTargetSummary(shots, home.teamId);
+  const awayOnTarget = shotsOnTargetSummary(shots, away.teamId);
   const checks = [
     ["match-ended", "המשחק הסתיים", TERMINAL_MATCH_STATUSES.has(match.status), `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
     ["score-vs-players", "סך שערי השחקנים תואם לתוצאה", verifiedPlayerGoals === home.score + away.score, goalEventsWithoutPlayerMetric.length ? `${playerGoals} שערים אומתו במדדי השחקנים ו-${goalEventsWithoutPlayerMetric.length} באירועי בעיטה עבור שחקנים שמדד השערים שלהם חסר` : `${playerGoals} שערים בשורות השחקנים`],
     ["shots-home", `בעיטות ${home.nameHe} תואמות למפת הבעיטות`, home.stats.team_total_shots === home.shotSummary.count, `${home.shotSummary.count} בעיטות`],
     ["shots-away", `בעיטות ${away.nameHe} תואמות למפת הבעיטות`, away.stats.team_total_shots === away.shotSummary.count, `${away.shotSummary.count} בעיטות`],
-    ["target-home", `בעיטות ${home.nameHe} למסגרת תואמות`, home.stats.team_shots_on_target === home.shotSummary.onTarget, `${home.shotSummary.onTarget} למסגרת`],
-    ["target-away", `בעיטות ${away.nameHe} למסגרת תואמות`, away.stats.team_shots_on_target === away.shotSummary.onTarget, `${away.shotSummary.onTarget} למסגרת`],
+    ["target-home", `בעיטות ${home.nameHe} למסגרת תואמות`, home.stats.team_shots_on_target === homeOnTarget.count, shotsOnTargetDetail(homeOnTarget)],
+    ["target-away", `בעיטות ${away.nameHe} למסגרת תואמות`, away.stats.team_shots_on_target === awayOnTarget.count, shotsOnTargetDetail(awayOnTarget)],
     ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - home.shotSummary.xg) <= Math.max(0.05, home.shotSummary.count * 0.005 + 0.005), `${home.stats.team_expected_goals} מול ${home.shotSummary.xg}; סבילות עיגול לפי ${home.shotSummary.count} בעיטות`],
     ["xg-away", `xG ${away.nameHe} עקבי בין המקורות`, Math.abs(away.stats.team_expected_goals - away.shotSummary.xg) <= Math.max(0.05, away.shotSummary.count * 0.005 + 0.005), `${away.stats.team_expected_goals} מול ${away.shotSummary.xg}; סבילות עיגול לפי ${away.shotSummary.count} בעיטות`],
     ["player-goal-events", "שערי השחקנים תואמים לאירועי הבעיטה", playerGoalEventsMatch, goalEventsWithoutPlayerMetric.length ? `${playerGoals} שערים נבדקו בין מדדי השחקנים לאירועים; ${goalEventsWithoutPlayerMetric.length} אירועי שער נשענו על אירוע הבעיטה משום שמדד השחקן חסר` : `${playerGoals} שערים נבדקו ברמת השחקן`],
