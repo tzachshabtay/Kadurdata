@@ -14,6 +14,7 @@ import {
 } from "./generate_content_article.mjs";
 import { buildReviewPacket, visibleSentenceEntries } from "./content_language_review.mjs";
 import { postprocessVisibleCopy } from "./postprocess_content_article.mjs";
+import { matchPlayerRecapEvidence, validateMatchPlayerRecaps } from "./content_match_player_recaps.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -61,11 +62,12 @@ function requirePostprocessedCopy(authored) {
   const processed = postprocessVisibleCopy(authored);
   if (
     JSON.stringify(processed.editorial) !== JSON.stringify(authored.editorial)
+    || JSON.stringify(processed.playerRecaps) !== JSON.stringify(authored.playerRecaps)
     || JSON.stringify(processed.analysisPlan?.graphics ?? []) !== JSON.stringify(authored.analysisPlan?.graphics ?? [])
   ) {
     throw new Error("Visible article copy has not passed content:postprocess; em dashes must be replaced before editorial and blind review.");
   }
-  const visibleCopy = visibleSentenceEntries(authored.editorial, authored.analysisPlan)
+  const visibleCopy = visibleSentenceEntries(authored.editorial, authored.analysisPlan, authored.playerRecaps)
     .map((entry) => entry.text)
     .join("\n");
   for (const [pattern, guidance] of [
@@ -149,8 +151,8 @@ function requireLanguageReviewArtifacts(authored) {
   if (!Array.isArray(editorialReview.changes) || editorialReview.changes.length < 3) {
     throw new Error("Hebrew editorial review must record at least three concrete changes.");
   }
-  const draftCopy = JSON.stringify(authored.draftEditorial);
-  const finalCopy = JSON.stringify(authored.editorial);
+  const draftCopy = JSON.stringify({ editorial: authored.draftEditorial, playerRecaps: authored.draftPlayerRecaps });
+  const finalCopy = JSON.stringify({ editorial: authored.editorial, playerRecaps: authored.playerRecaps });
   for (const [index, change] of editorialReview.changes.entries()) {
     requireString(change.location, `Editorial change ${index + 1} location`);
     requireString(change.original, `Editorial change ${index + 1} original`);
@@ -206,6 +208,16 @@ async function main() {
   if (authored.qualityReview.issues?.length) throw new Error("Quality review still contains unresolved issues.");
   requireLanguageReviewArtifacts(authored);
 
+  const recapFailures = validateMatchPlayerRecaps(source.players, authored.playerRecaps);
+  if (recapFailures.length) throw new Error(`Player recaps rejected:\n${recapFailures.join("\n")}`);
+  const evidence = authored.playerRecaps
+    ? [...source.evidence, ...matchPlayerRecapEvidence(source.players)]
+    : source.evidence;
+  const evidenceIds = new Set(evidence.map((item) => item.id));
+  for (const recap of authored.playerRecaps ?? []) {
+    if (recap.evidenceIds.some((id) => !evidenceIds.has(id))) throw new Error(`Unknown player recap evidence: ${recap.playerId}`);
+  }
+
   const model = authored.model || "codex-scheduled-task";
   const editorialReview = {
     ...authored.editorialReview,
@@ -228,7 +240,7 @@ async function main() {
     source.teams.away,
     source.players,
     rawShots,
-    source.evidence,
+    evidence,
     authored.editorial,
     editorialReview,
     qualityReview,
@@ -243,6 +255,12 @@ async function main() {
     source.gameStateContext,
     source.mechanismContext,
   );
+  if (authored.playerRecaps) checks.push({
+    id: "match-player-recaps",
+    label: "כל השחקנים ששיחקו מופיעים עם משפט מבוסס נתונים",
+    status: "passed",
+    detail: `${authored.playerRecaps.length} שחקנים; הציונים מוצגים ישירות מנתוני הספק`,
+  });
   const failedChecks = checks.filter((check) => check.status === "failed");
   if (failedChecks.length) {
     throw new Error(`Article rejected by deterministic finalization:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
@@ -270,6 +288,8 @@ async function main() {
     editorialReview,
     qualityReview,
     editorial: authored.editorial,
+    ...(authored.playerRecaps ? { playerRecaps: authored.playerRecaps } : {}),
+    evidence,
     approval: {
       status: "pending",
       approvedAt: null,
@@ -279,8 +299,8 @@ async function main() {
       status: "passed",
       checkedAt: finalizedAt,
       checks,
-      evidenceCount: source.evidence.length,
-      claimCount: claimEntries(authored.editorial).length,
+      evidenceCount: evidence.length,
+      claimCount: claimEntries(authored.editorial).length + (authored.playerRecaps?.length ?? 0),
       sourceViews: source.factCheck.sourceViews,
     },
   };

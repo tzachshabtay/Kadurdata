@@ -50,6 +50,7 @@ function visibleSentenceEntries(editorial, analysisPlan, playerRecaps = []) {
     appendSentences(entries, `editorial.takeaways.${index}`, takeaway.text);
   });
   playerRecaps.forEach((recap, index) => {
+    if (recap.nameHe) appendSentences(entries, `playerRecaps.${index}.nameHe`, recap.nameHe);
     appendSentences(entries, `playerRecaps.${index}.text`, recap.text);
   });
   appendSentences(entries, "editorial.conclusion", editorial?.conclusion);

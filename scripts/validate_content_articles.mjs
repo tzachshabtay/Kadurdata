@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildReviewPacket } from "./content_language_review.mjs";
+import { matchPlayerRecapEvidence, validateMatchPlayerRecaps } from "./content_match_player_recaps.mjs";
 import {
   AWKWARD_FOOTBALL_COPY_PATTERNS,
   mentionsPlayerByFullOrIntroducedShortName,
@@ -33,7 +34,7 @@ function claims(article) {
     { text: article.editorial.dek, evidenceIds: article.editorial.dekEvidenceIds },
     ...article.editorial.sections.flatMap((section) => section.paragraphs),
     ...article.editorial.takeaways,
-    ...(article.kind === "legionnaire_weekly" ? (article.playerRecaps ?? []).map((recap) => ({ text: recap.text, evidenceIds: recap.evidenceIds })) : []),
+    ...(article.playerRecaps ?? []).map((recap) => ({ text: recap.text, evidenceIds: recap.evidenceIds })),
     { text: article.editorial.conclusion, evidenceIds: article.editorial.conclusionEvidenceIds },
   ];
 }
@@ -105,10 +106,17 @@ function validateArticle(article, filename) {
     schemaVersion: 2,
     draftEditorial: null,
     editorial: article.editorial,
-    ...(article.kind === "legionnaire_weekly" ? { playerRecaps: article.playerRecaps } : {}),
+    ...(Array.isArray(article.playerRecaps) ? { playerRecaps: article.playerRecaps } : {}),
     analysisPlan: article.analysisPlan,
   });
   if (article.editorialReview?.finalHash !== packet.finalHash) fail("editorial review hash does not match final copy");
+  if (article.kind === "match_review" && article.playerRecaps !== undefined) {
+    validateMatchPlayerRecaps(article.players, article.playerRecaps).forEach(fail);
+    for (const expected of matchPlayerRecapEvidence(article.players)) {
+      const actual = article.evidence.find((item) => item.id === expected.id);
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) fail(`Player recap evidence differs from the player snapshot: ${expected.id}`);
+    }
+  }
   if (article.qualityReview?.reviewedHash !== packet.finalHash) fail("blind review hash does not match final copy");
   if (article.qualityReview?.numberlessHash !== packet.numberlessHash) fail("blind review hash does not match numberless copy");
   const expectedSentences = new Map(packet.sentences.map((entry) => [entry.location, entry.text]));
@@ -390,7 +398,11 @@ async function main() {
   console.log(`${publishedCount} approved article(s) passed validation; ${pendingCount} candidate(s) remain unpublished.`);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+export { validateArticle };
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

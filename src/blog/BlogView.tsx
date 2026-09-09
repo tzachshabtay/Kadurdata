@@ -248,41 +248,51 @@ function PlayerSpotlight({ article, spec }: { article: MatchReviewArticle; spec:
 function ShotMap({ article, spec }: { article: MatchReviewArticle; spec: MatchArticleGraphicSpec }) {
   const outcomeHe: Record<string, string> = { Goal: "שער", Saved: "נעצרה", Missed: "החטאה", Blocked: "נחסמה" };
   const colors = graphicTeamColors(article);
+  // Project normalized event coordinates onto a 105 × 68 m pitch. Extend the
+  // attacking half for unusually long shots instead of pinning them to an edge.
+  const depth = Math.max(52.5, ...article.shots.map((shot) => (100 - shot.x) * 1.05 + 1.5));
   return (
     <figure className="story-graphic shot-map-graphic">
       <figcaption>
         <div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div>
       </figcaption>
       <div className="article-shot-layout">
-        <div className="article-shot-pitch" aria-label="מפת בעיטות">
-          <span className="article-penalty-box" />
-          <span className="article-six-yard-box" />
-          <span className="article-goal" />
-          <span className="article-penalty-spot" />
+        <svg className="article-shot-pitch" viewBox={`-2 -3 72 ${depth + 5}`} aria-label="מפת בעיטות" role="group">
+          <g aria-hidden="true">
+            <rect width="68" height={depth} fill="#1d4537" />
+            {Array.from({ length: Math.ceil(depth / 5.25) }, (_, index) => (
+              <rect key={index} y={index * 5.25} width="68" height={Math.min(5.25, depth - index * 5.25)} fill={index % 2 ? "#234c3e" : "#1d4537"} />
+            ))}
+            <g className="article-pitch-lines">
+              <rect width="68" height={depth} />
+              <path d="M13.84 0 V16.5 H54.16 V0 M24.84 0 V5.5 H43.16 V0" />
+              <path d="M26.69 16.5 A9.15 9.15 0 0 0 41.31 16.5" />
+              <path d="M0 52.5 H68 M24.85 52.5 A9.15 9.15 0 0 1 43.15 52.5" />
+              <path d="M30.34 0 V-2.44 H37.66 V0" className="article-pitch-goal" />
+            </g>
+            <circle cx="34" cy="11" r="0.25" fill="#b0c2b7" />
+            <circle cx="34" cy="52.5" r="0.25" fill="#b0c2b7" />
+          </g>
           {article.shots.map((shot) => {
-            const size = Math.max(8, 8 + Math.sqrt(Math.max(0, shot.xg ?? 0)) * 20);
-            const top = Math.max(3, Math.min(96, ((100 - shot.x) / 30) * 100));
-            const left = Math.max(3, Math.min(97, shot.y));
+            const radius = 0.55 + Math.sqrt(Math.max(0, shot.xg ?? 0)) * 1.25;
             const isHome = shot.teamId === article.teams.home.teamId;
             return (
-              <span
+              <circle
                 aria-label={`${goalLabel(shot)}, ${outcomeHe[shot.outcome] ?? shot.outcome}, xG ${shot.xg}`}
                 className={`article-shot ${shot.outcome === "Goal" ? "goal" : ""}`}
                 key={shot.eventId}
                 role="img"
-                style={{
-                  top: `${top}%`,
-                  left: `${left}%`,
-                  width: size,
-                  height: size,
-                  "--shot-color": isHome ? colors.home : colors.away,
-                } as CSSProperties}
+                cx={shot.y * 0.68}
+                cy={(100 - shot.x) * 1.05}
+                r={radius}
+                style={{ "--shot-color": isHome ? colors.home : colors.away } as CSSProperties}
                 tabIndex={0}
-                title={`${goalLabel(shot)} · ${outcomeHe[shot.outcome] ?? shot.outcome} · xG ${shot.xg}`}
-              />
+              >
+                <title>{`${goalLabel(shot)} · ${outcomeHe[shot.outcome] ?? shot.outcome} · xG ${shot.xg}`}</title>
+              </circle>
             );
           })}
-        </div>
+        </svg>
         <div className="shot-map-legend">
           <span><i style={{ background: colors.home }} />{article.teams.home.nameHe}<strong>{article.teams.home.shotSummary.count}</strong></span>
           <span><i style={{ background: colors.away }} />{article.teams.away.nameHe}<strong>{article.teams.away.shotSummary.count}</strong></span>
@@ -481,6 +491,67 @@ function WeeklyPlayerRecaps({ article }: { article: LegionnaireWeeklyArticle }) 
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function MatchPlayerRatings({ article }: { article: MatchReviewArticle }) {
+  if (!article.playerRecaps?.length) return null;
+  const recaps = new Map(article.playerRecaps.map((recap) => [recap.playerId, recap]));
+  const colors = graphicTeamColors(article);
+  const roles: Record<string, string> = { Goalkeeper: "שוער", Defender: "הגנה", Midfielder: "קישור", Attacker: "התקפה" };
+  const sourceRating = (value: number | null | undefined) => typeof value === "number" && Number.isFinite(value) ? value : null;
+  return (
+    <section className="match-player-ratings" aria-labelledby="match-player-ratings-title">
+      <header className="match-player-ratings-heading">
+        <span>המשחק של כל אחד</span>
+        <h2 id="match-player-ratings-title">הציונים והסיפור שמאחוריהם</h2>
+        <p>ציוני 365Scores ומשפט מהנתונים לכל מי ששיחק, מהציון הגבוה לנמוך בכל קבוצה.</p>
+      </header>
+      <div className="match-player-team-grid">
+        {(["home", "away"] as const).map((side) => {
+          const team = article.teams[side];
+          const players = article.players.filter((player) => player.teamId === team.teamId && (player.minutes ?? 0) > 0)
+            .sort((left, right) => {
+              const leftRating = sourceRating(left.metrics.rating_365) ?? -1;
+              const rightRating = sourceRating(right.metrics.rating_365) ?? -1;
+              return rightRating - leftRating || (right.minutes ?? 0) - (left.minutes ?? 0) || left.nameHe.localeCompare(right.nameHe, "he");
+            });
+          return (
+            <section className="match-player-team" key={team.teamId} style={{ "--team-accent": colors[side] } as CSSProperties} aria-label={team.nameHe}>
+              <header>
+                {team.logoUrl && <img src={team.logoUrl} alt="" loading="lazy" />}
+                <div><h3>{team.nameHe}</h3><span>{players.length} שחקנים על המגרש</span></div>
+              </header>
+              <ol className="match-player-cards">
+                {players.map((player) => {
+                  const recap = recaps.get(player.playerId);
+                  if (!recap) return null;
+                  const rating = sourceRating(player.metrics.rating_365);
+                  const hasRating = rating !== null;
+                  const tone = !hasRating ? "unavailable" : rating >= 8 ? "excellent" : rating >= 7 ? "good" : rating >= 6 ? "average" : "low";
+                  return (
+                    <li className={`match-player-card ${tone}`} key={player.playerId}>
+                      <div className="match-player-card-heading">
+                        <div>
+                          <h4>{recap.nameHe}</h4>
+                          <span>{roles[player.roleGroup] ?? player.positionName} · {numeric(player.minutes)} דקות · {player.lineupStatus === "Starting" ? "הרכב" : "מחליף"}</span>
+                        </div>
+                        <div className="match-player-score" aria-label={hasRating ? `ציון ${numeric(rating, 1)}` : "ללא ציון במקור"}>
+                          <strong>{hasRating ? numeric(rating, 1) : "ללא ציון"}</strong>
+                          {hasRating && <span className="match-player-score-track" aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(10, rating)) * 10}%` }} /></span>}
+                        </div>
+                      </div>
+                      <p>{recap.text}</p>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          );
+        })}
+      </div>
+      <p className="match-player-ratings-note">ללא ציון: הספק לא העניק ציון להופעה. דקות המשחק מוצגות לפי נתוני הספק.</p>
     </section>
   );
 }
@@ -713,6 +784,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           {article.kind === "legionnaire_weekly" && <WeeklyPlayerRecaps article={article} />}
 
           <blockquote className="story-conclusion">{editorial.conclusion}</blockquote>
+          {isMatchReviewArticle(article) && <MatchPlayerRatings article={article} />}
           <FactCheckPanel article={article} />
 
           {isMatchReviewArticle(article) && (

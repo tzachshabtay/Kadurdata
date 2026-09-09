@@ -440,6 +440,7 @@ export type MatchReviewArticle = {
   tags: ArticleTag[];
   aiDisclosure: string;
   players: ArticlePlayer[];
+  playerRecaps?: MatchPlayerRecap[];
   playerSpotlight: ArticlePlayer[];
   heatmaps: ArticleHeatmap[];
   spatialProfile: ArticleSpatialProfile | null;
@@ -459,6 +460,14 @@ export type MatchReviewArticle = {
   editorial: ArticleEditorial;
   evidence: ArticleEvidence[];
   factCheck: ArticleFactCheck;
+};
+
+export type MatchPlayerRecap = {
+  playerId: string;
+  nameHe: string;
+  text: string;
+  evidenceIds: string[];
+  statCodes: string[];
 };
 
 export type LegionnaireWeeklyMatch = {
