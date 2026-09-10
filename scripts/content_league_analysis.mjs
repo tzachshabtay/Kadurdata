@@ -88,11 +88,61 @@ export function prepareLeagueSource(raw, { slug, generatedAt = new Date().toISOS
   return { schemaVersion: 1, kind: "league_analysis", slug, generatedAt, generation: { mode: "codex_skill_workbench", pipelineVersion: LEAGUE_PIPELINE_VERSION }, ...deriveLeagueData(snapshot), snapshot, snapshotHash: snapshotHash(snapshot) };
 }
 
+// Club comparisons reuse the sealed appearance snapshot. Rates use player minutes;
+// shares use ALL of a club's appearances, including roles outside the chart.
+export function deriveLeagueClubs(snapshot, teamNames, playerNames = {}) {
+  const ids = [...new Set(snapshot.matches.flatMap(m => [m.homeTeamId, m.awayTeamId]))].sort();
+  assert(teamNames && Object.keys(teamNames).length === ids.length && ids.every(id => typeof teamNames[id] === "string" && teamNames[id].trim()), "Provide a verified name for every club.");
+  const summarize = rows => {
+    const totals = Object.fromEntries(LEAGUE_METRICS.map(code => [code, rows.reduce((sum, a) => sum + a.metrics[code], 0)]));
+    const groups = Object.entries(LEAGUE_ROLES).map(([id, [labelHe, positions]]) => {
+      const selected = rows.filter(a => positions.includes(a.position));
+      const minutes = selected.reduce((sum, a) => sum + a.minutes, 0);
+      return { id, labelHe, minutes, appearances: selected.length, metrics: Object.fromEntries(LEAGUE_METRICS.map(code => {
+        const total = selected.reduce((sum, a) => sum + a.metrics[code], 0);
+        return [code, { total, per90: minutes ? rounded(total * 90 / minutes, 2) : null, per90OneDecimal: minutes ? rounded(total * 90 / minutes, 1) : null, teamShare: totals[code] ? rounded(total * 100 / totals[code], 1) : null }];
+      })) };
+    });
+    return { totals, groups };
+  };
+  const clubs = ids.map(teamId => {
+    const rows = snapshot.appearances.filter(a => a.teamId === teamId);
+    const matchIds = snapshot.matches.filter(m => [m.homeTeamId, m.awayTeamId].includes(teamId)).map(m => m.matchId);
+    return { teamId, labelHe: teamNames[teamId], matches: matchIds.length, ...summarize(rows), rest: summarize(snapshot.appearances.filter(a => a.teamId !== teamId)), byMatch: matchIds.map(matchId => ({ matchId, ...summarize(rows.filter(a => a.matchId === matchId)) })) };
+  });
+  const evidence = clubs.flatMap(c => {
+    const groupEvidence = (groups, prefix) => groups.map(g => ({ id: `${prefix}.${g.id}`, label: `${prefix.startsWith("rest.") ? "יתר הליגה ללא " : ""}${c.labelHe} · ${g.labelHe}`, sourceView: "api_match_player_stats", sourceRows: g.appearances * LEAGUE_METRICS.length, values: [90, 100, g.minutes, g.appearances, ...Object.values(g.metrics).flatMap(m => [m.total, m.per90, m.per90OneDecimal, m.teamShare]).filter(v => v !== null)], context: g }));
+    return [{ id: `club.${c.teamId}`, label: c.labelHe, sourceView: "api_match_player_stats", sourceRows: snapshot.appearances.filter(a => a.teamId === c.teamId).length * LEAGUE_METRICS.length, values: [c.matches, ...Object.values(c.totals)], context: c }, ...groupEvidence(c.groups, `club.${c.teamId}.position`), ...groupEvidence(c.rest.groups, `rest.${c.teamId}.position`), ...c.byMatch.flatMap(m => groupEvidence(m.groups, `club.${c.teamId}.match.${m.matchId}.position`))];
+  });
+  const players = Object.entries(playerNames).map(([playerId, nameHe]) => {
+    const rows = snapshot.appearances.filter(a => a.playerId === playerId);
+    assert(rows.length && typeof nameHe === "string" && nameHe.trim(), "Unknown comparison player.");
+    const minutes = rows.reduce((sum, a) => sum + a.minutes, 0);
+    const summary = summarize(rows);
+    const metrics = Object.fromEntries(LEAGUE_METRICS.map(code => [code, { total: summary.totals[code], per90: rounded(summary.totals[code] * 90 / minutes, 2) }]));
+    return { playerId, nameHe, minutes, appearances: rows.length, metrics, groups: summary.groups, byMatch: rows };
+  });
+  evidence.push(...players.map(p => ({ id: `league.player.${p.playerId}`, label: p.nameHe, sourceView: "api_match_player_stats", sourceRows: p.appearances * LEAGUE_METRICS.length, values: [90, p.minutes, p.appearances, ...Object.values(p.metrics).flatMap(m => [m.total, m.per90]), ...p.byMatch.flatMap(a => [a.minutes, ...Object.values(a.metrics)])], context: p })));
+  return { comparison: { teamNames, playerNames, clubs, players }, evidence };
+}
+
+export function addLeagueClubComparison(source, teamNames, playerNames = {}) {
+  assertLeagueData(source);
+  assert(!source.clubComparison, "Preserve an existing club comparison source.");
+  const { comparison, evidence } = deriveLeagueClubs(source.snapshot, teamNames, playerNames);
+  return { ...source, clubComparison: comparison, evidence: [...source.evidence, ...evidence] };
+}
+
 export function assertLeagueData(article) {
   assert(article.kind === "league_analysis" && article.schemaVersion === 1, "Unsupported league source schema.");
   assert(/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(article.slug), "Invalid league article slug.");
   assert(article.snapshotHash === snapshotHash(article.snapshot), "League snapshot hash changed.");
   const actual = deriveLeagueData(article.snapshot);
+  if (article.clubComparison) {
+    const { comparison, evidence } = deriveLeagueClubs(article.snapshot, article.clubComparison.teamNames, article.clubComparison.playerNames);
+    assert(hashJson(comparison) === hashJson(article.clubComparison), "League club comparison differs from raw snapshot calculations.");
+    actual.evidence.push(...evidence);
+  }
   for (const key of ["period","summary","groups","evidence"]) assert(hashJson(actual[key]) === hashJson(article[key]), `League ${key} differs from raw snapshot calculations.`);
   return actual;
 }
@@ -131,12 +181,20 @@ export function assertLeagueCopy(source, authored, { draftRequired = false } = {
   assert(plan.graphics?.length >= 2 && plan.graphics.length <= 4, "Select 2–4 league graphics.");
   const groups = new Set(source.groups.map(g=>g.id));
   for (const g of plan.graphics) {
-    assert(g.type === "league_role_comparison" && ["grouped","panels"].includes(g.layout) && g.unit === "per90", "Unsupported league graphic.");
+    const clubGraphic = g.type === "league_club_comparison";
+    assert(clubGraphic ? g.layout === "matrix" && ["per90", "team_share"].includes(g.unit) : g.type === "league_role_comparison" && ["grouped","panels"].includes(g.layout) && g.unit === "per90", "Unsupported league graphic.");
     assert(g.titleHe?.trim() && g.subtitleHe?.trim() && !/\d/.test(g.titleHe+g.subtitleHe), "Graphic titles/subtitles must be numberless.");
     assert(insights.has(g.placementInsightId), "Unknown graphic placement insight.");
-    assert(g.groups?.length >= 2 && g.groups.length <= 8 && new Set(g.groups).size === g.groups.length && g.groups.every(id=>groups.has(id)), "Unknown or duplicate graphic group.");
+    assert(g.groups?.length >= (clubGraphic ? 1 : 2) && g.groups.length <= 8 && new Set(g.groups).size === g.groups.length && g.groups.every(id=>groups.has(id)), "Unknown or duplicate graphic group.");
     assert(g.metrics?.length >= 1 && g.metrics.length <= 3 && new Set(g.metrics).size === g.metrics.length && g.metrics.every(code=>LEAGUE_METRICS.includes(code)), "Unsupported graphic metric.");
-    assert(g.evidenceIds?.every(id=>evidence.has(id)) && g.groups.every(id=>g.evidenceIds.includes(`position.${id}`)), "Graphic missing its groups' evidence.");
+    if (clubGraphic) {
+      const clubs = articleClubs(source);
+      assert(g.clubs?.length >= 1 && g.clubs.length <= 14 && new Set(g.clubs).size === g.clubs.length && g.clubs.every(id => clubs.has(id)), "Unknown or duplicate graphic club.");
+      assert(!g.highlightClubId || g.clubs.includes(g.highlightClubId), "Highlight must be a displayed club.");
+      assert(!g.includeRest || g.clubs.length === 1, "Rest comparison requires one focal club.");
+      assert(!g.groups.includes("fullbacks") || !g.groups.some(id => ["left_back", "right_back"].includes(id)), "Club chart roles must not overlap.");
+      assert(g.evidenceIds?.every(id => evidence.has(id)) && g.clubs.every(id => g.groups.every(role => g.evidenceIds.includes(`club.${id}.position.${role}`) && (!g.includeRest || g.evidenceIds.includes(`rest.${id}.position.${role}`)))), "Graphic missing club or rest evidence.");
+    } else assert(g.evidenceIds?.every(id=>evidence.has(id)) && g.groups.every(id=>g.evidenceIds.includes(`position.${id}`)), "Graphic missing its groups' evidence.");
   }
   const packet = buildReviewPacket({ ...authored, draftEditorial: authored.draftEditorial ?? null });
   assert(!packet.sentences.some(s=>s.text.includes("—")), "Run content:postprocess before review.");
@@ -153,6 +211,8 @@ export function assertLeagueCopy(source, authored, { draftRequired = false } = {
   if (draftRequired) assert(authored.draftEditorial && er.draftHash === packet.draftHash, "Draft hash mismatch.");
   return { claims: claims.length, sentences: packet.sentences.length };
 }
+
+const articleClubs = source => new Set(source.clubComparison?.clubs.map(c => c.teamId) ?? []);
 
 export function finalizeLeagueArticle(source, authored, now = new Date().toISOString()) {
   assert(source.generation?.mode === "codex_skill_workbench" && source.generation.pipelineVersion === LEAGUE_PIPELINE_VERSION, "Source is not a prepared league workbench.");

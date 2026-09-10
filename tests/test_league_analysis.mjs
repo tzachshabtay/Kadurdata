@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { prepareLeagueSource, finalizeLeagueArticle, assertLeagueData, assertLeagueCopy, LEAGUE_METRICS } from "../scripts/content_league_analysis.mjs";
+import { prepareLeagueSource, finalizeLeagueArticle, assertLeagueData, assertLeagueCopy, addLeagueClubComparison, LEAGUE_METRICS } from "../scripts/content_league_analysis.mjs";
 import { buildReviewPacket } from "../scripts/content_language_review.mjs";
 import { validateArticle } from "../scripts/validate_content_articles.mjs";
 
@@ -53,4 +53,44 @@ test("reject omitted reviews, duplicate coverage and incorrect numeric claims",(
   const source=prepareLeagueSource(fixture(),{slug:"fixture"});let a=authored(source);a.qualityReview.checks.storyValue=false;assert.throws(()=>finalizeLeagueArticle(source,a),/incomplete/);
   a=authored(source);a.qualityReview.sentenceReviews[1]=a.qualityReview.sentenceReviews[0];assert.throws(()=>finalizeLeagueArticle(source,a),/every exact/);
   a=authored(source);a.editorial.sections[0].paragraphs=[{text:"המגנים רשמו 99 מסירות.",evidenceIds:["position.fullbacks"]}];assert.throws(()=>finalizeLeagueArticle(source,a),/Unsupported number/);
+});
+
+test("club comparisons exclude the focal club and use all roles in share denominators", () => {
+  const original = prepareLeagueSource(fixture(), {slug:"fixture"});
+  const source = addLeagueClubComparison(original, {home:"בית",away:"חוץ"}, {back:"מגן"});
+  assert.equal(original.clubComparison, undefined);
+  assert.equal(source.snapshotHash, original.snapshotHash);
+  const home = source.clubComparison.clubs.find(c => c.teamId === "home");
+  const back = home.groups.find(g => g.id === "left_back");
+  assert.equal(back.metrics.key_passes.per90, 1.05);
+  assert.equal(back.metrics.key_passes.teamShare, 25); // 1 of all 4 team key passes.
+  assert.equal(home.rest.groups.find(g => g.id === "centre_forwards").metrics.key_passes.per90, 2);
+  assert.equal(home.groups.find(g => g.id === "centre_forwards").metrics.key_passes.per90, null);
+  assert.equal(home.byMatch[0].groups.find(g => g.id === "left_back").minutes, 86);
+  assert.equal(source.evidence.find(e => e.id === "league.player.back").context.minutes, 86);
+  assert.doesNotThrow(() => assertLeagueData(source));
+});
+
+test("club comparison tampering cannot survive source validation", () => {
+  const source = addLeagueClubComparison(prepareLeagueSource(fixture(), {slug:"fixture"}), {home:"בית",away:"חוץ"});
+  for (const mutate of [s => s.clubComparison.clubs[0].rest.groups[0].metrics.key_passes.per90 = 88, s => s.evidence.at(-1).values.push(99)]) {
+    const changed = structuredClone(source); mutate(changed);
+    assert.throws(() => assertLeagueData(changed), /differs/);
+  }
+  assert.throws(() => addLeagueClubComparison(prepareLeagueSource(fixture(), {slug:"fixture"}), {home:"בית"}), /every club/);
+});
+
+test("club graphics require their own evidence, a single rest baseline and nonoverlapping roles", () => {
+  const source = addLeagueClubComparison(prepareLeagueSource(fixture(), {slug:"fixture"}), {home:"בית",away:"חוץ"});
+  const make = () => {
+    const a = authored(source);
+    a.analysisPlan.graphics[0] = {...a.analysisPlan.graphics[0],type:"league_club_comparison",layout:"matrix",unit:"team_share",clubs:["home"],groups:["fullbacks","wing_forwards"],evidenceIds:["club.home.position.fullbacks","club.home.position.wing_forwards"]};
+    return a;
+  };
+  let a=make();a.analysisPlan.graphics[0].clubs=["unknown"];
+  assert.throws(()=>assertLeagueCopy(source,a),/graphic club/);
+  a=make();a.analysisPlan.graphics[0].includeRest=true;
+  assert.throws(()=>assertLeagueCopy(source,a),/rest evidence/);
+  a=make();a.analysisPlan.graphics[0].groups=["fullbacks","left_back"];
+  assert.throws(()=>assertLeagueCopy(source,a),/not overlap/);
 });

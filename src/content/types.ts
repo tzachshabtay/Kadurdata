@@ -337,15 +337,18 @@ export type LegionnaireArticleGraphicSpec = {
 
 export type LeagueArticleGraphicSpec = {
   id: string;
-  type: "league_role_comparison";
-  layout: "grouped" | "panels";
+  type: "league_role_comparison" | "league_club_comparison";
+  layout: "grouped" | "panels" | "matrix";
   titleHe: string;
   subtitleHe: string;
   placementInsightId: string;
   evidenceIds: string[];
   groups: string[];
   metrics: string[];
-  unit: "per90";
+  unit: "per90" | "team_share";
+  clubs?: string[];
+  highlightClubId?: string;
+  includeRest?: boolean;
 };
 
 export type ArticleGraphicSpec = MatchArticleGraphicSpec | LegionnaireArticleGraphicSpec | LeagueArticleGraphicSpec;
@@ -580,6 +583,16 @@ export type LeagueAnalysisArticle = {
     uniquePlayers: number;
     metrics: Record<string, { total: number; per90: number; per90OneDecimal: number; coverage: number }>;
   }>;
+  clubComparison?: {
+    teamNames: Record<string, string>;
+    clubs: Array<{
+      teamId: string;
+      labelHe: string;
+      matches: number;
+      groups: LeagueClubRole[];
+      rest: { groups: LeagueClubRole[] };
+    }>;
+  };
   tags: ArticleTag[];
   aiDisclosure: string;
   analysisPlan: { thesis: string; rankedInsights: Array<{ id: string; evidenceIds: string[] }>; graphics: LeagueArticleGraphicSpec[] };
@@ -588,6 +601,14 @@ export type LeagueAnalysisArticle = {
   qualityReview: ArticleQualityReview;
   factCheck: ArticleFactCheck;
   evidence: ArticleEvidence[];
+};
+
+export type LeagueClubRole = {
+  id: string;
+  labelHe: string;
+  minutes: number;
+  appearances: number;
+  metrics: Record<string, { total: number; per90: number | null; teamShare: number | null }>;
 };
 
 export type ContentArticle = MatchReviewArticle | LegionnaireWeeklyArticle | LeagueAnalysisArticle;

@@ -16,8 +16,57 @@ export function LeagueSummaryCard({ article }: { article: LeagueAnalysisArticle 
       <span><small>קבוצות</small><strong>{article.summary.teams}</strong></span>
       <span><small>מחזורים</small><strong>{article.summary.rounds.length}</strong></span>
     </div>
-    <p className="league-summary-note">השוואה ל־90 דקות שחקן, לפי העמדה הרשומה בכל הופעה.</p>
+    <p className="league-summary-note">{article.clubComparison ? "מי מוסר לפני הבעיטה, ומי בועט? התפקידים לפי העמדה הרשומה בכל הופעה." : "השוואה ל־90 דקות שחקן, לפי העמדה הרשומה בכל הופעה."}</p>
   </aside>;
+}
+
+export function LeagueClubGraphic({ article, spec }: { article: LeagueAnalysisArticle; spec: LeagueArticleGraphicSpec }) {
+  const clubs = (spec.clubs ?? []).map(id => article.clubComparison?.clubs.find(c => c.teamId === id)).filter(c => c !== undefined);
+  const rows = clubs.flatMap(c => [{ id: c.teamId, label: c.labelHe, groups: c.groups }, ...(spec.includeRest ? [{ id: `rest:${c.teamId}`, label: "יתר הליגה", groups: c.rest.groups }] : [])]);
+  const unit = spec.unit === "team_share" ? "teamShare" : "per90";
+  const format = (value: number | null | undefined) => value == null ? "-" : spec.unit === "team_share" ? `${value.toFixed(1)}%` : value.toFixed(2);
+  if (rows.length === 1) {
+    const groups = spec.groups.map(id => rows[0].groups.find(g => g.id === id)).filter(g => g !== undefined);
+    const scale = spec.unit === "team_share" ? 100 : Math.max(1, Math.ceil(Math.max(...groups.flatMap(g => spec.metrics.map(m => g.metrics[m][unit] ?? 0)))));
+    return <figure className="story-graphic league-club-graphic" aria-label={spec.titleHe}>
+      <figcaption><div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div></figcaption>
+      <div className="league-graphic-unit">{rows[0].label} · {spec.unit === "team_share" ? "חלקה של העמדה בסך פעולות הקבוצה" : "ל־90 דקות שחקן"}</div>
+      <div className="league-role-panels"><div className="league-role-panel">
+        <div className="league-role-legend">{spec.metrics.map(m => <span key={m}><i style={{background: colors[m]}} />{labels[m]}</span>)}</div>
+        {groups.map(g => <div className="league-role-group" key={g.id}><strong>{g.labelHe}</strong>{spec.metrics.map(m => <div className="league-role-bar-row" key={m} aria-label={`${g.labelHe}: ${format(g.metrics[m][unit])} ${labels[m]}`}>
+          <span className="league-role-bar-track" aria-hidden="true"><i style={{width: `${(g.metrics[m][unit] ?? 0) / scale * 100}%`, background: colors[m]}} /></span><bdi>{format(g.metrics[m][unit])}</bdi>
+        </div>)}</div>)}
+        <div className="league-role-axis" aria-hidden="true"><bdi>0</bdi><bdi>{scale}{spec.unit === "team_share" ? "%" : ""}</bdi></div>
+      </div></div>
+      <p className="league-club-note">{spec.unit === "team_share" ? "האחוזים מחושבים מכל פעולות הקבוצה, גם בעמדות שאינן מוצגות." : "העמדות הן אלה שנרשמו בכל הופעה."}</p>
+    </figure>;
+  }
+  return <figure className="story-graphic league-club-graphic" aria-label={spec.titleHe}>
+    <figcaption><div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div></figcaption>
+    <div className="league-graphic-unit">{spec.unit === "team_share" ? "חלקה של כל עמדה בסך הפעולות של קבוצתה" : "ל־90 דקות שחקן בעמדה"}</div>
+    {spec.metrics.map(metric => {
+      const max = Math.max(1, ...rows.flatMap(r => spec.groups.map(id => r.groups.find(g => g.id === id)?.metrics[metric]?.[unit] ?? 0)));
+      return <div className="league-club-metric" key={metric}>
+        <strong className="league-club-metric-title">{labels[metric]}</strong>
+        <div className="league-club-table-scroll" tabIndex={0} role="region" aria-label={`${labels[metric]} לפי קבוצה ועמדה`}>
+          <table className="league-club-table">
+            <thead><tr><th scope="col">קבוצה</th>{spec.groups.map(id => <th scope="col" key={id}>{article.groups.find(g => g.id === id)?.labelHe}</th>)}</tr></thead>
+            <tbody>{rows.map(row => <tr key={row.id} className={row.id === spec.highlightClubId ? "highlighted" : ""}>
+              <th scope="row">{row.label}</th>
+              {spec.groups.map(id => {
+                const group = row.groups.find(g => g.id === id);
+                const value = group?.metrics[metric]?.[unit];
+                return <td key={id} title={`${group?.minutes ?? 0} דקות שחקן בעמדה`}>
+                  <span className="league-club-cell" style={{ background: value == null ? undefined : `rgba(61, 197, 183, ${0.06 + value / max * .42})` }}><bdi>{format(value)}</bdi>{spec.groups.length === 1 && <small>{group?.minutes ?? 0} דקות</small>}</span>
+                </td>;
+              })}
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </div>;
+    })}
+    <p className="league-club-note">{spec.unit === "team_share" ? "הצבע מדגיש את הערכים הגבוהים בכל מדד. האחוזים מחושבים מכל פעולות הקבוצה, גם בעמדות שאינן מוצגות." : "הצבע מדגיש את הערכים הגבוהים בכל מדד. מקף מציין שלא נרשמו דקות בעמדה."}{spec.includeRest ? " יתר הליגה מחושב ללא הקבוצה המוצגת." : ""}</p>
+  </figure>;
 }
 
 export function LeagueRoleGraphic({ article, spec }: { article: LeagueAnalysisArticle; spec: LeagueArticleGraphicSpec }) {
