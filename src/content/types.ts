@@ -335,7 +335,20 @@ export type LegionnaireArticleGraphicSpec = {
   playerIds: string[];
 };
 
-export type ArticleGraphicSpec = MatchArticleGraphicSpec | LegionnaireArticleGraphicSpec;
+export type LeagueArticleGraphicSpec = {
+  id: string;
+  type: "league_role_comparison";
+  layout: "grouped" | "panels";
+  titleHe: string;
+  subtitleHe: string;
+  placementInsightId: string;
+  evidenceIds: string[];
+  groups: string[];
+  metrics: string[];
+  unit: "per90";
+};
+
+export type ArticleGraphicSpec = MatchArticleGraphicSpec | LegionnaireArticleGraphicSpec | LeagueArticleGraphicSpec;
 
 export type ArticleAnalysisPlan<TGraphic extends ArticleGraphicSpec = ArticleGraphicSpec> = {
   thesis: { claimHe: string; whyItMattersHe: string; evidenceIds: string[] };
@@ -544,7 +557,40 @@ export type LegionnaireWeeklyArticle = {
   factCheck: ArticleFactCheck;
 };
 
-export type ContentArticle = MatchReviewArticle | LegionnaireWeeklyArticle;
+export type LeagueAnalysisArticle = {
+  schemaVersion: number;
+  kind: "league_analysis";
+  slug: string;
+  language: "he";
+  status: "draft" | "published";
+  generatedAt: string;
+  finalizedAt: string;
+  publishedAt: string | null;
+  approval: ArticleApproval;
+  generation: ArticleGeneration;
+  authorship: ArticleAuthorship;
+  period: { start: string; end: string; seasonName: string; competitionNameHe: string };
+  summary: { matches: number; teams: number; rounds: number[]; appearances: number };
+  groups: Array<{
+    id: string;
+    labelHe: string;
+    positions: string[];
+    minutes: number;
+    appearances: number;
+    uniquePlayers: number;
+    metrics: Record<string, { total: number; per90: number; per90OneDecimal: number; coverage: number }>;
+  }>;
+  tags: ArticleTag[];
+  aiDisclosure: string;
+  analysisPlan: { thesis: string; rankedInsights: Array<{ id: string; evidenceIds: string[] }>; graphics: LeagueArticleGraphicSpec[] };
+  editorial: ArticleEditorial;
+  editorialReview: ArticleEditorialReview;
+  qualityReview: ArticleQualityReview;
+  factCheck: ArticleFactCheck;
+  evidence: ArticleEvidence[];
+};
+
+export type ContentArticle = MatchReviewArticle | LegionnaireWeeklyArticle | LeagueAnalysisArticle;
 
 export function isMatchReviewArticle(article: ContentArticle): article is MatchReviewArticle {
   return article.kind === "match_review";

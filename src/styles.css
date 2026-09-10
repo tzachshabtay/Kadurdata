@@ -6061,3 +6061,20 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* League-wide role comparisons share the blog's review and article layout. */
+.league-summary-note { margin: 18px 0 0; font-size: .9rem; line-height: 1.7; opacity: .8; }
+.league-graphic-unit { color: #aab8b1; margin: 18px 28px; font-size: .85rem; }
+.league-role-panels { display: grid; gap: 28px; padding: 0 28px 28px; }
+.league-role-panels.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.league-role-panel { min-width: 0; }
+.league-role-legend { display: flex; flex-wrap: wrap; gap: 12px 22px; margin-bottom: 20px; font-size: .85rem; }
+.league-role-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.league-role-legend i { width: 11px; height: 11px; border-radius: 3px; }
+.league-role-group { margin: 0 0 22px; }
+.league-role-group > strong { display: block; margin-bottom: 8px; font-size: .95rem; }
+.league-role-bar-row { display: grid; grid-template-columns: minmax(0, 1fr) 3.3em; align-items: center; gap: 10px; direction: ltr; margin: 6px 0; }
+.league-role-bar-row bdi { font-variant-numeric: tabular-nums; font-size: .9rem; }
+.league-role-bar-track { display: block; height: 18px; background: #2b3530; border-radius: 4px; overflow: hidden; }
+.league-role-bar-track i { display: block; height: 100%; border-radius: inherit; }
+.league-role-axis { display: flex; justify-content: space-between; direction: ltr; margin-right: calc(3.3em + 10px); font-size: .8rem; color: #aab8b1; }
+@media (max-width: 620px) { .league-role-panels.split { grid-template-columns: minmax(0, 1fr); } }

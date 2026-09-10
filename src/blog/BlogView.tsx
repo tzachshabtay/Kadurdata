@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { articles } from "../content/articles";
+import { LeagueSummaryCard, LeagueRoleGraphic } from "./LeagueAnalysis";
 import {
   isMatchReviewArticle,
   type ArticleGraphicSpec,
@@ -606,6 +607,7 @@ function LegionnaireGraphic({ article, spec }: { article: LegionnaireWeeklyArtic
 }
 
 function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
+  if (article.kind === "league_analysis") return spec.type === "league_role_comparison" ? <LeagueRoleGraphic article={article} spec={spec} /> : null;
   if (article.kind === "legionnaire_weekly") {
     if (spec.type === "legionnaire_workload" || spec.type === "legionnaire_metric" || spec.type === "legionnaire_trend") {
       return <LegionnaireGraphic article={article} spec={spec} />;
@@ -623,6 +625,7 @@ function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: Arti
 function FactCheckPanel({ article }: { article: ContentArticle }) {
   const visibleCheckIds = article.kind === "match_review"
     ? ["score-vs-events", "analysis-plan", "game-state-story", "number-discipline", "graphic-plan", "editorial-review", "numeric-claims"]
+    : article.kind === "league_analysis" ? ["league-window", "metric-coverage", "normalization", "graphic-plan", "editorial-review", "numberless-story", "numeric-claims"]
     : ["weekly-window", "deduplication", "analysis-plan", "sample-discipline", "player-coverage", "player-cards", "editorial-review", "numeric-claims"];
   const visibleChecks = visibleCheckIds
     .map((id) => article.factCheck.checks.find((check) => check.id === id))
@@ -667,7 +670,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           && candidate.status === "draft"
           && candidate.approval?.status === "pending"
           && candidate.generation.mode === "codex_skill_candidate"
-          && ["match-review-v23", "legionnaire-weekly-v2"].includes(candidate.generation.pipelineVersion)
+          && ["match-review-v23", "legionnaire-weekly-v2", "league-analysis-v1"].includes(candidate.generation.pipelineVersion)
           && candidate.factCheck.status === "passed"
           && candidate.qualityReview.status === "passed"
         ))
@@ -695,12 +698,18 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
   const article = activeTagId && !selectedArticle?.tags?.some((tag) => tag.id === activeTagId)
     ? filteredArticles[0]
     : selectedArticle;
+  useEffect(() => {
+    if (!reviewMode || !article) return;
+    const previousTitle = document.title;
+    document.title = `${article.editorial.headline} | כדורדאטה`;
+    return () => { document.title = previousTitle; };
+  }, [reviewMode, article?.editorial.headline]);
   if (!article) return <div className="story-empty">{reviewMode && reviewCandidates === null ? "טוען טיוטות לבדיקה…" : reviewMode ? "אין טיוטות מאושרות לבדיקה מקומית." : "אין עדיין כתבות שעמדו בבדיקות הפרסום."}</div>;
   const { editorial } = article;
   const articleDate = article.kind === "match_review" ? article.match.scheduledAt : article.period.end;
   const archiveMeta = (item: ContentArticle) => item.kind === "match_review"
     ? `${item.match.competitionNameHe} · ${hebrewDate.format(new Date(item.match.scheduledAt))}`
-    : `לגיונרים · ${hebrewDate.format(new Date(item.period.end))}`;
+    : `${item.kind === "league_analysis" ? "ניתוח ליגה" : "לגיונרים"} · ${hebrewDate.format(new Date(item.period.end))}`;
   const graphicsBySection = editorial.sections.map((section, index) => article.analysisPlan.graphics.filter((graphic) => (
     section.insightIds.includes(graphic.placementInsightId)
     && editorial.sections.findIndex((candidate) => candidate.insightIds.includes(graphic.placementInsightId)) === index
@@ -732,11 +741,11 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
       <article className="story-page">
       <header className="story-hero">
         <div className="story-hero-copy">
-          <div className="story-kicker"><Sparkles size={15} aria-hidden="true" /> {article.kind === "match_review" ? "הסיפור של המשחק" : "השבוע של הלגיונרים"}</div>
+          <div className="story-kicker"><Sparkles size={15} aria-hidden="true" /> {article.kind === "match_review" ? "הסיפור של המשחק" : article.kind === "league_analysis" ? "מבט על הליגה" : "השבוע של הלגיונרים"}</div>
           <p className="story-meta">
             {article.kind === "match_review"
               ? `${article.match.competitionNameHe}${article.match.roundNumber !== null && article.match.roundNumber !== undefined ? ` · מחזור ${article.match.roundNumber}` : ""} · ${hebrewDate.format(new Date(articleDate))}`
-              : `${article.period.labelHe} · עונת ${article.period.seasonName}`}
+              : article.kind === "league_analysis" ? `${article.period.competitionNameHe} · ${hebrewDate.format(new Date(article.period.start))} עד ${hebrewDate.format(new Date(article.period.end))} · עונת ${article.period.seasonName}` : `${article.period.labelHe} · עונת ${article.period.seasonName}`}
           </p>
           <h1>{editorial.headline}</h1>
           <p className="story-dek">{editorial.dek}</p>
@@ -747,10 +756,10 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           </div>
           <div className="story-byline">
             <span className="story-author-mark">KD</span>
-            <span><strong>מערכת כדורדאטה</strong><small>{article.kind === "match_review" ? "נוצר מנתוני המשחק" : "נוצר מנתוני השבוע"} · נבדק לפני פרסום</small></span>
+            <span><strong>מערכת כדורדאטה</strong><small>{article.kind === "match_review" ? "נוצר מנתוני המשחק" : article.kind === "league_analysis" ? "נוצר מנתוני הליגה" : "נוצר מנתוני השבוע"} · נבדק לפני פרסום</small></span>
           </div>
         </div>
-        {isMatchReviewArticle(article) ? <StoryScoreCard article={article} /> : <WeeklySummaryCard article={article} />}
+        {isMatchReviewArticle(article) ? <StoryScoreCard article={article} /> : article.kind === "league_analysis" ? <LeagueSummaryCard article={article} /> : <WeeklySummaryCard article={article} />}
       </header>
 
       <div className="story-trust-strip">

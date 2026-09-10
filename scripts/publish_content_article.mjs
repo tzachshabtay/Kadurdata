@@ -7,10 +7,11 @@ import { fileURLToPath } from "node:url";
 import { PIPELINE_VERSION } from "./generate_content_article.mjs";
 import { buildReviewPacket } from "./content_language_review.mjs";
 import { assertWeeklyEligibility } from "./legionnaire_eligibility.mjs";
+import { assertLeagueData, assertLeagueCopy, LEAGUE_PIPELINE_VERSION } from "./content_league_analysis.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
-const supportedPipelineVersions = new Set([PIPELINE_VERSION, "legionnaire-weekly-v2"]);
+const supportedPipelineVersions = new Set([PIPELINE_VERSION, "legionnaire-weekly-v2", LEAGUE_PIPELINE_VERSION]);
 
 function readArguments() {
   const args = process.argv.slice(2);
@@ -40,6 +41,7 @@ async function main() {
   const candidatePath = path.resolve(projectRoot, args.candidatePath);
   const candidate = JSON.parse(await readFile(candidatePath, "utf8"));
   assertWeeklyEligibility(candidate);
+  if (candidate.kind === "league_analysis") { assertLeagueData(candidate); assertLeagueCopy(candidate, candidate); }
   if (candidate.status !== "draft" || candidate.generation?.mode !== "codex_skill_candidate") {
     throw new Error("Only a finalized Codex-skill candidate can be published.");
   }
@@ -54,6 +56,8 @@ async function main() {
   requirePassedReview(candidate.qualityReview, "Quality review");
   if (candidate.qualityReview.issues?.length) throw new Error("Candidate still has unresolved quality issues.");
   const packet = buildReviewPacket({
+    kind: candidate.kind,
+    aiDisclosure: candidate.aiDisclosure,
     schemaVersion: 2,
     draftEditorial: null,
     editorial: candidate.editorial,

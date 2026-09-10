@@ -30,6 +30,7 @@ export const articles = Object.values(generatedModules)
     && (
       (article.kind === "match_review" && article.generation.pipelineVersion === "match-review-v23")
       || (article.kind === "legionnaire_weekly" && article.generation.pipelineVersion === "legionnaire-weekly-v2")
+      || (article.kind === "league_analysis" && article.generation.pipelineVersion === "league-analysis-v1")
     )
     && hasPassedReview(article)
   ))

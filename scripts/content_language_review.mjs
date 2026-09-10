@@ -92,12 +92,14 @@ function numberlessEntries(editorial, analysisPlan, playerRecaps = [], normaliza
 
 function buildReviewPacket(authored) {
   const playerRecaps = Array.isArray(authored.playerRecaps) ? authored.playerRecaps : [];
+  const league = authored.kind === "league_analysis";
   const sentences = visibleSentenceEntries(authored.editorial, authored.analysisPlan, playerRecaps);
+  if (league) appendSentences(sentences, "aiDisclosure", authored.aiDisclosure);
   // Published match reviews were reviewed with the original normalization. Weekly v2
   // packages opt into prefix-aware Hebrew normalization by carrying playerRecaps.
-  const normalizationVersion = Array.isArray(authored.playerRecaps) ? "v2" : "v1";
-  const withoutNumbers = numberlessEntries(authored.editorial, authored.analysisPlan, playerRecaps, normalizationVersion);
-  const finalCopy = Array.isArray(authored.playerRecaps)
+  const normalizationVersion = league || Array.isArray(authored.playerRecaps) ? "v2" : "v1";
+  const withoutNumbers = league ? sentences.map(entry => ({ ...entry, text: removeNumbers(entry.text) })) : numberlessEntries(authored.editorial, authored.analysisPlan, playerRecaps, normalizationVersion);
+  const finalCopy = league ? { editorial: authored.editorial, graphics: authored.analysisPlan?.graphics, aiDisclosure: authored.aiDisclosure } : Array.isArray(authored.playerRecaps)
     ? { editorial: authored.editorial, playerRecaps }
     : authored.editorial;
   const draftCopy = Array.isArray(authored.draftPlayerRecaps)

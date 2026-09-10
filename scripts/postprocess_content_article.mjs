@@ -22,6 +22,7 @@ function normalizeStrings(value) {
 function postprocessVisibleCopy(authored) {
   const processed = {
     ...authored,
+    ...(authored.kind === "league_analysis" ? { aiDisclosure: normalizeVisibleString(authored.aiDisclosure) } : {}),
     editorial: normalizeStrings(authored.editorial),
     ...(Array.isArray(authored.playerRecaps) ? { playerRecaps: normalizeStrings(authored.playerRecaps) } : {}),
     analysisPlan: {
@@ -58,6 +59,7 @@ async function main() {
   const authored = JSON.parse(await readFile(authoredPath, "utf8"));
   const processed = postprocessVisibleCopy(authored);
   const replacements = countEmDashes(authored.editorial)
+    + (authored.kind === "league_analysis" ? countEmDashes(authored.aiDisclosure) : 0)
     + countEmDashes(authored.playerRecaps ?? [])
     + countEmDashes(authored.analysisPlan?.graphics ?? []);
   if (args.check && replacements > 0) {

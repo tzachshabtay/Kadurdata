@@ -5,6 +5,7 @@ import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { assertLeagueData, assertLeagueCopy } from "./content_league_analysis.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const reviewDirectory = path.join(projectRoot, "src", "content", "review");
@@ -26,6 +27,7 @@ function readArguments() {
 }
 
 function validateCandidate(article, candidatePath) {
+  if (article.kind === "league_analysis") { assertLeagueData(article); assertLeagueCopy(article, article); }
   if (article.status !== "draft" || article.approval?.status !== "pending") {
     throw new Error(`${candidatePath} is not a pending draft candidate.`);
   }
