@@ -337,7 +337,7 @@ export type LegionnaireArticleGraphicSpec = {
 
 export type LeagueArticleGraphicSpec = {
   id: string;
-  type: "league_role_comparison" | "league_club_comparison";
+  type: "league_role_comparison" | "league_club_comparison" | "league_player_comparison";
   layout: "grouped" | "panels" | "matrix";
   titleHe: string;
   subtitleHe: string;
@@ -349,6 +349,8 @@ export type LeagueArticleGraphicSpec = {
   clubs?: string[];
   highlightClubId?: string;
   includeRest?: boolean;
+  playerIds?: string[];
+  highlightPlayerId?: string;
 };
 
 export type ArticleGraphicSpec = MatchArticleGraphicSpec | LegionnaireArticleGraphicSpec | LeagueArticleGraphicSpec;
@@ -591,6 +593,19 @@ export type LeagueAnalysisArticle = {
       matches: number;
       groups: LeagueClubRole[];
       rest: { groups: LeagueClubRole[] };
+    }>;
+  };
+  playerComparison?: {
+    scope: { role: string; minimumMinutes: number; players: number; eligiblePlayers: number };
+    metricDefinitions: Record<string, { labelHe: string; family: string; lowerIsBetter?: boolean }>;
+    players: Array<{
+      playerId: string;
+      nameHe: string;
+      teamIds: string[];
+      minutes: number;
+      appearances: number;
+      eligible: boolean;
+      metrics: Record<string, { total: number; per90: number | null; per90OneDecimal: number | null }>;
     }>;
   };
   tags: ArticleTag[];

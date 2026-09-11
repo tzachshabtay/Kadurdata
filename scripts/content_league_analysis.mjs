@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { buildReviewPacket, hashJson } from "./content_language_review.mjs";
+import { derivePlayerComparison, preparePlayerComparisonInput, playerInputHash, PLAYER_COMPARISON_METRICS } from "./content_league_player_comparison.mjs";
 
 export const LEAGUE_PIPELINE_VERSION = "league-analysis-v1";
 export const LEAGUE_ROLES = {
@@ -143,8 +144,22 @@ export function assertLeagueData(article) {
     assert(hashJson(comparison) === hashJson(article.clubComparison), "League club comparison differs from raw snapshot calculations.");
     actual.evidence.push(...evidence);
   }
+  if (article.playerComparison) {
+    assert(article.playerComparison.inputHash === playerInputHash(article.playerComparison.input), "Player supplement hash changed.");
+    const { comparison, evidence } = derivePlayerComparison(article.snapshot, article.playerComparison.input);
+    assert(hashJson(comparison) === hashJson(article.playerComparison), "Player comparison differs from raw supplement calculations.");
+    actual.evidence.push(...evidence);
+  }
   for (const key of ["period","summary","groups","evidence"]) assert(hashJson(actual[key]) === hashJson(article[key]), `League ${key} differs from raw snapshot calculations.`);
   return actual;
+}
+
+export function addLeaguePlayerComparison(source, raw, names, minimumMinutes = 180) {
+  assertLeagueData(source);
+  assert(!source.playerComparison, "Preserve an existing player comparison source.");
+  const input = preparePlayerComparisonInput(source, raw, names, minimumMinutes);
+  const { comparison, evidence } = derivePlayerComparison(source.snapshot, input);
+  return { ...source, playerComparison: comparison, evidence: [...source.evidence, ...evidence] };
 }
 
 function claimEntries(editorial) {
@@ -181,6 +196,16 @@ export function assertLeagueCopy(source, authored, { draftRequired = false } = {
   assert(plan.graphics?.length >= 2 && plan.graphics.length <= 4, "Select 2–4 league graphics.");
   const groups = new Set(source.groups.map(g=>g.id));
   for (const g of plan.graphics) {
+    if (g.type === "league_player_comparison") {
+      assert(g.layout === "matrix" && g.unit === "per90", "Unsupported player graphic.");
+      assert(g.titleHe?.trim() && g.subtitleHe?.trim() && !/\d/.test(g.titleHe + g.subtitleHe) && insights.has(g.placementInsightId), "Invalid player graphic titles/placement.");
+      const eligible = new Set(source.playerComparison?.players.filter(p => p.eligible).map(p => p.playerId) ?? []);
+      assert(g.playerIds?.length >= 2 && new Set(g.playerIds).size === g.playerIds.length && g.playerIds.every(id => eligible.has(id)), "Player chart requires distinct eligible peers.");
+      assert(g.highlightPlayerId && g.playerIds.includes(g.highlightPlayerId), "Highlight must be a displayed player.");
+      assert(g.metrics?.length >= 1 && g.metrics.length <= 4 && new Set(g.metrics).size === g.metrics.length && g.metrics.every(code => code in PLAYER_COMPARISON_METRICS), "Unsupported player graphic metric.");
+      assert(g.evidenceIds?.every(id => evidence.has(id)) && g.evidenceIds.includes("peer.scope") && g.playerIds.every(id => g.evidenceIds.includes(`peer.${id}`)), "Player graphic missing evidence.");
+      continue;
+    }
     const clubGraphic = g.type === "league_club_comparison";
     assert(clubGraphic ? g.layout === "matrix" && ["per90", "team_share"].includes(g.unit) : g.type === "league_role_comparison" && ["grouped","panels"].includes(g.layout) && g.unit === "per90", "Unsupported league graphic.");
     assert(g.titleHe?.trim() && g.subtitleHe?.trim() && !/\d/.test(g.titleHe+g.subtitleHe), "Graphic titles/subtitles must be numberless.");

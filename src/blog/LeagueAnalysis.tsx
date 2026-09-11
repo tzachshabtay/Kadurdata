@@ -10,14 +10,43 @@ const colors: Record<string,string> = { key_passes: "#3dc5b7", total_shots: "#ef
 export function LeagueSummaryCard({ article }: { article: LeagueAnalysisArticle }) {
   return <aside className="story-score-card weekly-summary-card league-summary-card" aria-label="חלון ההשוואה">
     <span className="score-card-label">{article.period.competitionNameHe}</span>
-    <strong className="weekly-summary-title">תפקידים שונים, אותה ליגה</strong>
+    <strong className="weekly-summary-title">{article.playerComparison ? "המגנים השמאליים בהתקפה ובהגנה" : "תפקידים שונים, אותה ליגה"}</strong>
     <div className="score-card-insight">
       <span><small>משחקים</small><strong>{article.summary.matches}</strong></span>
       <span><small>קבוצות</small><strong>{article.summary.teams}</strong></span>
       <span><small>מחזורים</small><strong>{article.summary.rounds.length}</strong></span>
     </div>
-    <p className="league-summary-note">{article.clubComparison ? "מי מוסר לפני הבעיטה, ומי בועט? התפקידים לפי העמדה הרשומה בכל הופעה." : "השוואה ל־90 דקות שחקן, לפי העמדה הרשומה בכל הופעה."}</p>
+    <p className="league-summary-note">{article.playerComparison ? "תרומה בהתקפה ובהגנה, בהשוואה לשחקנים באותה עמדה." : article.clubComparison ? "מי מוסר לפני הבעיטה, ומי בועט? התפקידים לפי העמדה הרשומה בכל הופעה." : "השוואה ל־90 דקות שחקן, לפי העמדה הרשומה בכל הופעה."}</p>
   </aside>;
+}
+
+export function LeaguePlayerGraphic({ article, spec }: { article: LeagueAnalysisArticle; spec: LeagueArticleGraphicSpec }) {
+  const comparison = article.playerComparison;
+  if (!comparison) return null;
+  const players = (spec.playerIds ?? []).map(id => comparison.players.find(p => p.playerId === id)).filter(p => p !== undefined);
+  const max = Object.fromEntries(spec.metrics.map(code => [code, Math.max(1, ...players.map(p => p.metrics[code].per90 ?? 0))]));
+  return <figure className="story-graphic league-club-graphic league-player-graphic" aria-label={spec.titleHe}>
+    <figcaption><div><strong>{spec.titleHe}</strong><small>{spec.subtitleHe}</small></div></figcaption>
+    <div className="league-graphic-unit">ל־90 דקות שחקן · לפחות {comparison.scope.minimumMinutes} דקות בהופעות שסווגו בעמדת מגן שמאלי</div>
+    <div className="league-club-metric">
+      <div className="league-club-table-scroll" role="region" tabIndex={0} aria-label="השוואה אישית בין מגנים שמאליים">
+        <table className="league-club-table league-player-table">
+          <thead><tr><th scope="col">שחקן</th>{spec.metrics.map(code => <th scope="col" key={code}>{comparison.metricDefinitions[code].labelHe}</th>)}</tr></thead>
+          <tbody>{players.map(p => <tr key={p.playerId} className={p.playerId === spec.highlightPlayerId ? "highlighted" : ""}>
+            <th scope="row"><strong>{p.nameHe}</strong><small>{p.teamIds.map(id => article.clubComparison?.teamNames[id]).filter(Boolean).join(" / ")}</small><small>{p.minutes} דקות</small></th>
+            {spec.metrics.map(code => {
+              const metric = p.metrics[code];
+              const negative = comparison.metricDefinitions[code].lowerIsBetter;
+              return <td key={code} title={`${metric.total} פעולות ב־${p.minutes} דקות`}>
+                <span className="league-club-cell" style={{background: `rgba(${negative ? "239, 171, 85" : "61, 197, 183"}, ${.06 + (metric.per90 ?? 0) / max[code] * .36})`}}><bdi>{metric.per90?.toFixed(2) ?? "-"}</bdi></span>
+              </td>;
+            })}
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+    <p className="league-club-note">הדקות כוללות את ההופעה כולה לפי סיווג העמדה של הספק.{spec.metrics.includes("was_dribbled_past") ? " בעמודה ״עברו אותו בכדרור״ ערך נמוך יותר מציין פחות מקרים." : ""}</p>
+  </figure>;
 }
 
 export function LeagueClubGraphic({ article, spec }: { article: LeagueAnalysisArticle; spec: LeagueArticleGraphicSpec }) {

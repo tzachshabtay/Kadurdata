@@ -8,7 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { articles } from "../content/articles";
-import { LeagueSummaryCard, LeagueRoleGraphic, LeagueClubGraphic } from "./LeagueAnalysis";
+import { LeagueSummaryCard, LeagueRoleGraphic, LeagueClubGraphic, LeaguePlayerGraphic } from "./LeagueAnalysis";
 import {
   isMatchReviewArticle,
   type ArticleGraphicSpec,
@@ -607,7 +607,7 @@ function LegionnaireGraphic({ article, spec }: { article: LegionnaireWeeklyArtic
 }
 
 function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: ArticleGraphicSpec }) {
-  if (article.kind === "league_analysis") return spec.type === "league_role_comparison" ? <LeagueRoleGraphic article={article} spec={spec} /> : spec.type === "league_club_comparison" ? <LeagueClubGraphic article={article} spec={spec} /> : null;
+  if (article.kind === "league_analysis") return spec.type === "league_role_comparison" ? <LeagueRoleGraphic article={article} spec={spec} /> : spec.type === "league_club_comparison" ? <LeagueClubGraphic article={article} spec={spec} /> : spec.type === "league_player_comparison" ? <LeaguePlayerGraphic article={article} spec={spec} /> : null;
   if (article.kind === "legionnaire_weekly") {
     if (spec.type === "legionnaire_workload" || spec.type === "legionnaire_metric" || spec.type === "legionnaire_trend") {
       return <LegionnaireGraphic article={article} spec={spec} />;

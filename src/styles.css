@@ -6092,6 +6092,11 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
 .league-club-cell small { display: inline-block; font-size: .7rem; margin-inline-start: 10px; color: #c0d0c7; }
 .league-club-table tr.highlighted th { color: #f6c974; border-right: 3px solid #f6c974; }
 .league-club-table tr.highlighted td { font-weight: 750; }
+.league-player-table th:first-child { min-width: 132px; }
+.league-player-table th > strong { display: block; font-size: .88rem; }
+.league-player-table th > small { display: block; margin-top: 4px; font-size: .68rem; font-weight: 400; color: #b9c9c0; }
+.league-player-table thead th:not(:first-child) { min-width: 78px; text-align: center; }
+.league-player-table .league-club-cell { padding-inline: 6px; }
 .league-club-note { padding: 0 28px 24px; margin: 0; font-size: .8rem; color: #aab8b1; line-height: 1.8; }
 @media (max-width: 620px) {
   .league-club-metric { margin-inline: 14px; }
