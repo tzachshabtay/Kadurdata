@@ -7,6 +7,8 @@ description: Select, analyze, write, fact-check, preview, and later publish Hebr
 
 Create Hebrew football journalism from Kadurdata's own data. Do not call a paid model API. Use Codex roles for the analytical and editorial work.
 
+Every scheduled daily run must produce a local article candidate. If no eligible match exists, broaden the analysis to another evidence-grounded Israeli-football topic; do not end the run with a no-article report.
+
 ## Route the request
 
 - For a scheduled daily article, read [daily-selection.md](references/daily-selection.md).
@@ -34,7 +36,7 @@ The writer, editor, and reviewer must be fresh-context agents. Do not collapse t
 - Every paragraph must advance the thesis with a finding, an explanation, and a consequence.
 - Prefer high-volume measures and role/style evidence. A goal or assist is context, not proof of a trend.
 - Compare like-for-like time windows and normalize player volume per 90 minutes when minutes differ materially.
-- A comparison with fewer than three prior substantial appearances is context only, never a claimed trend.
+- A claim that an individual player improved or declined requires at least three prior substantial appearances for the baseline. A shorter player history is context only, not trend evidence. This threshold does not apply to league-wide aggregates, position-group comparisons, single-match explanations, or other non-trend topics.
 - Every visible number must be present in the cited evidence package.
 - Graphics are selected after the story and must let the reader see a claim from the article. Do not add decorative graphics.
 - Replace every em dash (`—`) in visible copy with a hyphen-minus (`-`) before language review.
@@ -46,4 +48,3 @@ The writer, editor, and reviewer must be fresh-context agents. Do not collapse t
 Generation, revision, finalization, preview, scheduling, and automation are not publication approval.
 
 Finalize a local candidate with `status: "draft"` and `approval.status: "pending"`, serve it through the real blog components, and stop for the user's review. Run the promotion command only after the user explicitly approves that exact candidate in a later message.
-

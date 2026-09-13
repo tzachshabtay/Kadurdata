@@ -636,6 +636,36 @@ function shotSummary(shots, teamId) {
   };
 }
 
+function providerComparableTeamXg(shots, teamId) {
+  const relevant = shots.filter((shot) => (shot.team_id ?? shot.teamId) === teamId);
+  const shotsByDisplayedTime = new Map();
+  for (const shot of relevant) {
+    const eventTime = shot.event_time ?? shot.eventTime ?? `${shot.minute ?? "unknown"}'`;
+    const group = shotsByDisplayedTime.get(eventTime) ?? [];
+    group.push(shot);
+    shotsByDisplayedTime.set(eventTime, group);
+  }
+
+  let total = 0;
+  for (const group of shotsByDisplayedTime.values()) {
+    const penalties = group.filter((shot) => shot.situation === "Penalty");
+    const isMissedPenaltyReboundChain = group.length > 1
+      && penalties.length === 1
+      && penalties[0].outcome !== "Goal";
+    if (!isMissedPenaltyReboundChain) {
+      total += group.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0);
+      continue;
+    }
+
+    const noGoalProbability = group.reduce(
+      (probability, shot) => probability * (1 - Number(shot.xg ?? 0)),
+      1,
+    );
+    total += 1 - noGoalProbability;
+  }
+  return round(total);
+}
+
 function teamSnapshot(match, side, stats, assets, shots) {
   const prefix = side === "home" ? "home" : "away";
   const teamId = match[`${prefix}_team_id`];
@@ -2169,8 +2199,11 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     && qualityReview.numberlessReview?.status === "passed"
     && qualityReview.numberlessReview.articleStillCoherent
     && qualityReview.numberlessReview.issues.length === 0);
+  const homeComparableXg = providerComparableTeamXg(shots, home.teamId);
+  const awayComparableXg = providerComparableTeamXg(shots, away.teamId);
   const homeOnTarget = shotsOnTargetSummary(shots, home.teamId);
   const awayOnTarget = shotsOnTargetSummary(shots, away.teamId);
+  const xgTolerance = (shotCount) => Math.max(0.05, shotCount * 0.005 + 0.005);
   const checks = [
     ["match-ended", "המשחק הסתיים", TERMINAL_MATCH_STATUSES.has(match.status), `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
@@ -2179,8 +2212,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["shots-away", `בעיטות ${away.nameHe} תואמות למפת הבעיטות`, away.stats.team_total_shots === away.shotSummary.count, `${away.shotSummary.count} בעיטות`],
     ["target-home", `בעיטות ${home.nameHe} למסגרת תואמות`, home.stats.team_shots_on_target === homeOnTarget.count, shotsOnTargetDetail(homeOnTarget)],
     ["target-away", `בעיטות ${away.nameHe} למסגרת תואמות`, away.stats.team_shots_on_target === awayOnTarget.count, shotsOnTargetDetail(awayOnTarget)],
-    ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - home.shotSummary.xg) <= Math.max(0.05, home.shotSummary.count * 0.005 + 0.005), `${home.stats.team_expected_goals} מול ${home.shotSummary.xg}; סבילות עיגול לפי ${home.shotSummary.count} בעיטות`],
-    ["xg-away", `xG ${away.nameHe} עקבי בין המקורות`, Math.abs(away.stats.team_expected_goals - away.shotSummary.xg) <= Math.max(0.05, away.shotSummary.count * 0.005 + 0.005), `${away.stats.team_expected_goals} מול ${away.shotSummary.xg}; סבילות עיגול לפי ${away.shotSummary.count} בעיטות`],
+    ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - homeComparableXg) <= xgTolerance(home.shotSummary.count), `${home.stats.team_expected_goals} מול ${homeComparableXg}; סכום אירועי בעיטה גולמי ${home.shotSummary.xg}; סבילות עיגול לפי ${home.shotSummary.count} בעיטות`],
+    ["xg-away", `xG ${away.nameHe} עקבי בין המקורות`, Math.abs(away.stats.team_expected_goals - awayComparableXg) <= xgTolerance(away.shotSummary.count), `${away.stats.team_expected_goals} מול ${awayComparableXg}; סכום אירועי בעיטה גולמי ${away.shotSummary.xg}; סבילות עיגול לפי ${away.shotSummary.count} בעיטות`],
     ["player-goal-events", "שערי השחקנים תואמים לאירועי הבעיטה", playerGoalEventsMatch, goalEventsWithoutPlayerMetric.length ? `${playerGoals} שערים נבדקו בין מדדי השחקנים לאירועים; ${goalEventsWithoutPlayerMetric.length} אירועי שער נשענו על אירוע הבעיטה משום שמדד השחקן חסר` : `${playerGoals} שערים נבדקו ברמת השחקן`],
     ["flow-shot-total", "חלונות הזמן מכסים את כל הבעיטות", windowShotTotal === shots.length, `${windowShotTotal} בעיטות בחלונות הזמן`],
     ["timeline-goals", "אירועי המשחק תואמים לשערים", timelineGoalTotal === home.score + away.score, `${timelineGoalTotal} שערים בציר האירועים`],
@@ -2810,6 +2843,7 @@ export {
   buildChecks,
   claimEntries,
   mentionsPlayerByFullOrIntroducedShortName,
+  providerComparableTeamXg,
 };
 
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

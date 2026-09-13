@@ -24,13 +24,14 @@ Rank candidates in tiers:
 
 Within the highest non-empty tier, prefer the match with the strongest editorial potential. Score the evidence, not the fame: major game-state turns, a misleading final stat line, a sharp gap between shot volume and quality, a comeback, a tactical or role anomaly, strong player-level explanations, and complete data all increase interest. Record why the winner beat the other candidates.
 
-## No-match fallback
+## Mandatory no-match fallback
 
-If there is no eligible match, build an Israeli-league analysis topic from recent data. Examples are a sustained change in a team's style, a player's improvement or decline in a high-volume role metric, or a position-group comparison over a meaningful period.
+If there is no eligible match, an analytical article is still required. Build an Israeli-league topic from the available repository data. Examples include a sustained change in a team's style, a player's improvement or decline in a high-volume role metric, a position-group comparison, a league-wide tactical contrast, a shot or creation profile, or a historical comparison with a like-for-like window.
 
-Do not treat examples as fixed templates. Search the available data first, require a meaningful sample, and choose the question with the clearest reader value. Avoid league tables made from one-off goals or assists.
+Do not treat examples as fixed templates. Search the available data first and choose the question with the clearest reader value. If the season or player sample is too short for a trend claim, change the question rather than stopping: aggregate across the league, compare position or role groups, use a clearly labelled early-season snapshot, widen to a like-for-like historical window, or find another current data-backed angle. Match the strength of the language to the sample and avoid league tables made from one-off goals or assists.
+
+Never end a scheduled daily run with “no article,” “no candidate,” or a run report. The absence of an eligible match, a young season, or an insufficient player-trend baseline changes the article type; it does not cancel the article. Continue searching and reframing until one evidence-grounded topic clears the common quality gates.
 
 ## Output
 
-For a match, hand off to the match-review skill. For a league topic, use the same four-role, evidence, Hebrew-editing, graphics, fact-checking, local-preview, and approval gates described by this skill. If no defensible topic exists, produce a short run report instead of forcing an article.
-
+For a match, hand off to the match-review skill. For a league topic, use the same four-role, evidence, Hebrew-editing, graphics, fact-checking, local-preview, and approval gates described by this skill. Every scheduled daily run ends with a local draft candidate awaiting approval, never publication.
