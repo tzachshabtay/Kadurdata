@@ -8,7 +8,7 @@ import { buildReviewPacket } from "./content_language_review.mjs";
 import { assertWeeklyEligibility } from "./legionnaire_eligibility.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const pipelineVersion = "legionnaire-weekly-v3";
+const pipelineVersion = "legionnaire-weekly-v2";
 
 function parseArguments() {
   const args = process.argv.slice(2);
