@@ -493,7 +493,7 @@ export type LegionnaireWeeklyMatch = {
   competitionId?: string;
   seasonId?: string;
   scheduledAt: string;
-  status?: "Ended";
+  status?: "Ended" | "After ET" | "After Penalties";
   teamName: string;
   opponentName: string;
   minutes: number;

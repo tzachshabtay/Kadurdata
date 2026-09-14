@@ -61,14 +61,16 @@ test("rolling week includes Sunday American fixtures after Israeli midnight and 
 
 test("unfinished, missing and mismatched match records cannot enter weekly or baseline data", () => {
   const scheduled_at = "2026-09-13T21:30:00Z";
-  const rows = ["ended", "live", "scheduled", "unknown", "wrong-time"].map((match_id) => ({ match_id, scheduled_at }));
+  const rows = ["ended", "extra-time", "penalties", "live", "scheduled", "unknown", "wrong-time"].map((match_id) => ({ match_id, scheduled_at }));
   const result = filterCompletedHistory(rows, [
     { match_id: "ended", scheduled_at, status: "Ended" },
+    { match_id: "extra-time", scheduled_at, status: "After ET" },
+    { match_id: "penalties", scheduled_at, status: "After Penalties" },
     { match_id: "live", scheduled_at, status: "In Progress" },
     { match_id: "scheduled", scheduled_at, status: "Scheduled" },
     { match_id: "wrong-time", scheduled_at: "2026-09-06T21:30:00Z", status: "Ended" },
   ]);
-  assert.deepEqual(result.rows.map((r) => [r.match_id, r.match_status]), [["ended", "Ended"]]);
+  assert.deepEqual(result.rows.map((r) => [r.match_id, r.match_status]), [["ended", "Ended"], ["extra-time", "After ET"], ["penalties", "After Penalties"]]);
   assert.equal(result.excludedMatches.length, 4);
 });
 
@@ -77,6 +79,9 @@ test("finalization/publication rejects out-of-window and unfinished rolling appe
   const match = { matchId: "chicago", seasonId: "bg26", competitionId: "bg", competitionScope: "foreign_club", seasonName: "2026/2027", scheduledAt: "2026-09-13T21:30:00Z", status: "Ended" };
   const article = { kind: "legionnaire_weekly", period, summary: { players: [{ nameHe: "דור תורג׳מן", matches: [match] }] } };
   assert.doesNotThrow(() => assertWeeklyEligibility(article));
+  for (const status of ["After ET", "After Penalties"]) {
+    assert.doesNotThrow(() => assertWeeklyEligibility({ ...article, summary: { players: [{ nameHe: "שחקן", matches: [{ ...match, status }] }] } }));
+  }
   for (const invalid of [{ ...match, status: "In Progress" }, { ...match, status: undefined }, { ...match, scheduledAt: period.endAt }, { ...match, scheduledAt: "2026-09-07T19:30:00Z" }]) {
     assert.throws(() => assertWeeklyEligibility({ ...article, summary: { players: [{ nameHe: "שחקן", matches: [invalid] }] } }), /not a completed appearance/);
   }

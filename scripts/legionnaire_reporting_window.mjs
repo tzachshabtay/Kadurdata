@@ -1,5 +1,6 @@
 const weekMs = 7 * 24 * 60 * 60 * 1000;
 export const reportingTimezone = "Asia/Jerusalem";
+const completedStatuses = new Set(["Ended", "After ET", "After Penalties"]);
 
 export function rollingReportingWindow(asOf = new Date().toISOString()) {
   if (typeof asOf !== "string" || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(asOf) || !Number.isFinite(Date.parse(asOf))) {
@@ -33,7 +34,7 @@ export function filterCompletedHistory(rows, matches) {
   const eligible = [];
   for (const row of rows) {
     const match = byId.get(row.match_id);
-    if (match?.status !== "Ended" || Date.parse(match.scheduled_at) !== Date.parse(row.scheduled_at)) {
+    if (!completedStatuses.has(match?.status) || Date.parse(match.scheduled_at) !== Date.parse(row.scheduled_at)) {
       excluded.set(row.match_id, { matchId: row.match_id, status: match?.status ?? null, reason: "not_verified_completed" });
     } else {
       eligible.push({ ...row, match_status: match.status });
@@ -51,7 +52,7 @@ export function assertRollingReportingWindow(article) {
   }
   for (const player of article.summary?.players ?? []) {
     for (const match of player.matches ?? []) {
-      if (!isWithinReportingWindow(match.scheduledAt, period) || match.status !== "Ended") {
+      if (!isWithinReportingWindow(match.scheduledAt, period) || !completedStatuses.has(match.status)) {
         throw new Error(`Weekly window: ${player.nameHe} / ${match.matchId} is not a completed appearance inside the reporting window.`);
       }
     }
