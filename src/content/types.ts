@@ -493,6 +493,7 @@ export type LegionnaireWeeklyMatch = {
   competitionId?: string;
   seasonId?: string;
   scheduledAt: string;
+  status?: "Ended";
   teamName: string;
   opponentName: string;
   minutes: number;
@@ -541,7 +542,16 @@ export type LegionnaireWeeklyArticle = {
   generation: ArticleGeneration;
   authorship: ArticleAuthorship;
   approval?: ArticleApproval;
-  period: { start: string; end: string; labelHe: string; seasonName: string };
+  period: {
+    start: string;
+    end: string;
+    labelHe: string;
+    seasonName: string;
+    windowType?: "rolling_168_hours";
+    startAt?: string;
+    endAt?: string;
+    timeZone?: string;
+  };
   summary: {
     eligiblePlayers: number;
     playersWithMinutes: number;

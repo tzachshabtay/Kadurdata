@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { filterLegionnaireHistory, assertWeeklyEligibility } from "../scripts/legionnaire_eligibility.mjs";
+import { rollingReportingWindow, isWithinReportingWindow, filterCompletedHistory } from "../scripts/legionnaire_reporting_window.mjs";
 
 const competitions = [
   { competition_id: "bg", scope: "foreign_club", name: "Bulgarian league" },
@@ -40,4 +41,44 @@ test("publication rejects stale candidates and domestic or wrong-season appearan
   assert.throws(() => assertWeeklyEligibility({ ...article(valid), period: {} }), /missing reporting season/);
   assert.throws(() => assertWeeklyEligibility(article({ ...valid, matchId: undefined })), /not a verified/);
   assert.doesNotThrow(() => assertWeeklyEligibility({ kind: "match_review" }));
+});
+
+test("rolling week includes Sunday American fixtures after Israeli midnight and uses exact boundaries", () => {
+  const period = rollingReportingWindow("2026-09-14T23:36:00Z");
+  assert.equal(period.startAt, "2026-09-07T23:36:00.000Z");
+  assert.equal(period.start, "2026-09-08");
+  assert.equal(period.end, "2026-09-15");
+  assert.equal(isWithinReportingWindow("2026-09-13T21:30:00Z", period), true); // Turgeman at Chicago
+  assert.equal(isWithinReportingWindow(period.startAt, period), true);
+  assert.equal(isWithinReportingWindow("2026-09-07T23:35:59.999Z", period), false);
+  assert.equal(isWithinReportingWindow(period.endAt, period), false);
+  assert.deepEqual(rollingReportingWindow("2026-09-15T02:36:00+03:00"), period);
+  const dstWeek = rollingReportingWindow("2026-10-26T10:00:00Z");
+  assert.equal(Date.parse(dstWeek.endAt) - Date.parse(dstWeek.startAt), 168 * 3600000);
+  assert.throws(() => rollingReportingWindow("2026-09-14"), /explicit timezone/);
+  assert.throws(() => rollingReportingWindow("2026-09-14T23:36:00"), /explicit timezone/);
+});
+
+test("unfinished, missing and mismatched match records cannot enter weekly or baseline data", () => {
+  const scheduled_at = "2026-09-13T21:30:00Z";
+  const rows = ["ended", "live", "scheduled", "unknown", "wrong-time"].map((match_id) => ({ match_id, scheduled_at }));
+  const result = filterCompletedHistory(rows, [
+    { match_id: "ended", scheduled_at, status: "Ended" },
+    { match_id: "live", scheduled_at, status: "In Progress" },
+    { match_id: "scheduled", scheduled_at, status: "Scheduled" },
+    { match_id: "wrong-time", scheduled_at: "2026-09-06T21:30:00Z", status: "Ended" },
+  ]);
+  assert.deepEqual(result.rows.map((r) => [r.match_id, r.match_status]), [["ended", "Ended"]]);
+  assert.equal(result.excludedMatches.length, 4);
+});
+
+test("finalization/publication rejects out-of-window and unfinished rolling appearances", () => {
+  const period = { ...rollingReportingWindow("2026-09-14T23:36:00Z"), seasonName: "2026/2027" };
+  const match = { matchId: "chicago", seasonId: "bg26", competitionId: "bg", competitionScope: "foreign_club", seasonName: "2026/2027", scheduledAt: "2026-09-13T21:30:00Z", status: "Ended" };
+  const article = { kind: "legionnaire_weekly", period, summary: { players: [{ nameHe: "דור תורג׳מן", matches: [match] }] } };
+  assert.doesNotThrow(() => assertWeeklyEligibility(article));
+  for (const invalid of [{ ...match, status: "In Progress" }, { ...match, status: undefined }, { ...match, scheduledAt: period.endAt }, { ...match, scheduledAt: "2026-09-07T19:30:00Z" }]) {
+    assert.throws(() => assertWeeklyEligibility({ ...article, summary: { players: [{ nameHe: "שחקן", matches: [invalid] }] } }), /not a completed appearance/);
+  }
+  assert.throws(() => assertWeeklyEligibility({ ...article, period: { ...period, startAt: "2026-09-07T00:00:00Z" } }), /exactly 168 hours/);
 });

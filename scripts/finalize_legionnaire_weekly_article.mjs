@@ -8,7 +8,7 @@ import { buildReviewPacket } from "./content_language_review.mjs";
 import { assertWeeklyEligibility } from "./legionnaire_eligibility.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const pipelineVersion = "legionnaire-weekly-v2";
+const pipelineVersion = "legionnaire-weekly-v3";
 
 function parseArguments() {
   const args = process.argv.slice(2);
@@ -187,7 +187,7 @@ async function main() {
   const checkedAt = new Date().toISOString();
   const factChecks = [
     { id: "appearance-eligibility", label: "הופעות במועדונים בחו״ל", status: "passed", detail: "שיוך המסגרת והעונה אומת לכל הופעה" },
-    { id: "weekly-window", label: "חלון שבועי מלא", status: "passed", detail: `${source.period.start} עד ${source.period.end}` },
+    { id: "weekly-window", label: "חלון הדיווח השבועי", status: "passed", detail: source.period.labelHe },
     { id: "deduplication", label: "כפילויות משחקים הוסרו", status: "passed", detail: `${source.dataAudit.duplicateMatchIdsRemoved.length} רשומות כפולות הוסרו` },
     { id: "analysis-plan", label: "תזה ותכנית ניתוח", status: "passed", detail: "כל סעיף מקושר לתובנה שנבחרה מראש" },
     { id: "sample-discipline", label: "משמעת מדגם", status: "passed", detail: "טענות מגמה נשענות על לפחות שלוש הופעות קודמות" },
@@ -234,7 +234,7 @@ async function main() {
       checks: factChecks,
       evidenceCount: source.evidence.length,
       claimCount: claims(authored.editorial, authored.playerRecaps).length,
-      sourceViews: ["api_legionnaires", "api_player_history", "api_match_player_stats"],
+      sourceViews: ["api_legionnaires", "api_player_history", "api_match_player_stats", "api_matches"],
     },
   };
   const outputPath = path.join(path.dirname(sourcePath), "candidate.json");

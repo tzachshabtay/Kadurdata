@@ -1,3 +1,5 @@
+import { assertRollingReportingWindow } from "./legionnaire_reporting_window.mjs";
+
 // Eligibility belongs to the recorded appearance, not the player's current or
 // season-level census membership. A return to Israel must not import home games.
 export function filterLegionnaireHistory(rows, seasons, competitions, seasonName) {
@@ -29,6 +31,7 @@ export function filterLegionnaireHistory(rows, seasons, competitions, seasonName
 
 export function assertWeeklyEligibility(article) {
   if (article.kind !== "legionnaire_weekly") return;
+  assertRollingReportingWindow(article);
   if (typeof article.period?.seasonName !== "string" || !article.period.seasonName.trim()) {
     throw new Error("Weekly eligibility: missing reporting season.");
   }

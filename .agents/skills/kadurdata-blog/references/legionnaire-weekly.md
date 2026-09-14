@@ -2,7 +2,9 @@
 
 ## Reporting window
 
-Use the most recent seven fully completed calendar days in Israel. Query the current foreign-club season, then collect every appearance by an Israeli legionnaire in the window. Deduplicate the same fixture when two imported competition records describe it.
+Use a rolling window of the last 168 hours up to the collection cutoff, not a cutoff at Israeli midnight. Freeze the cutoff once at the start of collection. Include every appearance whose kickoff falls at or after `period.startAt` and before `period.endAt`, provided `api_matches.status` is `Ended`. This includes Sunday evening American fixtures that fall on Monday in Israel when they have finished before collection. Query the current foreign-club season and deduplicate imported copies of the same fixture. Apply the completed-match check before deduplication and historical baseline selection as well.
+
+Preserve the exact UTC start and cutoff, `windowType: "rolling_168_hours"`, and `timeZone: "Asia/Jerusalem"` in the evidence and candidate. Display the dates and times in Israel time. Every player must use the same window; never append just one out-of-window match. Revisions that change the cutoff require a fresh collection and full coverage/review of the resulting player set. Before publication after a material delay, check for newly completed eligible fixtures and refresh the candidate for review if needed; approval applies to the exact reviewed snapshot.
 
 Verify eligibility from each appearance's actual competition and season, not just the player's seasonal legionnaire census membership. Exclude domestic and national-team matches, including matches played after a return to Israel. Apply the same foreign-club/current-season filter before selecting historical baselines. Preserve verified competition/season identifiers on each appearance and review excluded rows; finalization and publication must reject unverified or ineligible appearances. A qualifying foreign-club appearance before a midweek return to Israel still counts.
 
@@ -46,7 +48,7 @@ Record the chosen supporting fields in each final `playerRecaps[].statCodes` arr
 
 ## Workflow
 
-1. Run `npm run content:prepare:legionnaires -- [--end-date YYYY-MM-DD]`.
+1. Run `npm run content:prepare:legionnaires -- [--as-of ISO_TIMESTAMP_WITH_TIMEZONE]`. By default the cutoff is now; an explicit cutoff freezes a reproducible revision. Calendar-day `--end-date` cutoffs are retired.
 2. Inspect the generated `source.json`, especially duplicate removals, data completeness, baselines, and deterministic insight candidates.
 3. The analyst completes the plan and creates one `playerRecaps` entry, in source order, for every player with minutes.
 4. A fresh writer writes `draftEditorial` and all `playerRecaps`.

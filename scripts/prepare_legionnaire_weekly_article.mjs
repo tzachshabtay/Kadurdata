@@ -6,10 +6,10 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { filterLegionnaireHistory } from "./legionnaire_eligibility.mjs";
+import { rollingReportingWindow, isWithinReportingWindow, filterCompletedHistory } from "./legionnaire_reporting_window.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbenchRoot = path.join(projectRoot, ".content-workbench");
-const timezone = "Asia/Jerusalem";
 const baselineMatchLimit = 5;
 const fullStatThreshold = 10;
 const trendMetricRules = {
@@ -70,28 +70,11 @@ function parseArguments() {
     const index = args.indexOf(flag);
     return index >= 0 ? args[index + 1] : null;
   };
-  return { endDate: valueAfter("--end-date"), seasonName: valueAfter("--season") };
-}
-
-function isoDateInTimezone(date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
-function shiftDate(dateString, days) {
-  const date = new Date(`${dateString}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function validateDate(value, label) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "") || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
-    throw new Error(`${label} must use YYYY-MM-DD.`);
+  if (args.includes("--end-date")) throw new Error("Calendar-day cutoffs are retired. Use --as-of with an ISO timestamp, or omit it to collect through now.");
+  if (args.includes("--as-of") && !valueAfter("--as-of")) {
+    throw new Error("--as-of requires an ISO timestamp with an explicit timezone.");
   }
+  return { asOf: valueAfter("--as-of") ?? undefined, seasonName: valueAfter("--season") };
 }
 
 async function loadLocalEnv() {
@@ -130,6 +113,7 @@ function groupAppearances(rows, playerNameById, lineupByAppearanceId) {
         competitionScope: row.competition_scope,
         competitionNameHe: row.competition_name,
         scheduledAt: row.scheduled_at,
+        status: row.match_status,
         teamName: row.team_name,
         opponentName: row.opponent_team_name,
         side: row.side,
@@ -228,18 +212,17 @@ function insightCandidates(players) {
 
 async function main() {
   const args = parseArguments();
+  const period = rollingReportingWindow(args.asOf);
   await loadLocalEnv();
   const url = process.env.VITE_SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.");
   const client = createClient(url, key, { auth: { persistSession: false } });
 
-  const currentIsraelDate = isoDateInTimezone(new Date());
-  const endDate = args.endDate ?? shiftDate(currentIsraelDate, -1);
-  validateDate(endDate, "--end-date");
-  const startDate = shiftDate(endDate, -6);
-  const queryStart = `${shiftDate(startDate, -50)}T00:00:00Z`;
-  const queryEnd = `${shiftDate(endDate, 2)}T00:00:00Z`;
+  const startDate = period.start;
+  const endDate = period.end;
+  const queryStart = new Date(Date.parse(period.startAt) - 50 * 86400000).toISOString();
+  const queryEnd = period.endAt;
 
   let seasonName = args.seasonName;
   if (!seasonName) {
@@ -288,7 +271,14 @@ async function main() {
     selectAll((from, to) => client.from("api_competitions").select("competition_id,name,name_he,scope").range(from, to)),
   ]);
   const eligibility = filterLegionnaireHistory(rawHistoryRows, eligibilitySeasons, eligibilityCompetitions, seasonName);
-  const historyRows = eligibility.rows;
+  const matchIds = [...new Set(eligibility.rows.map((row) => row.match_id))];
+  const matchRows = [];
+  for (let offset = 0; offset < matchIds.length; offset += 100) {
+    matchRows.push(...await selectAll((from, to) => client.from("api_matches")
+      .select("match_id,scheduled_at,status").in("match_id", matchIds.slice(offset, offset + 100)).range(from, to)));
+  }
+  const completion = filterCompletedHistory(eligibility.rows, matchRows);
+  const historyRows = completion.rows;
 
   const appearanceIds = [...new Set(historyRows.map((row) => row.appearance_id))];
   const lineupRows = appearanceIds.length ? await selectAll((from, to) => client
@@ -298,14 +288,11 @@ async function main() {
     .range(from, to)) : [];
   const lineupByAppearanceId = new Map(lineupRows.map((row) => [row.appearance_id, row.lineup_status]));
   const grouped = groupAppearances(historyRows, playerNameById, lineupByAppearanceId);
-  const weekly = grouped.appearances.filter((match) => {
-    const localDate = isoDateInTimezone(new Date(match.scheduledAt));
-    return localDate >= startDate && localDate <= endDate && match.minutes > 0;
-  });
+  const weekly = grouped.appearances.filter((match) => isWithinReportingWindow(match.scheduledAt, period) && match.minutes > 0);
   const players = [...new Set(weekly.map((match) => match.playerId))].map((playerId) => {
     const playerMatches = weekly.filter((match) => match.playerId === playerId).sort((left, right) => left.scheduledAt.localeCompare(right.scheduledAt));
     const priorMatches = grouped.appearances
-      .filter((match) => match.playerId === playerId && isoDateInTimezone(new Date(match.scheduledAt)) < startDate && match.minutes >= 30)
+      .filter((match) => match.playerId === playerId && Date.parse(match.scheduledAt) < Date.parse(period.startAt) && match.minutes >= 30)
       .sort((left, right) => right.scheduledAt.localeCompare(left.scheduledAt))
       .slice(0, baselineMatchLimit);
     const weekAggregate = aggregateMatches(playerMatches);
@@ -334,6 +321,7 @@ async function main() {
         competitionId: match.competitionId,
         competitionScope: match.competitionScope,
         scheduledAt: match.scheduledAt,
+        status: match.status,
         teamName: match.teamName,
         opponentName: match.opponentName,
         minutes: match.minutes,
@@ -376,7 +364,7 @@ async function main() {
       sourceView: "api_legionnaires + api_player_history",
       sourceRows: historyRows.length,
       values: [census.length, players.length, appearances, starts, minutes, fullStatAppearances, basicOnlyAppearances],
-      context: { startDate, endDate, duplicateMatchIdsRemoved: grouped.duplicateMatchIdsRemoved },
+      context: { ...period, duplicateMatchIdsRemoved: grouped.duplicateMatchIdsRemoved },
     },
     ...players.map((player) => ({
       id: `player.week.${player.playerId}`,
@@ -405,7 +393,7 @@ async function main() {
     language: "he",
     kind: "legionnaire_weekly",
     generatedAt: new Date().toISOString(),
-    period: { start: startDate, end: endDate, labelHe: `${startDate.split("-").reverse().join(".")} - ${endDate.split("-").reverse().join(".")}`, seasonName },
+    period: { ...period, seasonName },
     summary,
     evidence,
     insightCandidates: insightCandidates(players),
@@ -413,6 +401,7 @@ async function main() {
       eligibilityVersion: 1,
       rawHistoryRows: rawHistoryRows.length,
       excludedAppearances: eligibility.excludedAppearances,
+      excludedUnfinishedMatches: completion.excludedMatches,
       queriedHistoryRows: historyRows.length,
       duplicateMatchIdsRemoved: grouped.duplicateMatchIdsRemoved,
       fullStatAppearances,
