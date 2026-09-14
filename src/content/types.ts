@@ -490,6 +490,8 @@ export type MatchPlayerRecap = {
 
 export type LegionnaireWeeklyMatch = {
   matchId: string;
+  competitionId?: string;
+  seasonId?: string;
   scheduledAt: string;
   teamName: string;
   opponentName: string;

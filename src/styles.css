@@ -547,6 +547,23 @@ input[type="search"]::-webkit-search-cancel-button {
   line-height: 1.15;
 }
 
+.weekly-player-profile-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: #9aa79b;
+  text-underline-offset: 4px;
+}
+
+.weekly-player-profile-link:hover {
+  color: #0a6f56;
+}
+
+.weekly-player-profile-link:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid #0a6f56;
+  outline-offset: 4px;
+}
+
 .weekly-player-recap > header p {
   margin-top: 6px;
   color: #70756f;

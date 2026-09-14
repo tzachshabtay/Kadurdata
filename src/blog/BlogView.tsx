@@ -447,6 +447,21 @@ function weeklyPlayerStats(player: LegionnaireWeeklyPlayer, statCodes: string[])
   }).slice(0, 4);
 }
 
+function weeklyPlayerProfileHref(player: LegionnaireWeeklyPlayer) {
+  const params = new URLSearchParams({
+    lang: "he",
+    player: player.playerId,
+    playerTournaments: "all",
+  });
+  const latestMatch = player.matches.reduce<LegionnaireWeeklyPlayer["matches"][number] | undefined>(
+    (latest, match) => !latest || match.scheduledAt > latest.scheduledAt ? match : latest,
+    undefined,
+  );
+  if (latestMatch?.competitionId) params.set("competition", latestMatch.competitionId);
+  if (latestMatch?.seasonId) params.set("season", latestMatch.seasonId);
+  return `${import.meta.env.BASE_URL}?${params.toString()}#players`;
+}
+
 function WeeklyPlayerRecaps({ article }: { article: LegionnaireWeeklyArticle }) {
   const recapsByPlayerId = new Map(article.playerRecaps.map((recap) => [recap.playerId, recap]));
   const players = [...article.summary.players].sort((left, right) => {
@@ -476,7 +491,7 @@ function WeeklyPlayerRecaps({ article }: { article: LegionnaireWeeklyArticle }) 
             <article className="weekly-player-recap" key={player.playerId}>
               <header>
                 <div>
-                  <h3>{player.nameHe}</h3>
+                  <h3><a className="weekly-player-profile-link" href={weeklyPlayerProfileHref(player)}>{player.nameHe}</a></h3>
                   <p>{[player.teamName, player.competitionNameHe, player.position ? weeklyPositionLabels[player.position] ?? player.position : null].filter(Boolean).join(" · ")}</p>
                 </div>
                 <span className={hasRating ? "weekly-player-rating" : "weekly-player-rating unavailable"}>
