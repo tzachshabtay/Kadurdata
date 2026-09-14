@@ -259,23 +259,28 @@ async function main() {
 
   const rawHistoryRows = await selectAll((from, to) => client
     .from("api_player_history")
-    .select("player_id,display_name,appearance_id,match_id,season_id,competition_id,scheduled_at,team_name,opponent_team_name,side,minutes_played,home_score,away_score,metric_code,value_numeric")
+    .select("player_id,display_name,appearance_id,match_id,season_id,competition_id,scheduled_at,team_name,opponent_team_name,side,minutes_played,home_score,away_score,metric_id,metric_code,source_id,value_numeric")
     .in("player_id", playerIds)
     .gte("scheduled_at", queryStart)
     .lt("scheduled_at", queryEnd)
     .order("scheduled_at")
+    // Kickoffs tie across thousands of metric rows. Complete the ordering with
+    // the observation's unique key so offset pages cannot skip or repeat rows.
+    .order("appearance_id")
+    .order("metric_id")
+    .order("source_id")
     .range(from, to));
 
   const [eligibilitySeasons, eligibilityCompetitions] = await Promise.all([
-    selectAll((from, to) => client.from("api_seasons").select("season_id,season_name,competition_id").range(from, to)),
-    selectAll((from, to) => client.from("api_competitions").select("competition_id,name,name_he,scope").range(from, to)),
+    selectAll((from, to) => client.from("api_seasons").select("season_id,season_name,competition_id").order("season_id").range(from, to)),
+    selectAll((from, to) => client.from("api_competitions").select("competition_id,name,name_he,scope").order("competition_id").range(from, to)),
   ]);
   const eligibility = filterLegionnaireHistory(rawHistoryRows, eligibilitySeasons, eligibilityCompetitions, seasonName);
   const matchIds = [...new Set(eligibility.rows.map((row) => row.match_id))];
   const matchRows = [];
   for (let offset = 0; offset < matchIds.length; offset += 100) {
     matchRows.push(...await selectAll((from, to) => client.from("api_matches")
-      .select("match_id,scheduled_at,status").in("match_id", matchIds.slice(offset, offset + 100)).range(from, to)));
+      .select("match_id,scheduled_at,status").in("match_id", matchIds.slice(offset, offset + 100)).order("match_id").range(from, to)));
   }
   const completion = filterCompletedHistory(eligibility.rows, matchRows);
   const historyRows = completion.rows;
@@ -285,6 +290,9 @@ async function main() {
     .from("api_match_player_stats")
     .select("appearance_id,lineup_status")
     .in("appearance_id", appearanceIds)
+    .order("appearance_id")
+    .order("metric_id")
+    .order("source_id")
     .range(from, to)) : [];
   const lineupByAppearanceId = new Map(lineupRows.map((row) => [row.appearance_id, row.lineup_status]));
   const grouped = groupAppearances(historyRows, playerNameById, lineupByAppearanceId);
