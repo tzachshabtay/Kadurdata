@@ -695,6 +695,106 @@ def upsert_match(
     return match_id
 
 
+def reconcile_match_teams(
+    cur: psycopg.Cursor,
+    match_id: str,
+    home_team_id: str,
+    away_team_id: str,
+) -> None:
+    """Reconcile fixture corrections without moving statistics to another club.
+
+    upsert_match has already locked the parent match in this transaction. Keep
+    existing match-team IDs for retained teams; only remove obsolete fixture-only
+    rows. A participant replacement with any recorded match detail needs review.
+    """
+    if home_team_id == away_team_id:
+        raise ValueError(f"match {match_id} has the same home and away team")
+    cur.execute(
+        "select id, team_id, side from core.match_teams where match_id = %s for update",
+        (match_id,),
+    )
+    existing = cur.fetchall()
+    expected = {home_team_id: "home", away_team_id: "away"}
+    if not existing or all(expected.get(row["team_id"]) == row["side"] for row in existing):
+        return
+    if any(row["side"] not in {"home", "away"} for row in existing):
+        raise ValueError(f"match {match_id} has an unexpected existing side")
+
+    removed = [row for row in existing if row["team_id"] not in expected]
+    if removed:
+        cur.execute(
+            """
+            select
+              exists (select 1 from core.player_match_appearances where match_id = %(match)s)
+              or exists (select 1 from obs.player_appearance_observations where match_id = %(match)s)
+              or exists (select 1 from obs.events where match_id = %(match)s)
+              or exists (select 1 from obs.heatmaps where match_id = %(match)s)
+              or exists (
+                select 1 from obs.team_match_stats stats
+                join core.match_teams team on team.id = stats.match_team_id
+                where team.match_id = %(match)s
+              )
+              or exists (
+                select 1 from obs.stat_observations
+                where match_id = %(match)s or subject_id in
+                  (select id from core.match_teams where match_id = %(match)s)
+              )
+              or exists (
+                select 1 from source.source_entity_ids
+                where canonical_id in
+                  (select id from core.match_teams where match_id = %(match)s)
+              )
+              or exists (
+                select 1 from core.match_teams where match_id = %(match)s
+                and (red_cards is not null or formation is not null
+                     or coach_name is not null or metadata <> '{}'::jsonb)
+              ) as has_details
+            """,
+            {"match": match_id},
+        )
+        if cur.fetchone()["has_details"]:
+            raise ValueError(
+                f"refusing participant replacement for match {match_id}: recorded match details exist"
+            )
+        cur.execute(
+            "delete from core.match_teams where match_id = %s and team_id <> all(%s::uuid[])",
+            (match_id, [home_team_id, away_team_id]),
+        )
+
+    # Immediate uniqueness constraints require vacating BOTH sides before a swap.
+    # These temporary labels never leave the current transaction.
+    cur.execute(
+        "update core.match_teams set side = 'reconcile:' || id::text where match_id = %s",
+        (match_id,),
+    )
+    cur.execute(
+        """
+        update core.match_teams
+        set side = case when team_id = %(home)s then 'home' else 'away' end,
+            opponent_team_id = case when team_id = %(home)s then %(away)s::uuid else %(home)s::uuid end
+        where match_id = %(match)s
+        """,
+        {"match": match_id, "home": home_team_id, "away": away_team_id},
+    )
+    # A side swap retains the same teams and their stats, but appearances also
+    # carry side/opponent context and must agree with the corrected fixture.
+    cur.execute(
+        """
+        update core.player_match_appearances
+        set side = case when team_id = %(home)s then 'home' else 'away' end,
+            opponent_team_id = case when team_id = %(home)s then %(away)s::uuid else %(home)s::uuid end
+        where match_id = %(match)s and team_id in (%(home)s, %(away)s)
+        """,
+        {"match": match_id, "home": home_team_id, "away": away_team_id},
+    )
+    print(
+        f"reconciled match {match_id} participants: "
+        f"{[(str(row['team_id']), row['side']) for row in existing]} -> "
+        f"home={home_team_id}, away={away_team_id}",
+        flush=True,
+    )
+
+
 def upsert_match_team(
     cur: psycopg.Cursor,
     match_id: str,
@@ -951,6 +1051,50 @@ def ensure_metrics(cur: psycopg.Cursor, specs: dict[str, tuple[str, str]]) -> di
         """
     )
     return {row["code"]: row["id"] for row in cur.fetchall()}
+
+
+def deduplicate_player_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Discard only exact repeats or empty Missing placeholders for an athlete.
+
+    Run before BOTH appearance and stat processing so the discarded record can
+    neither overwrite the played appearance nor contribute a second stat row.
+    Conflicting substantive records are rejected rather than guessed or summed.
+    """
+    def empty_missing(row: dict[str, str]) -> bool:
+        return (
+            str(row.get("lineup_status_text") or "").strip().casefold() == "missing"
+            and str(row.get("has_stats") or "").strip().casefold() not in {"true", "1"}
+            and empty_to_none(row.get("heatmap_url")) is None
+            and empty_to_none(row.get("rating")) is None
+            and not any(
+                empty_to_none(value) is not None
+                for column, value in row.items()
+                if metric_from_stat_column(column)
+            )
+        )
+
+    chosen: dict[tuple[str, str, str], dict[str, str]] = {}
+    skipped = 0
+    for row in rows:
+        player_id = source_player_id(row)
+        if not player_id:
+            continue
+        key = (row["game_id"], player_id, row["team_id"])
+        previous = chosen.get(key)
+        if previous is None:
+            chosen[key] = row
+        elif previous == row:
+            skipped += 1
+        elif empty_missing(previous) and not empty_missing(row):
+            chosen[key] = row
+            skipped += 1
+        elif empty_missing(row) and not empty_missing(previous):
+            skipped += 1
+        else:
+            raise ValueError(f"conflicting player appearance records for {key}")
+    if skipped:
+        print(f"discarded {skipped} duplicate/empty Missing player records", flush=True)
+    return list(chosen.values())
 
 
 def valid_player_rows(rows: list[dict[str, str]], indexes: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1673,6 +1817,7 @@ def load_fixtures(cur: psycopg.Cursor, source_id: str, competition_id: str, seas
             teams[home_source_id],
             teams[away_source_id],
         )
+        reconcile_match_teams(cur, match_id, teams[home_source_id], teams[away_source_id])
         matches[row["game_id"]] = match_id
         match_teams[(row["game_id"], home_source_id)] = upsert_match_team(
             cur,
@@ -1734,7 +1879,7 @@ def load_player_rows(
     rows: list[dict[str, str]],
     indexes: dict[str, Any],
 ) -> None:
-    valid_rows = valid_player_rows(rows, indexes)
+    valid_rows = valid_player_rows(deduplicate_player_rows(rows), indexes)
     metric_specs = collect_player_stat_metric_specs([item["row"] for item in valid_rows])
     ensure_metrics(cur, metric_specs)
     player_ids = ensure_players(cur, source_id, israel_country_id, season_id, valid_rows)
@@ -2151,6 +2296,7 @@ def main() -> int:
         if key:
             team_stat_groups.setdefault(key, []).append(row)
 
+    failures: list[str] = []
     with psycopg.connect(database_url, row_factory=dict_row, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
             source_id = get_source(cur)
@@ -2166,64 +2312,73 @@ def main() -> int:
                 ),
             )
             for (competition_source_id, season_num), season_fixture_rows in ordered_groups:
-                competition = competitions[competition_source_id]
-                competition_id = canonical_competitions.get(competition_source_id)
-                if competition_id is None:
-                    competition_id = get_or_create_competition(
+                try:
+                    competition = competitions[competition_source_id]
+                    competition_id = canonical_competitions.get(competition_source_id)
+                    if competition_id is None:
+                        competition_id = get_or_create_competition(
+                            cur,
+                            source_id,
+                            competition_country_id(country_id, competition),
+                            competition,
+                        )
+                        canonical_competitions[competition_source_id] = competition_id
+
+                    season_id = get_or_create_season(
                         cur,
                         source_id,
-                        competition_country_id(country_id, competition),
-                        competition,
+                        competition_id,
+                        competition_source_id,
+                        season_fixture_rows,
+                        season_manifest(competition, season_num),
                     )
-                    canonical_competitions[competition_source_id] = competition_id
-
-                season_id = get_or_create_season(
-                    cur,
-                    source_id,
-                    competition_id,
-                    competition_source_id,
-                    season_fixture_rows,
-                    season_manifest(competition, season_num),
-                )
-                indexes = load_fixtures(
-                    cur,
-                    source_id,
-                    competition_id,
-                    season_id,
-                    season_fixture_rows,
-                )
-                conn.commit()
-                print(
-                    f"loaded {competition['name']} season {season_num}: "
-                    f"{len(indexes['matches'])} matches",
-                    flush=True,
-                )
-                load_player_rows(
-                    conn,
-                    cur,
-                    source_id,
-                    country_id,
-                    season_id,
-                    player_groups.get((competition_source_id, season_num), []),
-                    indexes,
-                )
-                loaded_shots = load_shot_events(
-                    conn,
-                    cur,
-                    source_id,
-                    shot_groups.get((competition_source_id, season_num), []),
-                    indexes,
-                )
-                if loaded_shots:
-                    print(f"loaded {loaded_shots} shot events", flush=True)
-                load_team_stats(
-                    conn,
-                    cur,
-                    source_id,
-                    season_id,
-                    team_stat_groups.get((competition_source_id, season_num), []),
-                    indexes,
-                )
+                    indexes = load_fixtures(
+                        cur,
+                        source_id,
+                        competition_id,
+                        season_id,
+                        season_fixture_rows,
+                    )
+                    conn.commit()
+                    print(
+                        f"loaded {competition['name']} season {season_num}: "
+                        f"{len(indexes['matches'])} matches",
+                        flush=True,
+                    )
+                    load_player_rows(
+                        conn,
+                        cur,
+                        source_id,
+                        country_id,
+                        season_id,
+                        player_groups.get((competition_source_id, season_num), []),
+                        indexes,
+                    )
+                    loaded_shots = load_shot_events(
+                        conn,
+                        cur,
+                        source_id,
+                        shot_groups.get((competition_source_id, season_num), []),
+                        indexes,
+                    )
+                    if loaded_shots:
+                        print(f"loaded {loaded_shots} shot events", flush=True)
+                    load_team_stats(
+                        conn,
+                        cur,
+                        source_id,
+                        season_id,
+                        team_stat_groups.get((competition_source_id, season_num), []),
+                        indexes,
+                    )
+                    conn.commit()
+                except (psycopg.Error, ValueError) as exc:
+                    conn.rollback()
+                    canonical_competitions.pop(competition_source_id, None)
+                    failure = f"competition {competition_source_id}, season {season_num}: {exc}"
+                    failures.append(failure)
+                    print(f"FAILED {failure}", flush=True)
+                    continue
             if legionnaire_rows:
                 loaded_legionnaires = load_legionnaire_roster(
                     cur,
@@ -2234,6 +2389,10 @@ def main() -> int:
                 conn.commit()
                 print(f"loaded {loaded_legionnaires} legionnaire club-season affiliations", flush=True)
         conn.commit()
+
+    if failures:
+        print(f"load incomplete: {len(failures)} competition-season group(s) failed", flush=True)
+        return 1
 
     print(
         "loaded "
