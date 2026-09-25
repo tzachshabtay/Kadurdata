@@ -2302,6 +2302,9 @@ def main() -> int:
             source_id = get_source(cur)
             print("source ready", flush=True)
             country_id = get_or_create_country(cur)
+            # Shared identities must survive a later competition rollback, even
+            # on the first import into an empty database.
+            conn.commit()
             canonical_competitions: dict[str, str] = {}
 
             ordered_groups = sorted(
