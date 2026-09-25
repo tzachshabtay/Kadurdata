@@ -3718,7 +3718,13 @@
       "weightedRatingsRecomputed": true,
       "missingMetricsNotZeroFilled": true,
       "allSelectedStatsDirectlySupportParagraph": true,
-      "numberlessCoherence": true
+      "numberlessCoherence": true,
+      "storyValue": true,
+      "gameStateContext": true,
+      "graphicRelevance": true,
+      "explanatoryDepth": true,
+      "playerRoleAttribution": true,
+      "historicalAuditComplete": true
     },
     "issues": [],
     "sentenceReviews": [
@@ -4983,6 +4989,41 @@
       "sentenceCount": 84,
       "playerCardCount": 23,
       "reviewScope": "Independent visible-copy, supplied-source and analyst evidence audit; no new database collection and no rendered preview inspection."
+    },
+    "compatibilityReview": {
+      "status": "passed",
+      "mode": "codex_skill_quality_gate_compatibility",
+      "model": "gpt-6-astra",
+      "reviewerAgentId": "/root/publication_refresh_reviewer",
+      "reviewedAt": "2026-09-25T19:16:55.143372+00:00",
+      "reviewedHash": "cc4187cb42c1ca92273d5cd867d807bf19082a2eb9b3e3840184dc31c53ccbd2",
+      "sourceSha256": "a222f10d461e4b24291a8d1624b3a620be6ccd883916124a18f961bdad93ef2c",
+      "checks": {
+        "storyValue": true,
+        "gameStateContext": true,
+        "graphicRelevance": true,
+        "explanatoryDepth": true,
+        "playerRoleAttribution": true,
+        "historicalAuditComplete": true
+      },
+      "rationales": {
+        "storyValue": "Passed for the weekly-report genre: the overview explains contribution through repeated creation and assists rather than goals alone. The 23 complete player recaps retain coherent football meaning without numbers.",
+        "gameStateContext": "Passed within the available match-level evidence: wins, draws, defeats and chronological weekly appearances are accurately attributed. No claim compares pre/post-red-card phases, asserts event sequencing within a match, or attributes causality to score state. No event-level game-state adjustment is claimed.",
+        "graphicRelevance": "Passed: the 23 player cards are the primary weekly graphics. Every selected supporting metric directly substantiates its adjacent paragraph, with at most four fields beyond rating/minutes; missing metrics are omitted and Khalaila partial rating is qualified. No decorative or cross-player comparison graphic is selected. This is content relevance, not a fresh rendered-layout signoff.",
+        "explanatoryDepth": "Passed at the descriptive scope explicitly set in the analysis plan: Gloukh repeated key passes plus own-history frequency explain sustained weekly creation; Turgeman assists despite goalless shooting, Baribo shot volume without scoring, and Saba sole low-xG scoring attempt provide supported interpretation. Sparse basic-only recaps appropriately stay factual; no unsupported tactical mechanism is asserted.",
+        "playerRoleAttribution": "Passed: actions are assigned to the individual who performed them, including creation, shooting, passing, recoveries and keeper saves. Team results are distinguished from individual statistics, notably Hanin conceded data is not inferred from the score. The text does not invent positions, off-ball movements, or causal tactical roles.",
+        "historicalAuditComplete": "Passed for the weekly own-player scope: existing review covers all 23 player baselines and strongest eligible signals, with selection/omission decisions. Gloukh 10 key passes/180 minutes versus 6/292 over five substantial priors validates 5 versus 1.85 per 90. The analysis plan documents other omitted eligible signals, partial-metric removals, foreign-club exclusions, insufficient Revivo/Abu Farhi baselines and refreshed Safuri history. Team/cross-player comparison categories do not apply to this weekly format. Database eligibility completeness relies on the supplied independent analyst audit, as already disclosed."
+      },
+      "issues": [],
+      "inputs": [
+        "src/content/articles.ts",
+        "refresh-quality-review.json",
+        "review-packet.json",
+        "source.json",
+        "authored.json:analysisPlan",
+        "previously reviewed blind-visible.json and refresh analyst audit/corrections"
+      ],
+      "scope": "Metadata compatibility supplement to completed review, with no new prose or publication authorization. Analysis plan inspected only after initial blind review was completed. Existing verification limits and blind-protocol disclosure remain in force."
     }
   },
   "editorial": {
