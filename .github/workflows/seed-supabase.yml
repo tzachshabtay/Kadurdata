@@ -19,6 +19,11 @@ on:
         description: "Matches per competition. Use 0 for every match in the selected window."
         required: false
         default: "0"
+      run_maintenance:
+        description: "Also run daily roster, loan, and Hebrew-name maintenance. Disable for a focused match backfill."
+        required: false
+        default: true
+        type: boolean
       competition_ids:
         description: "Optional comma-separated 365Scores competition IDs. Blank means domestic, UEFA, and national-team competitions."
         required: false
@@ -42,7 +47,7 @@ jobs:
       SEED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_mode || 'recent' }}
       COMPETITION_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.competition_ids || '' }}
       RUN_MATCH_REFRESH: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '17 1-23/2 * * *' }}
-      RUN_MAINTENANCE: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '47 2 * * *' }}
+      RUN_MAINTENANCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_maintenance) || github.event.schedule == '47 2 * * *' }}
 
     steps:
       - name: Checkout

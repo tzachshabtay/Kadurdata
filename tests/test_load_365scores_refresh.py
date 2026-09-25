@@ -104,11 +104,11 @@ class RefreshPostgresTests(unittest.TestCase):
             cur.execute("select current_database() as name")
             if cur.fetchone()["name"] != "kadurdata_test":
                 raise RuntimeError("Integration tests require the disposable kadurdata_test database")
-            # Real schema/constraints, plus the two wide-stat tables introduced in023.
+            # Real schema, wide-stat compatibility views and database constraints.
             root = Path(__file__).resolve().parents[1]
             cur.execute((root / "db/migrations/001_initial_schema.sql").read_text())
             wide = (root / "db/migrations/023_wide_match_stats.sql").read_text()
-            cur.execute(wide[:wide.index("do $migration$")])
+            cur.execute(wide)
         cls.conn.commit()
 
     @classmethod
@@ -178,7 +178,7 @@ class RefreshPostgresTests(unittest.TestCase):
         self.cur.execute("select match_team_id from obs.team_match_stats")
         self.assertEqual(self.cur.fetchone()["match_team_id"],self.home_row)
 
-    def test_replacement_with_appearance_or_legacy_stat_is_rejected(self):
+    def test_replacement_with_appearance_is_rejected(self):
         self.cur.execute("insert into core.players (display_name) values ('Test') returning id")
         player = self.cur.fetchone()["id"]
         self.cur.execute("insert into core.player_match_appearances (match_id,player_id,team_id) values (%s,%s,%s)", (self.match,player,self.home))
