@@ -201,6 +201,38 @@ class RefreshPostgresTests(unittest.TestCase):
         self.cur.execute("select heatmap_url from obs.player_appearance_observations")
         self.assertEqual(self.cur.fetchone()["heatmap_url"],played_row()["heatmap_url"])
 
+    def test_match_stat_filter_migration_preserves_rows_and_future_metrics(self):
+        root = Path(__file__).resolve().parents[1]
+        self.cur.execute("insert into core.players (display_name) values ('Metric test') returning id")
+        player = self.cur.fetchone()["id"]
+        self.cur.execute("insert into core.player_match_appearances (match_id,player_id,team_id) values (%s,%s,%s) returning id", (self.match, player, self.home))
+        appearance = self.cur.fetchone()["id"]
+        self.cur.execute("insert into obs.metrics (code,name,subject_type,value_type) values ('test_value','Test','player_match','number')")
+        self.cur.execute("alter table obs.player_match_stats add column test_value numeric(18,6)")
+        self.cur.execute("alter table obs.team_match_stats add column test_value numeric(18,6)")
+        self.cur.execute("insert into obs.player_match_stats (source_id,appearance_id,test_value) values (%s,%s,0)", (self.source, appearance))
+        self.cur.execute("insert into obs.team_match_stats (source_id,match_team_id,test_value) values (%s,%s,1.25),(%s,%s,null)", (self.source, self.home_row, self.source, self.away_row))
+        self.cur.execute("select obs.refresh_stat_values_view()")
+        old = (root / "db/migrations/003_explorer_api_views.sql").read_text()
+        old = old[old.index("create or replace view public.api_match_player_stats as"):old.index("grant select on")]
+        self.cur.execute(old)
+        before = {}
+        for view in ("api_match_player_stats", "api_match_team_stats"):
+            self.cur.execute(f"select * from public.{view} order by metric_code")
+            before[view] = self.cur.fetchall()
+            self.assertEqual(len(before[view]), 1)
+        self.cur.execute((root / "db/migrations/042_push_match_filters_into_stat_values.sql").read_text())
+        for view, expected in before.items():
+            self.cur.execute(f"select * from public.{view} where match_id=any(%s::uuid[]) and season_id=%s order by metric_code", ([self.match], self.season))
+            self.assertEqual(self.cur.fetchall(), expected)
+        # Loaders add columns and refresh stat_values as new provider metrics arrive.
+        self.cur.execute("insert into obs.metrics (code,name,subject_type,value_type) values ('future_value','Future','player_match','number')")
+        self.cur.execute("alter table obs.player_match_stats add column future_value numeric(18,6)")
+        self.cur.execute("update obs.player_match_stats set future_value=2.5")
+        self.cur.execute("select obs.refresh_stat_values_view()")
+        self.cur.execute("select metric_code,value_numeric from public.api_match_player_stats where match_id=%s order by metric_code", (self.match,))
+        self.assertEqual(self.cur.fetchall(), [{"metric_code":"future_value","value_numeric":2.5},{"metric_code":"test_value","value_numeric":0}])
+
 
 if __name__ == "__main__":
     unittest.main()

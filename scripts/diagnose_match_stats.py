@@ -3,6 +3,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import psycopg
 
@@ -32,6 +33,32 @@ def main():
                 order by match_id, metric_code limit 1000
             """, (ids,))
             print(json.dumps({"label": "current", "plan": cur.fetchone()[0]}), flush=True)
+            migration = Path("db/migrations/042_push_match_filters_into_stat_values.sql").read_text()
+            for view in ("api_match_player_stats", "api_match_team_stats"):
+                proposed = migration.split(f"create or replace view public.{view} as\n", 1)[1].split(";", 1)[0]
+                cur.execute(f"""
+                    explain (analyze, buffers, format json)
+                    select * from ({proposed}) proposed
+                    where match_id = any(%s::uuid[])
+                    order by match_id, metric_code limit 1000
+                """, (ids,))
+                print(json.dumps({"label": f"proposed-{view}", "plan": cur.fetchone()[0]}), flush=True)
+                cur.execute(f"""
+                    with current_rows as (
+                      select * from public.{view} where match_id = any(%s::uuid[])
+                    ), proposed_rows as (
+                      select * from ({proposed}) proposed where match_id = any(%s::uuid[])
+                    )
+                    select count(*) from (
+                      (select * from current_rows except all select * from proposed_rows)
+                      union all
+                      (select * from proposed_rows except all select * from current_rows)
+                    ) difference
+                """, (ids, ids))
+                differences = cur.fetchone()[0]
+                print(json.dumps({"view": view, "different_rows": differences}), flush=True)
+                if differences:
+                    raise RuntimeError(f"Proposed {view} changes data")
 
 
 if __name__ == "__main__":
