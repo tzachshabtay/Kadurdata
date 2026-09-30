@@ -45,6 +45,19 @@ test("finalization is pending and publication validation accepts reviewed league
   const promoted={...candidate,status:"published",publishedAt:new Date().toISOString(),generation:{...candidate.generation,mode:"codex_skill"},approval:{status:"approved",approvedAt:new Date().toISOString(),note:"Synthetic test fixture"}};
   assert.deepEqual(validateArticle(promoted,"fixture.json"),[]);
 });
+test("GPT-6.1 Sol finalizes with matching recorded roles and retains review gates",()=>{
+  const source=prepareLeagueSource(fixture(),{slug:"fixture"}),a=authored(source);
+  a.model=a.editorialReview.model=a.qualityReview.model="gpt-6.1-sol";
+  const candidate=finalizeLeagueArticle(source,a);
+  for(const role of ["model","analystModel","writerModel","editorModel","qualityModel"])
+    assert.equal(candidate.generation[role],"gpt-6.1-sol");
+  assert.equal(candidate.approval.status,"pending");
+  a.qualityReview.model="gpt-6-astra";
+  assert.throws(()=>finalizeLeagueArticle(source,a),/matching recorded/);
+  a.qualityReview.model="gpt-6.1-sol";
+  a.qualityReview.checks.storyValue=false;
+  assert.throws(()=>finalizeLeagueArticle(source,a),/incomplete/);
+});
 test("review hashes bind chart metrics and disclosure as well as prose",()=>{
   const source=prepareLeagueSource(fixture(),{slug:"fixture"});
   for(const mutate of [a=>a.analysisPlan.graphics[0].metrics.push("total_shots"),a=>a.aiDisclosure+=" טקסט נוסף.",a=>a.editorial.headline+=" תיקון"]){const a=authored(source);mutate(a);assert.throws(()=>assertLeagueCopy(source,a),/changed|exact/);}

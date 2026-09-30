@@ -242,7 +242,8 @@ const articleClubs = source => new Set(source.clubComparison?.clubs.map(c => c.t
 export function finalizeLeagueArticle(source, authored, now = new Date().toISOString()) {
   assert(source.generation?.mode === "codex_skill_workbench" && source.generation.pipelineVersion === LEAGUE_PIPELINE_VERSION, "Source is not a prepared league workbench.");
   assertLeagueData(source);
-  assert(authored.schemaVersion === 2 && authored.model === "gpt-6-astra" && authored.editorialReview?.model === "gpt-6-astra" && authored.qualityReview?.model === "gpt-6-astra", "League authoring requires the recorded GPT-6 Astra roles.");
+  const supportedModels = ["gpt-6-astra", "gpt-6.1-sol"];
+  assert(authored.schemaVersion === 2 && supportedModels.includes(authored.model) && authored.editorialReview?.model === authored.model && authored.qualityReview?.model === authored.model, "League authoring requires matching recorded GPT-6 Astra or GPT-6.1 Sol roles.");
   const counts = assertLeagueCopy(source,authored,{draftRequired:true});
   const checks = [
     ["league-window","חלון ליגה אחיד",`${source.summary.matches} משחקים באותה ליגה ועונה`],
