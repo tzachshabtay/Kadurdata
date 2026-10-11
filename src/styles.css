@@ -2982,6 +2982,141 @@ table {
   min-width: 650px;
 }
 
+.match-player-table-panel {
+  min-width: 0;
+  padding: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.match-table-heading,
+.match-table-actions,
+.match-column-picker-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.match-columns-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 37px;
+  padding: 7px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--raised);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.match-columns-button:hover,
+.match-columns-button[aria-expanded="true"] {
+  border-color: var(--teal);
+}
+
+.match-columns-button > span {
+  color: var(--teal);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-column-picker {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel-deep);
+}
+
+.match-column-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 180px;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.match-column-search input {
+  width: 100%;
+  min-width: 0;
+  height: 37px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--panel);
+  font-size: 11px;
+}
+
+.match-column-picker > p {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.match-column-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 18px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 3px;
+}
+
+.match-column-groups fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.match-column-groups legend {
+  margin-bottom: 7px;
+  color: var(--teal);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.match-column-groups label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.match-column-groups label:hover {
+  background: var(--raised);
+}
+
+.match-column-groups input {
+  flex: 0 0 auto;
+  accent-color: var(--teal);
+}
+
+.player-stat-table th,
+.player-stat-table td {
+  white-space: nowrap;
+}
+
+.player-stat-table th:first-child,
+.player-stat-table td:first-child {
+  position: sticky;
+  z-index: 1;
+  inset-inline-start: 0;
+}
+
+.match-player-table-panel .data-table-wrap:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
 .average-position-panel {
   margin-bottom: 16px;
 }

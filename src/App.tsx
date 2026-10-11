@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Columns3,
   Globe2,
   LayoutDashboard,
   ListFilter,
@@ -292,17 +293,23 @@ const comparisonMetrics = [
   "team_corners",
   "team_passes_completed",
 ];
-const matchPlayerMetrics = [
+const defaultMatchColumns = [
+  "minutes",
   "rating_365",
   "goals",
   "assists",
   "pass_completion_pct",
-  "passes_completed",
-  "passes_attempted",
   "total_shots",
-  "tackles_won",
-  "minutes",
 ];
+const matchColumnsStorageKey = "kadurdata-match-columns";
+type MatchTableMetric = Pick<Metric, "code" | "name" | "value_type" | "numerator_metric_code" | "denominator_metric_code">;
+const defaultMatchTableMetrics: MatchTableMetric[] = defaultMatchColumns.map((code) => ({
+  code,
+  name: code.replace(/_/g, " "),
+  value_type: code === "pass_completion_pct" ? "percentage" : code === "rating_365" ? "rating" : "count",
+  numerator_metric_code: code === "pass_completion_pct" ? "passes_completed" : null,
+  denominator_metric_code: code === "pass_completion_pct" ? "passes_attempted" : null,
+}));
 
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -513,6 +520,28 @@ async function fetchPlayerHistoryRows(competitionId: string, playerId: string, a
     if (pageRows.length < pageSize) return { rows, error: null };
     page += 1;
   }
+}
+
+async function fetchMatchPlayerStats(matchId: string, signal: AbortSignal) {
+  const rows: MatchPlayerStat[] = [];
+  if (!supabase) return { data: rows, error: null };
+  const pageSize = 1000;
+  for (let offset = 0; !signal.aborted; offset += pageSize) {
+    const result = await supabase
+      .from("api_match_player_stats")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("appearance_id")
+      .order("metric_id")
+      .order("source_id")
+      .range(offset, offset + pageSize - 1)
+      .abortSignal(signal);
+    if (result.error) return { data: [], error: result.error };
+    const pageRows = (result.data ?? []) as MatchPlayerStat[];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) break;
+  }
+  return { data: rows, error: null };
 }
 
 async function fetchPlayerValuationRows(playerId: string) {
@@ -1127,6 +1156,7 @@ export function App() {
   }, [matches, roundId, roundMatches, seasonId, seasonLoading]);
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadMatchDetail() {
       if (view !== "matches" || !matchId) {
         setMatchPlayerStats([]);
@@ -1138,16 +1168,12 @@ export function App() {
       if (!hasSupabaseConfig || !supabase) return;
       setDetailLoading(true);
       const [playersResult, teamsResult, heatmapsResult, shotsResult] = await Promise.all([
-        supabase
-          .from("api_match_player_stats")
-          .select("*")
-          .eq("match_id", matchId)
-          .in("metric_code", matchPlayerMetrics)
-          .limit(1000),
+        fetchMatchPlayerStats(matchId, controller.signal),
         supabase.from("api_match_team_stats").select("*").eq("match_id", matchId).limit(500),
         supabase.from("api_match_player_heatmaps").select("*").eq("match_id", matchId).limit(100),
         supabase.from("api_match_shots").select("*").eq("match_id", matchId).order("minute").limit(500),
       ]);
+      if (controller.signal.aborted) return;
       const firstError = playersResult.error ?? teamsResult.error;
       if (firstError) setError(firstError.message);
       setMatchPlayerStats((playersResult.data ?? []) as MatchPlayerStat[]);
@@ -1158,6 +1184,7 @@ export function App() {
     }
 
     void loadMatchDetail();
+    return () => controller.abort();
   }, [matchId, view]);
 
   useEffect(() => {
@@ -3576,13 +3603,20 @@ function MatchesView({
                     </div>
                   </div>
                   {detailLoading ? <InlineLoading /> : (
-                    <>
-                      <MatchAveragePositionPitch players={players} seasonPlayers={seasonPlayers} heatmaps={heatmaps} inspectPlayer={setSelectedMatchPlayerId} />
-                      <PlayerMatchTable players={players} seasonPlayers={seasonPlayers} inspectPlayer={setSelectedMatchPlayerId} />
-                    </>
+                    <MatchAveragePositionPitch players={players} seasonPlayers={seasonPlayers} heatmaps={heatmaps} inspectPlayer={setSelectedMatchPlayerId} />
                   )}
                 </div>
               </div>
+              <PlayerMatchTable
+                players={players}
+                seasonPlayers={seasonPlayers}
+                metrics={metrics}
+                teamName={localizedMatchTeam(selectedMatch, matchSide, language)}
+                matchSide={matchSide}
+                setMatchSide={(side) => { setSelectedMatchPlayerId(""); setMatchSide(side); }}
+                loading={detailLoading}
+                inspectPlayer={setSelectedMatchPlayerId}
+              />
               <MatchShotMap
                 match={selectedMatch}
                 shots={shots}
@@ -5283,7 +5317,7 @@ function MatchShotMap({
   );
 }
 
-function matchTableRankClasses(players: PlayerPivot[]) {
+function matchTableRankClasses(players: PlayerPivot[], columns: MatchTableMetric[]) {
   function extremes(valueForPlayer: (player: PlayerPivot) => number | null | undefined, metricCode: string) {
     const ranked = players.map((player) => {
       const rawValue = valueForPlayer(player);
@@ -5296,8 +5330,8 @@ function matchTableRankClasses(players: PlayerPivot[]) {
     const observed = ranked.flatMap((item) => item.value === null ? [] : [item.value]);
     const classes = new Map<string, string>();
     if (observed.length < 2) return classes;
-    const best = Math.max(...observed);
-    const worst = Math.min(...observed);
+    const best = isLowerBetterMetric(metricCode) ? Math.min(...observed) : Math.max(...observed);
+    const worst = isLowerBetterMetric(metricCode) ? Math.max(...observed) : Math.min(...observed);
     if (Math.abs(best - worst) < 0.000001) return classes;
     const bestCount = ranked.filter((item) => item.value !== null && Math.abs(item.value - best) < 0.000001).length;
     const worstCount = ranked.filter((item) => item.value !== null && Math.abs(item.value - worst) < 0.000001).length;
@@ -5309,13 +5343,10 @@ function matchTableRankClasses(players: PlayerPivot[]) {
     return classes;
   }
 
-  return {
-    rating: extremes((player) => player.values.rating_365, "rating_365"),
-    goals: extremes((player) => player.values.goals, "goals"),
-    assists: extremes((player) => player.values.assists, "assists"),
-    passCompletion: extremes((player) => player.values.pass_completion_pct, "pass_completion_pct"),
-    shots: extremes((player) => player.values.total_shots, "total_shots"),
-  };
+  return Object.fromEntries(columns.map(({ code }) => [
+    code,
+    code === "minutes" ? new Map<string, string>() : extremes((player) => player.values[code], code),
+  ]));
 }
 
 function shortPlayerName(name: string) {
@@ -5404,54 +5435,153 @@ function sortMatchLineupPlayers(players: PlayerPivot[], seasonPlayerById: Map<st
 function PlayerMatchTable({
   players,
   seasonPlayers,
+  metrics,
+  teamName,
+  matchSide,
+  setMatchSide,
+  loading,
   inspectPlayer,
 }: {
   players: PlayerPivot[];
   seasonPlayers: SeasonPlayer[];
+  metrics: Metric[];
+  teamName: string;
+  matchSide: "home" | "away";
+  setMatchSide: (side: "home" | "away") => void;
+  loading: boolean;
   inspectPlayer: (id: string) => void;
 }) {
   const { language, text } = useLocale();
+  const [selectedCodes, setSelectedCodes] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem(matchColumnsStorageKey) ?? "null");
+      if (Array.isArray(saved) && saved.every((code) => typeof code === "string")) return [...new Set(saved)];
+    } catch { /* Use the defaults when browser storage is unavailable. */ }
+    return [...defaultMatchColumns];
+  });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const pickerButton = useRef<HTMLButtonElement>(null);
+  const availableColumns = useMemo(() => Array.from(new Map([
+    ...defaultMatchTableMetrics,
+    ...metrics.filter((metric) => metric.subject_type === "player_match"),
+  ].map((metric) => [metric.code, metric])).values()), [metrics]);
+  const columnByCode = new Map(availableColumns.map((metric) => [metric.code, metric]));
+  const columns = selectedCodes.flatMap((code) => {
+    const metric = columnByCode.get(code);
+    return metric ? [metric] : [];
+  });
+  const columnName = (metric: MatchTableMetric) => metricName(metric.code, friendlyMetric(metric.name), language);
+  const defaultLabels: Record<string, string> = {
+    minutes: text.minShort, rating_365: text.rating, goals: text.goalsShort,
+    assists: text.assistsShort, pass_completion_pct: text.passPct, total_shots: text.shots,
+  };
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const groups = playerAttributeCategories.map((category) => ({
+    category,
+    columns: availableColumns.filter((metric) => playerAttributeCategory(metric) === category
+      && `${columnName(metric)} ${metric.name} ${metric.code}`.toLocaleLowerCase().includes(normalizedQuery))
+      .sort((left, right) => columnName(left).localeCompare(columnName(right), localeCode(language))),
+  })).filter((group) => group.columns.length);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(matchColumnsStorageKey, JSON.stringify(selectedCodes)); }
+    catch { /* Column selection still works without browser storage. */ }
+  }, [selectedCodes]);
+
+  function closePicker() {
+    setPickerOpen(false);
+    setQuery("");
+    pickerButton.current?.focus();
+  }
+
   const seasonPlayerById = new Map(seasonPlayers.map((player) => [player.player_id, player]));
-  const rankClasses = matchTableRankClasses(players);
+  const rankClasses = matchTableRankClasses(players, columns);
   const sortedPlayers = sortMatchLineupPlayers(players, seasonPlayerById);
-  if (!players.length) return <EmptyState text={text.noSidePlayerStats} />;
   return (
-    <div className="data-table-wrap">
-      <table className="player-stat-table">
-        <thead><tr><th>{text.player}</th><th>{text.minShort}</th><th>{text.rating}</th><th>{text.goalsShort}</th><th>{text.assistsShort}</th><th>{text.passPct}</th><th>{text.shots}</th></tr></thead>
-        <tbody>{sortedPlayers.map((player, index) => {
-          const displayName = localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language);
-          const inspect = () => inspectPlayer(player.player_id);
-          const startsSubstitutes = matchLineupStatusOrder(player.lineup_status) === 1
-            && index > 0
-            && matchLineupStatusOrder(sortedPlayers[index - 1].lineup_status) !== 1;
-          return (
-            <tr
-              className={startsSubstitutes ? "substitute-start" : undefined}
-              key={player.appearance_id}
-              role="button"
-              tabIndex={0}
-              title={`${text.viewMatchAttributes}: ${displayName}`}
-              aria-label={`${text.viewMatchAttributes}: ${displayName}`}
-              onClick={inspect}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                inspect();
-              }}
-            >
-              <td><span className="match-player-cell"><span>{player.shirt_number ?? "-"}</span><span><strong>{displayName}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></span></td>
-              <td>{formatMetric(player.minutes_played)}</td>
-              <td className={rankClasses.rating.get(player.player_id)}><strong>{formatMetric(player.values.rating_365)}</strong></td>
-              <td className={rankClasses.goals.get(player.player_id)}>{formatMetric(player.values.goals)}</td>
-              <td className={rankClasses.assists.get(player.player_id)}>{formatMetric(player.values.assists)}</td>
-              <td className={rankClasses.passCompletion.get(player.player_id)}>{formatMetricWithRatio(player.values.pass_completion_pct, "percentage", player.values.passes_completed, player.values.passes_attempted)}</td>
-              <td className={rankClasses.shots.get(player.player_id)}>{formatMetric(player.values.total_shots)}</td>
-            </tr>
-          );
-        })}</tbody>
-      </table>
-    </div>
+    <section className="match-player-table-panel" aria-label={text.playerStatistics}>
+      <div className="lineup-heading match-table-heading">
+        <div><span>{text.playerStatistics}</span><strong>{teamName}</strong></div>
+        <div className="match-table-actions">
+          <div className="segmented compact-segmented" aria-label={text.team}>
+            <button className={matchSide === "home" ? "active" : ""} type="button" onClick={() => setMatchSide("home")}>{text.home}</button>
+            <button className={matchSide === "away" ? "active" : ""} type="button" onClick={() => setMatchSide("away")}>{text.away}</button>
+          </div>
+          <button ref={pickerButton} className="match-columns-button" type="button" aria-expanded={pickerOpen} aria-controls="match-column-picker" onClick={() => pickerOpen ? closePicker() : setPickerOpen(true)}>
+            <Columns3 size={15} aria-hidden="true" />{text.chooseColumns}<span>{columns.length}</span>
+          </button>
+        </div>
+      </div>
+      {pickerOpen && (
+        <div id="match-column-picker" className="match-column-picker" role="region" aria-label={text.chooseColumns} onKeyDown={(event) => {
+          if (event.key === "Escape") { event.stopPropagation(); closePicker(); }
+        }}>
+          <div className="match-column-picker-toolbar">
+            <label className="match-column-search"><Search size={16} aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.searchPlayerAttributes} aria-label={text.searchPlayerAttributes} autoFocus /></label>
+            <button className="match-columns-button" type="button" onClick={() => setSelectedCodes([...defaultMatchColumns])}>{text.resetColumns}</button>
+            <button className="icon-button compact" type="button" aria-label={text.closeColumnPicker} onClick={closePicker}><X size={17} aria-hidden="true" /></button>
+          </div>
+          <p>{text.chooseColumnsHint}</p>
+          <div className="match-column-groups">
+            {groups.length ? groups.map((group) => (
+              <fieldset key={group.category}>
+                <legend>{categoryName(group.category, language)}</legend>
+                {group.columns.map((metric) => (
+                  <label key={metric.code}>
+                    <input type="checkbox" checked={selectedCodes.includes(metric.code)} onChange={(event) => {
+                      const checked = event.target.checked;
+                      setSelectedCodes((current) => checked ? [...current, metric.code] : current.filter((code) => code !== metric.code));
+                    }} />
+                    <span>{columnName(metric)}</span>
+                  </label>
+                ))}
+              </fieldset>
+            )) : <EmptyState text={text.noMatchingAttributes} />}
+          </div>
+        </div>
+      )}
+      {loading ? <InlineLoading /> : !players.length ? <EmptyState text={text.noSidePlayerStats} /> : (
+        <div className="data-table-wrap" role="region" aria-label={text.playerStatistics} tabIndex={0}>
+          <table className="player-stat-table" aria-label={`${text.playerStatistics}: ${teamName}`}>
+            <thead><tr><th scope="col">{text.player}</th>{columns.map((metric) => <th key={metric.code} scope="col" title={columnName(metric)}>{defaultLabels[metric.code] ?? columnName(metric)}</th>)}</tr></thead>
+            <tbody>{sortedPlayers.map((player, index) => {
+              const displayName = localizedPlayerName(seasonPlayerById.get(player.player_id), player.display_name, language);
+              const inspect = () => inspectPlayer(player.player_id);
+              const startsSubstitutes = matchLineupStatusOrder(player.lineup_status) === 1
+                && index > 0
+                && matchLineupStatusOrder(sortedPlayers[index - 1].lineup_status) !== 1;
+              return (
+                <tr
+                  className={startsSubstitutes ? "substitute-start" : undefined}
+                  key={player.appearance_id}
+                  role="button"
+                  tabIndex={0}
+                  title={`${text.viewMatchAttributes}: ${displayName}`}
+                  aria-label={`${text.viewMatchAttributes}: ${displayName}`}
+                  onClick={inspect}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    inspect();
+                  }}
+                >
+                  <td><span className="match-player-cell"><span>{player.shirt_number ?? "-"}</span><span><strong>{displayName}</strong><small>{localizedFormationPosition(player.formation_position ?? player.position_name, language) || player.lineup_status || text.player}</small></span></span></td>
+                  {columns.map((metric) => {
+                    const value = formatMetricWithRatio(
+                      metric.code === "minutes" ? player.minutes_played : player.values[metric.code],
+                      metric.value_type,
+                      metric.numerator_metric_code ? player.values[metric.numerator_metric_code] : undefined,
+                      metric.denominator_metric_code ? player.values[metric.denominator_metric_code] : undefined,
+                    );
+                    return <td key={metric.code} className={rankClasses[metric.code].get(player.player_id)}>{metric.code === "rating_365" ? <strong>{value}</strong> : value}</td>;
+                  })}
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
