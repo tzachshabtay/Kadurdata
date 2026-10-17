@@ -280,6 +280,17 @@ export type ArticleEditorialReview = {
 };
 
 export type ArticleQualityReview = {
+  storyReview?: {
+    status: "passed" | "failed";
+    briefHash: string;
+    reviewedContentHash: string;
+    evidenceHash: string;
+    summaryHe: string;
+    explanationHe: string;
+    readerValueHe: string;
+    sectionProgression: Array<{ sectionIndex: number; addsHe: string }>;
+    issues: string[];
+  };
   mode: string;
   model: string | null;
   status: "passed" | "failed";
@@ -355,7 +366,19 @@ export type LeagueArticleGraphicSpec = {
 
 export type ArticleGraphicSpec = MatchArticleGraphicSpec | LegionnaireArticleGraphicSpec | LeagueArticleGraphicSpec;
 
+// Optional on stored legacy content; required by every new finalization.
+export type ArticleStoryBrief = {
+  status: "ready" | "reject";
+  questionHe: string;
+  answerHe: string;
+  tensionHe: string;
+  whyItMattersHe: string;
+  evidenceIds: string[];
+  rejectionReasonHe?: string;
+};
+
 export type ArticleAnalysisPlan<TGraphic extends ArticleGraphicSpec = ArticleGraphicSpec> = {
+  storyBrief?: ArticleStoryBrief;
   thesis: { claimHe: string; whyItMattersHe: string; evidenceIds: string[] };
   rankedInsights: ArticleInsight[];
   explanatoryModel: {
@@ -400,6 +423,7 @@ export type ArticleAnalysisPlan<TGraphic extends ArticleGraphicSpec = ArticleGra
 };
 
 export type ArticleGeneration = {
+  storyGateVersion?: 1;
   mode: string;
   analystModel: string | null;
   writerModel: string | null;
@@ -622,7 +646,7 @@ export type LeagueAnalysisArticle = {
   };
   tags: ArticleTag[];
   aiDisclosure: string;
-  analysisPlan: { thesis: string; rankedInsights: Array<{ id: string; evidenceIds: string[] }>; graphics: LeagueArticleGraphicSpec[] };
+  analysisPlan: { storyBrief?: ArticleStoryBrief; thesis: string; rankedInsights: Array<{ id: string; evidenceIds: string[] }>; graphics: LeagueArticleGraphicSpec[] };
   editorial: ArticleEditorial;
   editorialReview: ArticleEditorialReview;
   qualityReview: ArticleQualityReview;

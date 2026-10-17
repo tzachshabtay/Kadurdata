@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildReviewPacket } from "./content_language_review.mjs";
+import { assertStoredStoryGate } from "./content_story_gate.mjs";
 import { assertLeagueData, assertLeagueCopy, LEAGUE_PIPELINE_VERSION } from "./content_league_analysis.mjs";
 import { matchPlayerRecapEvidence, validateMatchPlayerRecaps } from "./content_match_player_recaps.mjs";
 import {
@@ -72,6 +73,7 @@ function chanceMechanismRepresentativeNames(mechanismContext) {
 function validateArticle(article, filename) {
   const failures = [];
   const fail = (message) => failures.push(`${filename}: ${message}`);
+  try { assertStoredStoryGate(article); } catch (error) { fail(error.message); }
   if (article.schemaVersion !== 1) fail("unsupported schemaVersion");
   if (article.language !== "he") fail("content must be Hebrew-only");
   if (article.status !== "published") fail("generated article is not published");

@@ -34,6 +34,12 @@ jobs:
       - name: Test weekly appearance eligibility
         run: node --test tests/test_legionnaire_eligibility.mjs
 
+      - name: Test editorial pipeline
+        run: npm run content:check:pipeline
+
+      - name: Validate published content
+        run: npm run content:validate
+
       - name: Build
         env:
           VITE_SUPABASE_URL: https://zmmubdmuqwpihyptlxrg.supabase.co

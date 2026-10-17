@@ -11,6 +11,7 @@ The workbench writes two ignored files under `.content-workbench/<slug>/`:
 - `model`: the Codex model selected for the task.
 - `authorship`: four non-empty and distinct real agent IDs for analyst, writer, Hebrew editor, and blind reviewer.
 - `analysisPlan`: one thesis, 3–5 ranked insights, a two-or-more-source explanatory model, the mandatory historical audit, a narrative arc, 2–4 distinct relevant graphics, all eight coverage decisions, and all quality flags. `playerRoleAttribution` is true only after the analyst has compared unit-level creation/finishing and representative players from both sides.
+- `analysisPlan.storyBrief`: the pre-draft question, answer, tension, reader consequence and decisive evidence from [story-first.md](../../kadurdata-blog/references/story-first.md). Pass `content:check:story` before the writer starts; this is not a self-awarded story-value checkbox.
 - Graphic titles and subtitles may describe only fields the selected component actually renders. They contain no numbers; rendered values come from the data component so that copy cannot conflict with rounding or source values. In particular, `tactical_heatmap` renders aggregate team heatmaps, not a named-player trace, shot locations, or unit-creation totals.
 - `draftEditorial`: the writer's untouched draft: headline, dek, 3–6 sections, exactly three takeaways, and a conclusion.
 - `draftPlayerRecaps`: the writer's untouched array of one recap for every player with `source.players[].minutes > 0`.
@@ -18,6 +19,7 @@ The workbench writes two ignored files under `.content-workbench/<slug>/`:
 - `playerRecaps`: the editor's final array, covering the same played players exactly once, including short appearances and players without a source rating. Use the player-recap contract below.
 - `editorialReview`: the writer/editor IDs, hashes of the draft and final copy, at least three concrete edit records, exact coverage of every visible final sentence, `status: "passed"`, and all thirteen checks true.
 - `qualityReview`: a distinct reviewer ID, hashes of the final and numberless copy, exact independent coverage of every visible final sentence, a passed numberless read with no issues, all thirteen checks true, `issues: []`, and a positive attempt number.
+- `qualityReview.storyReview`: the blind reader's own narrative assessment and complete section progression, bound to the packet's `storyBriefHash`, as specified in story-first.md. Required for every new match, league and weekly finalization; legacy stored packages remain unchanged.
 
 Use the TypeScript definitions in `src/content/types.ts` when a field is unclear. Use candidate IDs verbatim. A section may reference only insights selected in `analysisPlan.rankedInsights`. Run `npm run content:review-packet -- --authored <authored.json>` after the editor finishes; it prints the hashes, numberless copy, and exact sentence locations that the editor and reviewer must cover.
 

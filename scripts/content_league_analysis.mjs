@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { buildReviewPacket, hashJson } from "./content_language_review.mjs";
+import { assertStoryGate, STORY_GATE_VERSION } from "./content_story_gate.mjs";
 import { derivePlayerComparison, preparePlayerComparisonInput, playerInputHash, PLAYER_COMPARISON_METRICS } from "./content_league_player_comparison.mjs";
 
 export const LEAGUE_PIPELINE_VERSION = "league-analysis-v1";
@@ -245,7 +246,9 @@ export function finalizeLeagueArticle(source, authored, now = new Date().toISOSt
   const supportedModels = ["gpt-6-astra", "gpt-6.1-sol"];
   assert(authored.schemaVersion === 2 && supportedModels.includes(authored.model) && authored.editorialReview?.model === authored.model && authored.qualityReview?.model === authored.model, "League authoring requires matching recorded GPT-6 Astra or GPT-6.1 Sol roles.");
   const counts = assertLeagueCopy(source,authored,{draftRequired:true});
+  assertStoryGate(authored, source.evidence);
   const checks = [
+    ["story-contract","שאלה, הסבר ומשמעות","הסיפור נבחן לפני הכתיבה ובקריאה עצמאית"],
     ["league-window","חלון ליגה אחיד",`${source.summary.matches} משחקים באותה ליגה ועונה`],
     ["deduplication","ללא הופעות כפולות",`${source.summary.appearances} הופעות ייחודיות`],
     ["metric-coverage","כיסוי מדדים מלא","כל מדד קיים במפורש לכל הופעה שנכללה"],
@@ -256,5 +259,6 @@ export function finalizeLeagueArticle(source, authored, now = new Date().toISOSt
     ["numberless-story","סיפור גם ללא מספרים","הנוסח עבר קריאה עצמאית ללא מספרים"],
     ["numeric-claims","כל המספרים מקושרים לראיות",`${counts.claims} טענות נבדקו`],
   ].map(([id,label,detail])=>({id,label,detail,status:"passed"}));
-  return { ...source, language:"he",status:"draft",publishedAt:null,finalizedAt:now,generation:{mode:"codex_skill_candidate",pipelineVersion:LEAGUE_PIPELINE_VERSION,model:authored.model,analystModel:authored.model,writerModel:authored.model,editorModel:authored.editorialReview.model,qualityModel:authored.qualityReview.model},authorship:authored.authorship,approval:{status:"pending",approvedAt:null,note:null},tags:[{id:"topic:league-analysis",label:"ניתוח ליגה",kind:"topic"},{id:"topic:positions",label:"תפקידים במגרש",kind:"topic"}],aiDisclosure:authored.aiDisclosure,analysisPlan:authored.analysisPlan,editorial:authored.editorial,editorialReview:authored.editorialReview,qualityReview:authored.qualityReview,factCheck:{status:"passed",checkedAt:now,checks,evidenceCount:source.evidence.length,claimCount:counts.claims,sourceViews:["api_matches","api_match_player_stats"]} };
+  const generation = { mode:"codex_skill_candidate", pipelineVersion:LEAGUE_PIPELINE_VERSION, storyGateVersion:STORY_GATE_VERSION, model:authored.model, analystModel:authored.model, writerModel:authored.model, editorModel:authored.editorialReview.model, qualityModel:authored.qualityReview.model };
+  return { ...source, language:"he",status:"draft",publishedAt:null,finalizedAt:now,generation,authorship:authored.authorship,approval:{status:"pending",approvedAt:null,note:null},tags:[{id:"topic:league-analysis",label:"ניתוח ליגה",kind:"topic"},{id:"topic:positions",label:"תפקידים במגרש",kind:"topic"}],aiDisclosure:authored.aiDisclosure,analysisPlan:authored.analysisPlan,editorial:authored.editorial,editorialReview:authored.editorialReview,qualityReview:authored.qualityReview,factCheck:{status:"passed",checkedAt:now,checks,evidenceCount:source.evidence.length,claimCount:counts.claims,sourceViews:["api_matches","api_match_player_stats"]} };
 }

@@ -6,6 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { assertLeagueData, assertLeagueCopy } from "./content_league_analysis.mjs";
+import { assertStoredStoryGate } from "./content_story_gate.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const reviewDirectory = path.join(projectRoot, "src", "content", "review");
@@ -27,6 +28,7 @@ function readArguments() {
 }
 
 function validateCandidate(article, candidatePath) {
+  assertStoredStoryGate(article);
   if (article.kind === "league_analysis") { assertLeagueData(article); assertLeagueCopy(article, article); }
   if (article.status !== "draft" || article.approval?.status !== "pending") {
     throw new Error(`${candidatePath} is not a pending draft candidate.`);
@@ -39,22 +41,27 @@ function validateCandidate(article, candidatePath) {
   }
 }
 
-async function clearStagedCandidates() {
-  await mkdir(reviewDirectory, { recursive: true });
-  const names = await readdir(reviewDirectory);
+async function clearStagedCandidates(directory) {
+  await mkdir(directory, { recursive: true });
+  const names = await readdir(directory);
   await Promise.all(names
     .filter((name) => name.endsWith(".json"))
-    .map((name) => unlink(path.join(reviewDirectory, name))));
+    .map((name) => unlink(path.join(directory, name))));
 }
 
-async function stageCandidates(candidatePaths) {
-  await clearStagedCandidates();
-  const staged = [];
+export async function stageCandidates(candidatePaths, directory = reviewDirectory) {
+  const candidates = [];
   for (const relativeCandidatePath of candidatePaths) {
     const candidatePath = path.resolve(projectRoot, relativeCandidatePath);
     const article = JSON.parse(await readFile(candidatePath, "utf8"));
     validateCandidate(article, candidatePath);
-    const stagedPath = path.join(reviewDirectory, `${article.slug}.json`);
+    candidates.push({ article, candidatePath });
+  }
+  // A rejected incoming draft must not erase the user's existing review stage.
+  await clearStagedCandidates(directory);
+  const staged = [];
+  for (const { article, candidatePath } of candidates) {
+    const stagedPath = path.join(directory, `${article.slug}.json`);
     await writeFile(stagedPath, `${JSON.stringify(article, null, 2)}\n`, "utf8");
     staged.push({ candidatePath, stagedPath, slug: article.slug, headline: article.editorial.headline });
   }
@@ -90,7 +97,9 @@ async function main() {
   });
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

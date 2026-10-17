@@ -50,11 +50,11 @@ Record the chosen supporting fields in each final `playerRecaps[].statCodes` arr
 
 1. Run `npm run content:prepare:legionnaires -- [--as-of ISO_TIMESTAMP_WITH_TIMEZONE]`. By default the cutoff is now; an explicit cutoff freezes a reproducible revision. Calendar-day `--end-date` cutoffs are retired.
 2. Inspect the generated `source.json`, especially duplicate removals, data completeness, baselines, and deterministic insight candidates.
-3. The analyst completes the plan and creates one `playerRecaps` entry, in source order, for every player with minutes.
+3. The analyst completes the [story brief](story-first.md) for the selective overview, runs `content:check:story`, and completes the plan and one `playerRecaps` entry, in source order, for every player with minutes. A coherent overview must not manufacture a shared tactical cause or remove required player coverage.
 4. A fresh writer writes `draftEditorial` and all `playerRecaps`.
 5. A fresh Hebrew editor writes `editorial` and edits every `playerRecaps` entry, then run `npm run content:postprocess -- --authored <authored.json>`.
 6. Run `npm run content:review-packet -- --authored <authored.json>` and record exact hashes and sentence coverage.
-7. A fresh blind reviewer first reads the final visible copy without the editor notes, then checks every claim against `source.json`.
+7. A fresh blind reviewer first reads the final visible and numberless copy without the analyst brief or editor notes, then checks every claim against `source.json`. Record the independent narrative assessment in `qualityReview.storyReview`; assess the contribution of each overview section while retaining all mandatory player cards.
 8. Run `npm run content:finalize:legionnaires -- --source <source.json> --authored <authored.json>`.
 9. Run `npm run content:preview -- --candidate <candidate.json>` and stop for approval.
 

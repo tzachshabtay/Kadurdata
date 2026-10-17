@@ -6,6 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildReviewPacket } from "./content_language_review.mjs";
 import { assertWeeklyEligibility } from "./legionnaire_eligibility.mjs";
+import { assertStoryGate, STORY_GATE_VERSION } from "./content_story_gate.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pipelineVersion = "legionnaire-weekly-v2";
@@ -62,6 +63,7 @@ async function main() {
   const authored = JSON.parse(await readFile(authoredPath, "utf8"));
   if (source.kind !== "legionnaire_weekly" || source.schemaVersion !== 1) throw new Error("Unsupported weekly source schema.");
   assertWeeklyEligibility(source);
+  assertStoryGate(authored, source.evidence);
   if (authored.schemaVersion !== 2 || !authored.editorial || !authored.draftEditorial || !Array.isArray(authored.draftPlayerRecaps) || !Array.isArray(authored.playerRecaps)) throw new Error("Authored copy is incomplete.");
 
   const roleIds = Object.values(authored.authorship ?? {});
@@ -186,6 +188,7 @@ async function main() {
   ];
   const checkedAt = new Date().toISOString();
   const factChecks = [
+    { id: "story-contract", label: "שאלה, הסבר ומשמעות", status: "passed", detail: "הסיפור נבחן לפני הכתיבה ובקריאה עצמאית" },
     { id: "appearance-eligibility", label: "הופעות במועדונים בחו״ל", status: "passed", detail: "שיוך המסגרת והעונה אומת לכל הופעה" },
     { id: "weekly-window", label: "חלון הדיווח השבועי", status: "passed", detail: source.period.labelHe },
     { id: "deduplication", label: "כפילויות משחקים הוסרו", status: "passed", detail: `${source.dataAudit.duplicateMatchIdsRemoved.length} רשומות כפולות הוסרו` },
@@ -214,6 +217,7 @@ async function main() {
       editorModel: authored.editorialReview.model,
       qualityModel: authored.qualityReview.model,
       pipelineVersion,
+      storyGateVersion: STORY_GATE_VERSION,
     },
     authorship: authored.authorship,
     approval: { status: "pending", approvedAt: null, note: null },

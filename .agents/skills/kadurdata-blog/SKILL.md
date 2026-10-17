@@ -7,18 +7,19 @@ description: Select, analyze, write, fact-check, preview, and later publish Hebr
 
 Create Hebrew football journalism from Kadurdata's own data. Do not call a paid model API. Use Codex roles for the analytical and editorial work.
 
-Every scheduled daily run must produce a local article candidate. If no eligible match exists, broaden the analysis to another evidence-grounded Israeli-football topic; do not end the run with a no-article report.
+Each scheduled run seeks at most one worthwhile local candidate. If no eligible match exists, investigate another evidence-grounded Israeli-football topic. If no premise clears the story and evidence gates, record the rejected leads and produce no article; do not force a statistical catalogue to meet a quota. Respect the caller's cadence and selection window.
 
 ## Route the request
 
 - For a scheduled daily article, read [daily-selection.md](references/daily-selection.md).
 - For a weekly legionnaire article, read [legionnaire-weekly.md](references/legionnaire-weekly.md).
+- Before any article draft or blind review, read [story-first.md](references/story-first.md) for the story brief, rejection criteria and narrative-review contract.
 - For Hebrew voice and sentence-level editing, read `../kadurdata-match-review/references/hebrew-voice-guide.md` and `../kadurdata-match-review/references/editorial-standards.md` in full.
 - When the selected daily item is a match review, follow `../kadurdata-match-review/SKILL.md` in full after selection.
 
 ## Mandatory roles
 
-Use GPT-6 Astra (`gpt-6-astra`) for all four roles below. Set the model explicitly when creating each role agent and record the actual model in the authored package; do not silently substitute GPT-5.6.
+Use GPT-6.1 Sol (`gpt-6.1-sol`) with high reasoning effort for all four roles below unless the user explicitly selects another configuration. Set model and reasoning effort explicitly when creating each fresh-context role and record the actual settings in the authored package.
 
 Use four distinct real Codex agent contexts and record their IDs:
 
@@ -32,6 +33,7 @@ The writer, editor, and reviewer must be fresh-context agents. Do not collapse t
 ## Common quality gates
 
 - One coherent thesis comes before the list of numbers.
+- Pass the pre-draft story brief before assigning the writer. Expected job descriptions (a centre-back passes, a creator creates, a forward shoots), true rankings and unusual totals do not establish a story on their own. Identify the consequential football question those facts answer.
 - Write the headline, dek, overview, takeaways, conclusion, and player recaps for football readers. Describe what players did and why it matters; keep collection completeness, coverage decisions, sample-eligibility counts, review procedures, and explanations of how the article was assembled in the internal evidence and review records. Preserve the required AI disclosure and concise qualifications needed to interpret a specific claim honestly.
 - Every paragraph must advance the thesis with a finding, an explanation, and a consequence.
 - Prefer high-volume measures and role/style evidence. A goal or assist is context, not proof of a trend.

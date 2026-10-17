@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { blankStoryBrief } from "./content_story_gate.mjs";
 import { filterLegionnaireHistory } from "./legionnaire_eligibility.mjs";
 import { rollingReportingWindow, isWithinReportingWindow, filterCompletedHistory } from "./legionnaire_reporting_window.mjs";
 
@@ -421,6 +422,7 @@ async function main() {
     model: null,
     authorship: { analystAgentId: "", writerAgentId: "", editorAgentId: "", reviewerAgentId: "" },
     analysisPlan: {
+      storyBrief: blankStoryBrief(),
       thesis: { claimHe: "", whyItMattersHe: "", evidenceIds: [] },
       rankedInsights: [],
       explanatoryModel: { questionHe: "", answerHe: "", supportLevel: "descriptive", evidenceIds: [], components: [] },

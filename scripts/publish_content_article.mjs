@@ -6,6 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { PIPELINE_VERSION } from "./generate_content_article.mjs";
 import { buildReviewPacket } from "./content_language_review.mjs";
+import { assertStoredStoryGate } from "./content_story_gate.mjs";
 import { assertWeeklyEligibility } from "./legionnaire_eligibility.mjs";
 import { assertLeagueData, assertLeagueCopy, LEAGUE_PIPELINE_VERSION } from "./content_league_analysis.mjs";
 
@@ -41,6 +42,7 @@ async function main() {
   const candidatePath = path.resolve(projectRoot, args.candidatePath);
   const candidate = JSON.parse(await readFile(candidatePath, "utf8"));
   assertWeeklyEligibility(candidate);
+  assertStoredStoryGate(candidate);
   if (candidate.kind === "league_analysis") { assertLeagueData(candidate); assertLeagueCopy(candidate, candidate); }
   if (candidate.status !== "draft" || candidate.generation?.mode !== "codex_skill_candidate") {
     throw new Error("Only a finalized Codex-skill candidate can be published.");

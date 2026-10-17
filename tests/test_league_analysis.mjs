@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { prepareLeagueSource, finalizeLeagueArticle, assertLeagueData, assertLeagueCopy, addLeagueClubComparison, LEAGUE_METRICS } from "../scripts/content_league_analysis.mjs";
 import { buildReviewPacket } from "../scripts/content_language_review.mjs";
 import { validateArticle } from "../scripts/validate_content_articles.mjs";
+import { storyEvidenceHash } from "../scripts/content_story_gate.mjs";
 
 function fixture() {
   const match={match_id:"fixture-match",competition_id:"league",competition_name:"Israeli Premier League",season_id:"season",season_name:"2026/2027",scheduled_at:"2026-09-01T16:00:00Z",status:"Ended",round_number:1,home_team_id:"home",away_team_id:"away"};
@@ -16,10 +17,15 @@ function authored(source) {
   const editorial={headline:"המגנים והמסירה",headlineEvidenceIds:claim.evidenceIds,dek:"המגנים השתתפו בהתקפה.",dekEvidenceIds:claim.evidenceIds,sections:["creation","shooting","progression"].map(id=>({heading:`השוואת תפקידים ${id}`,insightIds:[id],paragraphs:[claim]})),takeaways:[claim,claim,claim],conclusion:"תרומתם ניכרה במסירה.",conclusionEvidenceIds:claim.evidenceIds};
   const graphics=["creation","progression"].map(id=>({id,type:"league_role_comparison",layout:"grouped",groups:["fullbacks","centre_forwards"],metrics:["key_passes"],unit:"per90",titleHe:"המגנים והחלוצים במסירה",subtitleHe:"לפי דקות המשחק בעמדה",placementInsightId:id,evidenceIds:["position.fullbacks","position.centre_forwards"]}));
   const a={schemaVersion:2,kind:"league_analysis",model:"gpt-6-astra",authorship:{analystAgentId:"fixture:analyst",writerAgentId:"fixture:writer",editorAgentId:"fixture:editor",reviewerAgentId:"fixture:reviewer"},aiDisclosure:"הכתבה נכתבה בעזרת בינה מלאכותית.",draftEditorial:{...editorial,headline:"נוסח טיוטה"},editorial,analysisPlan:{thesis:"תפקידים שונים במסירה",rankedInsights:["creation","shooting","progression"].map(id=>({id,evidenceIds:claim.evidenceIds})),graphics}};
+  // Contract fixtures do not substitute for real judgments about narrative value.
+  a.analysisPlan.storyBrief={status:"ready",questionHe:"מה מראה ההשוואה?",answerHe:"תפקידי המסירה שונים.",tensionHe:"הבדל בין תפקידי המשחק.",whyItMattersHe:"הקשר לתרומה בהתקפה.",evidenceIds:claim.evidenceIds};
   const p=buildReviewPacket(a),sentenceReviews=p.sentences.map(s=>({...s,verdict:"passed",noteHe:"Synthetic test fixture"}));
   const checks=Object.fromEntries(["naturalHebrew","footballHebrew","numericClarity","cohesiveNarrative","storyValue","numberDiscipline","highVolumeComparisonsOnly","evidenceFaithfulness","gameStateContext","graphicRelevance","explanatoryDepth","playerRoleAttribution","historicalAuditComplete"].map(k=>[k,true]));
   a.editorialReview={mode:"codex_skill_editor",model:a.model,status:"passed",writerAgentId:a.authorship.writerAgentId,editorAgentId:a.authorship.editorAgentId,draftHash:p.draftHash,finalHash:p.finalHash,sentenceReviews,checks,changes:[1,2,3].map(i=>({location:`fixture.${i}`,original:"נוסח טיוטה",revised:"נוסח סופי",reasonHe:"Synthetic test fixture"}))};
   a.qualityReview={mode:"codex_skill_quality_gate",model:a.model,status:"passed",reviewerAgentId:a.authorship.reviewerAgentId,reviewedHash:p.finalHash,numberlessHash:p.numberlessHash,sentenceReviews:structuredClone(sentenceReviews),checks,issues:[],attempt:1,numberlessReview:{status:"passed",articleStillCoherent:true,summaryHe:"Synthetic test fixture",issues:[]}};
+  a.qualityReview.storyReview={status:"passed",briefHash:p.storyBriefHash,summaryHe:"סיכום סינתטי לצורך בדיקת החוזה בלבד.",explanationHe:"הסבר סינתטי לצורך בדיקת החוזה בלבד.",readerValueHe:"ערך סינתטי לצורך בדיקת החוזה בלבד.",sectionProgression:editorial.sections.map((s,sectionIndex)=>({sectionIndex,addsHe:"תרומה סינתטית לצורך הבדיקה."})),issues:[]};
+  a.qualityReview.storyReview.reviewedContentHash=p.storyContentHash;
+  a.qualityReview.storyReview.evidenceHash=storyEvidenceHash(a.analysisPlan.storyBrief,source.evidence);
   return a;
 }
 
@@ -57,6 +63,11 @@ test("GPT-6.1 Sol finalizes with matching recorded roles and retains review gate
   a.qualityReview.model="gpt-6.1-sol";
   a.qualityReview.checks.storyValue=false;
   assert.throws(()=>finalizeLeagueArticle(source,a),/incomplete/);
+});
+test("league finalization requires the story contract even when all old review checks pass",()=>{
+  const source=prepareLeagueSource(fixture(),{slug:"fixture"}),a=authored(source);
+  delete a.analysisPlan.storyBrief;
+  assert.throws(()=>finalizeLeagueArticle(source,a),/pre-draft story brief/);
 });
 test("review hashes bind chart metrics and disclosure as well as prose",()=>{
   const source=prepareLeagueSource(fixture(),{slug:"fixture"});

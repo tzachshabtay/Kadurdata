@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
 import { shotsOnTargetSummary, shotsOnTargetDetail } from "./content_shot_reconciliation.mjs";
+import { blankStoryBrief } from "./content_story_gate.mjs";
 import {
   buildGameStateContext,
   buildHistoricalAuditContext,
@@ -2595,7 +2596,7 @@ function authoringTemplate(sourceFilename, analysisPlan, editorial) {
       editorAgentId: "editor-agent-id",
       reviewerAgentId: "reviewer-agent-id",
     },
-    analysisPlan,
+    analysisPlan: { ...analysisPlan, storyBrief: blankStoryBrief() },
     draftEditorial: editorial,
     editorial,
     editorialReview: {

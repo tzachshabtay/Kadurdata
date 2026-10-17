@@ -105,11 +105,16 @@ function buildReviewPacket(authored) {
   const draftCopy = Array.isArray(authored.draftPlayerRecaps)
     ? { editorial: authored.draftEditorial, playerRecaps: authored.draftPlayerRecaps }
     : authored.draftEditorial;
+  const finalHash = hashJson(finalCopy), numberlessHash = hashJson(withoutNumbers);
   return {
     schemaVersion: authored.schemaVersion,
+    ...(authored.analysisPlan?.storyBrief ? {
+      storyBriefHash: hashJson(authored.analysisPlan.storyBrief),
+      storyContentHash: hashJson({ brief: authored.analysisPlan.storyBrief, finalHash, numberlessHash, graphics: authored.analysisPlan.graphics ?? [] }),
+    } : {}),
     draftHash: hashJson(draftCopy),
-    finalHash: hashJson(finalCopy),
-    numberlessHash: hashJson(withoutNumbers),
+    finalHash,
+    numberlessHash,
     sentences,
     numberlessCopy: withoutNumbers,
   };

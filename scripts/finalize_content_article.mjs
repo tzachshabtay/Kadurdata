@@ -15,6 +15,7 @@ import {
 import { buildReviewPacket, visibleSentenceEntries } from "./content_language_review.mjs";
 import { postprocessVisibleCopy } from "./postprocess_content_article.mjs";
 import { matchPlayerRecapEvidence, validateMatchPlayerRecaps } from "./content_match_player_recaps.mjs";
+import { assertStoryGate, STORY_GATE_VERSION } from "./content_story_gate.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -202,6 +203,10 @@ async function main() {
   }
   rejectScaffoldText(authored);
   if (!authored.analysisPlan || !authored.editorial) throw new Error("Authored package must include analysisPlan and editorial.");
+  const evidence = authored.playerRecaps
+    ? [...source.evidence, ...matchPlayerRecapEvidence(source.players)]
+    : source.evidence;
+  assertStoryGate(authored, evidence);
   requirePostprocessedCopy(authored);
   requireCompleteReview(authored.editorialReview, "Editorial review");
   requireCompleteReview(authored.qualityReview, "Quality review");
@@ -210,9 +215,6 @@ async function main() {
 
   const recapFailures = validateMatchPlayerRecaps(source.players, authored.playerRecaps);
   if (recapFailures.length) throw new Error(`Player recaps rejected:\n${recapFailures.join("\n")}`);
-  const evidence = authored.playerRecaps
-    ? [...source.evidence, ...matchPlayerRecapEvidence(source.players)]
-    : source.evidence;
   const evidenceIds = new Set(evidence.map((item) => item.id));
   for (const recap of authored.playerRecaps ?? []) {
     if (recap.evidenceIds.some((id) => !evidenceIds.has(id))) throw new Error(`Unknown player recap evidence: ${recap.playerId}`);
@@ -261,6 +263,7 @@ async function main() {
     status: "passed",
     detail: `${authored.playerRecaps.length} שחקנים; הציונים מוצגים ישירות מנתוני הספק`,
   });
+  checks.push({ id: "story-contract", label: "שאלה, הסבר ומשמעות", status: "passed", detail: "הסיפור נבחן לפני הכתיבה ובקריאה עצמאית" });
   const failedChecks = checks.filter((check) => check.status === "failed");
   if (failedChecks.length) {
     throw new Error(`Article rejected by deterministic finalization:\n${failedChecks.map((check) => `- ${check.label}: ${check.detail}`).join("\n")}`);
@@ -281,6 +284,7 @@ async function main() {
       editorModel: model,
       qualityModel: model,
       pipelineVersion: PIPELINE_VERSION,
+      storyGateVersion: STORY_GATE_VERSION,
     },
     authorship: authored.authorship,
     tags,
