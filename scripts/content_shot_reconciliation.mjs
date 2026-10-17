@@ -15,6 +15,18 @@ const verifiedGoalLineBlocks = [
     definitionUrl: "https://www.statsperform.com/opta-event-definitions/",
     verifiedAt: "2026-09-08",
   },
+  {
+    matchId: "b627585d-b1d3-4b29-b4a1-b428e623cda7",
+    sourceCode: "365scores",
+    sourceEventId: "54739320",
+    teamId: "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+    playerId: "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+    minute: 20,
+    findingHe: "שחקן סכנין הרחיק מקו השער את בעיטת דור פרץ, כפי שמתועד בדיווח הרשמי של מכבי תל אביב.",
+    sourceUrl: "https://www.maccabi-tlv.co.il/2026/10/מכבי-סיימה-ב-00-מול-בני-סכנין/",
+    definitionUrl: "https://www.statsperform.com/opta-event-definitions/",
+    verifiedAt: "2026-10-17",
+  },
 ];
 
 export function verifiedGoalLineBlock(shot) {
