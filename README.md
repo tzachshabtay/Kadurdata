@@ -2,6 +2,8 @@
 
 Israeli soccer data pipeline and schema exploration.
 
+[Visit the Kadurdata website](https://tzachshabtay.github.io/Kadurdata/).
+
 ## Current Pieces
 
 - React + TypeScript frontend: `src/`
