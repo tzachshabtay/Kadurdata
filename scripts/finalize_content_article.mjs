@@ -205,7 +205,7 @@ async function main() {
   rejectScaffoldText(authored);
   if (!authored.analysisPlan || !authored.editorial) throw new Error("Authored package must include analysisPlan and editorial.");
   const evidence = [...withMatchContextEvidence(source.evidence, source.matchContext), ...reportingEvidence(authored.reportingContext), ...(authored.playerRecaps ? matchPlayerRecapEvidence(source.players) : [])];
-  assertStoryGate(authored, evidence, { contextRequired: true });
+  assertStoryGate(authored, evidence, { contextRequired: true, internalReportingRequired: true });
   requirePostprocessedCopy(authored);
   requireCompleteReview(authored.editorialReview, "Editorial review");
   requireCompleteReview(authored.qualityReview, "Quality review");
@@ -284,7 +284,7 @@ async function main() {
       qualityModel: model,
       pipelineVersion: PIPELINE_VERSION,
       storyGateVersion: STORY_GATE_VERSION,
-      matchContextVersion: 1,
+      matchContextVersion: 2,
     },
     authorship: authored.authorship,
     tags,

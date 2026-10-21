@@ -424,7 +424,7 @@ export type ArticleAnalysisPlan<TGraphic extends ArticleGraphicSpec = ArticleGra
 
 export type ArticleGeneration = {
   storyGateVersion?: 1;
-  matchContextVersion?: 1;
+  matchContextVersion?: 1 | 2;
   mode: string;
   analystModel: string | null;
   writerModel: string | null;
@@ -463,7 +463,8 @@ export type MatchReviewArticle = {
   kind: "match_review";
   matchContext?: Record<string, unknown>;
   reportingContext?: {
-    sources: Array<{ id: string; publisher: string; title: string; url: string; phase: string; publishedAt: string; updatedAt?: string; accessedAt: string; facts: Array<{ textHe: string; values: number[] }> }>;
+    presentation?: "internal";
+    sources: Array<{ id: string; publisher: string; publisherType?: "news_outlet" | "official"; title: string; url: string; phase: string; publishedAt: string; updatedAt?: string; accessedAt: string; facts: Array<{ textHe: string; values: number[] }> }>;
     novelty: { pressSummaryHe: string; addedInsightHe: string; dataEvidenceIds: string[] };
   };
   status: "published" | "draft";

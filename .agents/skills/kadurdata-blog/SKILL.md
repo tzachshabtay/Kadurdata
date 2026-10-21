@@ -41,6 +41,7 @@ The writer, editor, and reviewer must be fresh-context agents. Do not collapse t
 - Compare like-for-like time windows and normalize player volume per 90 minutes when minutes differ materially.
 - A claim that an individual player improved or declined requires at least three prior substantial appearances for the baseline. A shorter player history is context only, not trend evidence. This threshold does not apply to league-wide aggregates, position-group comparisons, single-match explanations, or other non-trend topics.
 - Every visible number must be present in the cited evidence package.
+- Use news reporting as internal context only. The visible article, graphics, recaps and fact-check panel must not mention other news outlets/reporters or display their source links; retain provenance for internal verification.
 - Graphics are selected after the story and must let the reader see a claim from the article. Do not add decorative graphics.
 - Replace every em dash (`—`) in visible copy with a hyphen-minus (`-`) before language review.
 - Read every visible sentence aloud. Reject translationese, analysis jargon, and phrases an Israeli sports editor would rewrite.

@@ -6255,18 +6255,3 @@ html[dir="rtl"] .comparison-slot-options > button[aria-selected="true"] {
   .league-club-note { padding-inline: 14px; }
   .league-club-table th:first-child { min-width: 100px; }
 }
-.story-reporting-source {
-  display: inline-block;
-  margin-inline-start: .4em;
-  font-size: .8em;
-  color: #087967;
-  text-decoration: underline;
-  text-underline-offset: .18em;
-}
-.story-reporting-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .6em;
-  margin-block: 1.5rem;
-  font-size: .9rem;
-}

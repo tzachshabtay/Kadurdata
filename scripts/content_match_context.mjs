@@ -76,6 +76,7 @@ export function reportingEvidence(reporting) {
     const url = new URL(source.url);
     ensure(url.protocol === 'https:' && !url.username && !url.password, 'reporting link must be public HTTPS');
     ensure(['before', 'live', 'after'].includes(source.phase), 'reporting phase missing');
+    ensure(source.publisherType === undefined || ['news_outlet', 'official'].includes(source.publisherType), 'invalid publisher type');
     ensure(source.publisher?.trim() && source.title?.trim() && source.publishedAt?.trim() && Number.isFinite(Date.parse(source.accessedAt)), 'reporting provenance missing');
     ensure(Array.isArray(source.facts) && source.facts.length && source.facts.every(f => f.textHe?.trim() && Array.isArray(f.values) && f.values.every(Number.isFinite)), 'reporting facts need text and explicit numeric values');
     return item(`context.reporting.${source.id}`, source.title, source.facts.length, source, source.url);
@@ -87,13 +88,29 @@ export function usedReportingSources(editorial, reporting) {
   return (reporting?.sources ?? []).filter(s => ids.has(`context.reporting.${s.id}`));
 }
 
-export function assertContextUse(authored, evidence, { required = false } = {}) {
+export function assertInternalReportingCopy(authored) {
+  const e = authored.editorial ?? {};
+  const text = [e.headline, e.dek, e.conclusion,
+    ...(e.sections ?? []).flatMap(s => [s.heading, ...s.paragraphs.map(p => p.text)]),
+    ...(e.takeaways ?? []).map(t => t.text),
+    ...(authored.playerRecaps ?? []).flatMap(p => [p.nameHe, p.text]),
+    ...(authored.analysisPlan?.graphics ?? []).flatMap(g => [g.titleHe, g.subtitleHe])].filter(Boolean).join('\n');
+  const publishers = (authored.reportingContext?.sources ?? []).filter(s => s.publisherType !== 'official').map(s => s.publisher).filter(Boolean);
+  const lower = text.toLocaleLowerCase();
+  ensure(!publishers.some(p => lower.includes(p.toLocaleLowerCase()))
+    && !/(?:וואלה|ynet|וויינט|וואינט|\bONE\b|אתר\s+וואן|בוואן|Sport\s*5|ספורט\s*(?:5|חמש))/iu.test(text),
+  'news outlet names belong in the internal research record, not visible copy');
+}
+
+export function assertContextUse(authored, evidence, { required = false, internalRequired = false } = {}) {
   const hasTable = evidence.some(e => e.id === 'context.table');
-  if (!required && !hasTable && !authored.reportingContext) return;
+  if (!required && !internalRequired && !hasTable && !authored.reportingContext) return;
   const bodyIds = new Set(authored.editorial.sections.flatMap(s => s.paragraphs.flatMap(p => p.evidenceIds)));
   if (hasTable) ensure([...bodyIds].some(id => /^context\.(table|form\.)/.test(id)), 'the article must use relevant table/form context');
   reportingEvidence(authored.reportingContext);
-  ensure(usedReportingSources(authored.editorial, authored.reportingContext).length > 0, 'the article must attribute the reporting context it uses');
+  if (internalRequired) ensure(authored.reportingContext?.presentation === 'internal', 'reporting must remain internal');
+  if (authored.reportingContext?.presentation === 'internal') assertInternalReportingCopy(authored);
+  ensure(usedReportingSources(authored.editorial, authored.reportingContext).length > 0, 'the article must trace reporting context to internal evidence');
   const novelty = authored.reportingContext?.novelty;
   ensure(novelty?.pressSummaryHe?.trim() && novelty?.addedInsightHe?.trim() && Array.isArray(novelty?.dataEvidenceIds) && novelty.dataEvidenceIds.length > 0, 'record what the data adds beyond the reporting');
   const known = new Set(evidence.map(e => e.id));

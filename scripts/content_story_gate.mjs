@@ -34,9 +34,9 @@ export function storyEvidenceHash(brief, evidence) {
   return hashJson(ids.map(id => byId.get(id)));
 }
 
-export function assertStoryGate(authored, evidence, { contextRequired = false } = {}) {
+export function assertStoryGate(authored, evidence, { contextRequired = false, internalReportingRequired = false } = {}) {
   const brief = assertStoryBrief(authored.analysisPlan?.storyBrief, evidence);
-  assertContextUse(authored, evidence, { required: contextRequired });
+  assertContextUse(authored, evidence, { required: contextRequired, internalRequired: internalReportingRequired });
   const review = authored.qualityReview?.storyReview;
   requireValue(review?.status === "passed" && Array.isArray(review.issues) && review.issues.length === 0,
     "the blind reader must pass the narrative review with no unresolved issues.");
@@ -65,13 +65,15 @@ export function assertStoryGate(authored, evidence, { contextRequired = false } 
 export function assertStoredStoryGate(article) {
   const version = article.generation?.storyGateVersion;
   requireValue(version === undefined || version === STORY_GATE_VERSION, "unsupported story gate version.");
+  const contextVersion = article.generation?.matchContextVersion;
+  requireValue(contextVersion === undefined || [1, 2].includes(contextVersion), "unsupported match context version.");
   if (version !== undefined || article.analysisPlan?.storyBrief
     || article.factCheck?.checks?.some(check => check.id === "story-contract")) {
     if (article.matchContext) {
       const derived = withMatchContextEvidence([], article.matchContext);
       requireValue(derived.every(item => hashJson(item) === hashJson(article.evidence.find(e => e.id === item.id))), "historical context differs from its reviewed evidence.");
     }
-    return assertStoryGate(article, article.evidence, { contextRequired: article.generation?.matchContextVersion === 1 });
+    return assertStoryGate(article, article.evidence, { contextRequired: contextVersion >= 1, internalReportingRequired: contextVersion === 2 });
   }
   return null;
 }

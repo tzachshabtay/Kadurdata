@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMatchContext, matchContextEvidence, reportingEvidence, assertContextUse, usedReportingSources } from '../scripts/content_match_context.mjs';
+import { buildMatchContext, matchContextEvidence, reportingEvidence, assertContextUse, usedReportingSources, assertInternalReportingCopy } from '../scripts/content_match_context.mjs';
 import { buildReviewPacket } from '../scripts/content_language_review.mjs';
 import { storyEvidenceHash } from '../scripts/content_story_gate.mjs';
 
@@ -70,7 +70,7 @@ test('nonleague finalizations require reporting and native novelty without a syn
   const a = { editorial: { sections: [{ paragraphs: [{ evidenceIds: ['context.reporting.ynet', 'match.shots'] }] }] }, reportingContext: report() };
   assert.doesNotThrow(() => assertContextUse(a, [{ id: 'match.shots' }], { required: true }));
   delete a.reportingContext;
-  assert.throws(() => assertContextUse(a, [{ id: 'match.shots' }], { required: true }), /attribute/);
+  assert.throws(() => assertContextUse(a, [{ id: 'match.shots' }], { required: true }), /trace/);
 });
 
 test('report links and reviewed labels include citations outside body paragraphs once per source', () => {
@@ -78,4 +78,32 @@ test('report links and reviewed labels include citations outside body paragraphs
   assert.equal(usedReportingSources(editorial, report()).length, 1);
   const packet = buildReviewPacket({ schemaVersion: 2, draftEditorial: null, editorial, reportingContext: report(), analysisPlan: { graphics: [] } });
   assert.equal(packet.sentences.filter(s => s.location.startsWith('reportingSources.')).length, 1);
+});
+
+test('internal reporting preserves evidence and hash bindings without publisher labels in visible review', () => {
+  const a = { schemaVersion: 2, draftEditorial: null, editorial: { headline: 'הסיפור', sections: [{ heading: 'הסבר', paragraphs: [{ text: 'פרץ בעט והכדור הורחק מהקו.', evidenceIds: ['context.reporting.ynet'] }] }] }, analysisPlan: { graphics: [] }, reportingContext: { ...report(), presentation: 'internal' } };
+  const packet = buildReviewPacket(a);
+  assert.equal(packet.sentences.some(s => s.location.startsWith('reportingSources.')), false);
+  assert.equal(reportingEvidence(a.reportingContext).length, 1);
+  a.reportingContext.sources[0].url = 'https://www.ynet.co.il/updated';
+  assert.notEqual(buildReviewPacket(a).finalHash, packet.finalHash);
+});
+
+test('internal reporting rejects outlet mentions throughout authored visible text but permits official club names', () => {
+  const a = { editorial: { headline: 'מכבי תל אביב התקשתה לכבוש', sections: [{ paragraphs: [{ text: 'לפי ynet, פרץ בעט.' }] }] }, reportingContext: { ...report(), presentation: 'internal' } };
+  assert.throws(() => assertInternalReportingCopy(a), /news outlet/);
+  a.editorial.sections[0].paragraphs[0].text = 'פרץ בעט.';
+  a.playerRecaps = [{ text: 'בוואלה תיארו את ההחמצה.' }];
+  assert.throws(() => assertInternalReportingCopy(a), /news outlet/);
+  a.playerRecaps = [];
+  a.reportingContext.sources.push({ publisher: 'מכבי תל אביב', publisherType: 'official' });
+  assert.doesNotThrow(() => assertInternalReportingCopy(a));
+});
+
+test('new internal-only finalization requires the presentation contract as well as evidence tracing', () => {
+  const a = { editorial: { sections: [{ paragraphs: [{ evidenceIds: ['context.reporting.ynet', 'match.shots'] }] }] }, reportingContext: report() };
+  const evidence = [{ id: 'match.shots' }];
+  assert.throws(() => assertContextUse(a, evidence, { required: true, internalRequired: true }), /remain internal/);
+  a.reportingContext.presentation = 'internal';
+  assert.doesNotThrow(() => assertContextUse(a, evidence, { required: true, internalRequired: true }));
 });

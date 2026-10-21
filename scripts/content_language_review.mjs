@@ -59,7 +59,7 @@ function visibleSentenceEntries(editorial, analysisPlan, playerRecaps = [], repo
     appendSentences(entries, `analysisPlan.graphics.${index}.titleHe`, graphic.titleHe);
     appendSentences(entries, `analysisPlan.graphics.${index}.subtitleHe`, graphic.subtitleHe);
   });
-  usedReportingSources(editorial, reportingContext).forEach((source, index) => {
+  (reportingContext?.presentation === "internal" ? [] : usedReportingSources(editorial, reportingContext)).forEach((source, index) => {
     appendSentences(entries, `reportingSources.${index}.publisher`, source.publisher);
   });
   return entries;
