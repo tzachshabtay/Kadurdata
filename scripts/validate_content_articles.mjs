@@ -113,6 +113,7 @@ function validateArticle(article, filename) {
     editorial: article.editorial,
     ...(Array.isArray(article.playerRecaps) ? { playerRecaps: article.playerRecaps } : {}),
     analysisPlan: article.analysisPlan,
+    reportingContext: article.reportingContext,
   });
   if (article.editorialReview?.finalHash !== packet.finalHash) fail("editorial review hash does not match final copy");
   if (article.kind === "match_review" && article.playerRecaps !== undefined) {

@@ -5,7 +5,7 @@ description: Select, analyze, write, fact-check, preview, and later publish Hebr
 
 # Kadurdata blog
 
-Create Hebrew football journalism from Kadurdata's own data. Do not call a paid model API. Use Codex roles for the analytical and editorial work.
+Create Hebrew football journalism grounded in Kadurdata's data, informed by verified match context and Israeli football reporting. Do not call a paid model API. Use Codex roles for the analytical and editorial work.
 
 Each scheduled run seeks at most one worthwhile local candidate. If no eligible match exists, investigate another evidence-grounded Israeli-football topic. If no premise clears the story and evidence gates, record the rejected leads and produce no article; do not force a statistical catalogue to meet a quota. Respect the caller's cadence and selection window.
 
@@ -16,6 +16,7 @@ Each scheduled run seeks at most one worthwhile local candidate. If no eligible 
 - Before any article draft or blind review, read [story-first.md](references/story-first.md) for the story brief, rejection criteria and narrative-review contract.
 - For Hebrew voice and sentence-level editing, read `../kadurdata-match-review/references/hebrew-voice-guide.md` and `../kadurdata-match-review/references/editorial-standards.md` in full.
 - When the selected daily item is a match review, follow `../kadurdata-match-review/SKILL.md` in full after selection.
+- For every match article, read [match-context.md](references/match-context.md): establish the table and recent form at the match date, read relevant Israeli reporting, and develop a data-backed insight beyond the reports reviewed.
 
 ## Mandatory roles
 

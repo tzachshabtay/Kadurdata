@@ -639,6 +639,21 @@ function PlannedGraphic({ article, spec }: { article: ContentArticle; spec: Arti
   return null;
 }
 
+function ReportingSources({ article }: { article: MatchReviewArticle }) {
+  const { editorial } = article;
+  const cited = new Set([
+    ...editorial.headlineEvidenceIds, ...editorial.dekEvidenceIds,
+    ...editorial.sections.flatMap(section => section.paragraphs.flatMap(paragraph => paragraph.evidenceIds)),
+    ...editorial.takeaways.flatMap(takeaway => takeaway.evidenceIds), ...editorial.conclusionEvidenceIds,
+  ]);
+  const sources = article.reportingContext?.sources.filter(source => cited.has(`context.reporting.${source.id}`)) ?? [];
+  if (!sources.length) return null;
+  return <aside className="story-reporting-sources" aria-label="דיווחים להקשר הכתבה">
+    <span>דיווחים להקשר הכתבה:</span>
+    {sources.map(source => <a className="story-reporting-source" key={source.id} href={source.url} target="_blank" rel="noopener noreferrer" title={source.title}>{source.publisher}</a>)}
+  </aside>;
+}
+
 function FactCheckPanel({ article }: { article: ContentArticle }) {
   const visibleCheckIds = article.kind === "match_review"
     ? ["score-vs-events", "analysis-plan", "game-state-story", "number-discipline", "graphic-plan", "editorial-review", "numeric-claims"]
@@ -810,6 +825,7 @@ export function BlogView({ onOpenMatch }: BlogViewProps) {
           {article.kind === "legionnaire_weekly" && <WeeklyPlayerRecaps article={article} />}
 
           <blockquote className="story-conclusion">{editorial.conclusion}</blockquote>
+          {isMatchReviewArticle(article) && <ReportingSources article={article} />}
           {isMatchReviewArticle(article) && <MatchPlayerRatings article={article} />}
           <FactCheckPanel article={article} />
 

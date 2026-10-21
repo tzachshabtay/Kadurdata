@@ -65,6 +65,7 @@ async function main() {
     editorial: candidate.editorial,
     ...(Array.isArray(candidate.playerRecaps) ? { playerRecaps: candidate.playerRecaps } : {}),
     analysisPlan: candidate.analysisPlan,
+    reportingContext: candidate.reportingContext,
   });
   if (
     candidate.editorialReview.finalHash !== packet.finalHash

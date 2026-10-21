@@ -4,6 +4,18 @@
 // never infer them from coordinates or from the aggregate count being short.
 const verifiedGoalLineBlocks = [
   {
+    matchId: "fe0a16ab-0cfc-40b3-9634-39733223c77e",
+    sourceCode: "365scores",
+    sourceEventId: "324739311",
+    teamId: "af106a7f-f0a9-4db3-88d7-bd04ebbfb100",
+    playerId: "b6a41010-aafc-4cdc-983e-8e64d0dd852c",
+    minute: 89,
+    findingHe: "קרבאלי הרחיק מקו השער את בעיטת דור פרץ אחרי יציאת סילבה, כפי שמתועד בדיווח המשחק של נדב צנציפר ב-ynet.",
+    sourceUrl: "https://www.ynet.co.il/sport/israelisoccer/article/bkzrtkm2fe",
+    definitionUrl: "https://www.statsperform.com/opta-event-definitions/",
+    verifiedAt: "2026-10-21",
+  },
+  {
     matchId: "76e6c0e6-9d63-4813-89a7-772b01b142c7",
     sourceCode: "365scores",
     sourceEventId: "194739340",

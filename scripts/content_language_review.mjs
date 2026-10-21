@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { usedReportingSources } from "./content_match_context.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -36,7 +37,7 @@ function appendSentences(entries, location, text) {
   });
 }
 
-function visibleSentenceEntries(editorial, analysisPlan, playerRecaps = []) {
+function visibleSentenceEntries(editorial, analysisPlan, playerRecaps = [], reportingContext) {
   const entries = [];
   appendSentences(entries, "editorial.headline", editorial?.headline);
   appendSentences(entries, "editorial.dek", editorial?.dek);
@@ -57,6 +58,9 @@ function visibleSentenceEntries(editorial, analysisPlan, playerRecaps = []) {
   (analysisPlan?.graphics ?? []).forEach((graphic, index) => {
     appendSentences(entries, `analysisPlan.graphics.${index}.titleHe`, graphic.titleHe);
     appendSentences(entries, `analysisPlan.graphics.${index}.subtitleHe`, graphic.subtitleHe);
+  });
+  usedReportingSources(editorial, reportingContext).forEach((source, index) => {
+    appendSentences(entries, `reportingSources.${index}.publisher`, source.publisher);
   });
   return entries;
 }
@@ -93,15 +97,16 @@ function numberlessEntries(editorial, analysisPlan, playerRecaps = [], normaliza
 function buildReviewPacket(authored) {
   const playerRecaps = Array.isArray(authored.playerRecaps) ? authored.playerRecaps : [];
   const league = authored.kind === "league_analysis";
-  const sentences = visibleSentenceEntries(authored.editorial, authored.analysisPlan, playerRecaps);
+  const sentences = visibleSentenceEntries(authored.editorial, authored.analysisPlan, playerRecaps, authored.reportingContext);
   if (league) appendSentences(sentences, "aiDisclosure", authored.aiDisclosure);
   // Published match reviews were reviewed with the original normalization. Weekly v2
   // packages opt into prefix-aware Hebrew normalization by carrying playerRecaps.
   const normalizationVersion = league || Array.isArray(authored.playerRecaps) ? "v2" : "v1";
-  const withoutNumbers = league ? sentences.map(entry => ({ ...entry, text: removeNumbers(entry.text) })) : numberlessEntries(authored.editorial, authored.analysisPlan, playerRecaps, normalizationVersion);
-  const finalCopy = league ? { editorial: authored.editorial, graphics: authored.analysisPlan?.graphics, aiDisclosure: authored.aiDisclosure } : Array.isArray(authored.playerRecaps)
+  const withoutNumbers = league || authored.reportingContext ? sentences.map(entry => ({ ...entry, text: removeNumbers(entry.text) })) : numberlessEntries(authored.editorial, authored.analysisPlan, playerRecaps, normalizationVersion);
+  const copy = league ? { editorial: authored.editorial, graphics: authored.analysisPlan?.graphics, aiDisclosure: authored.aiDisclosure } : Array.isArray(authored.playerRecaps)
     ? { editorial: authored.editorial, playerRecaps }
     : authored.editorial;
+  const finalCopy = authored.reportingContext ? { ...copy, reportingContext: authored.reportingContext } : copy;
   const draftCopy = Array.isArray(authored.draftPlayerRecaps)
     ? { editorial: authored.draftEditorial, playerRecaps: authored.draftPlayerRecaps }
     : authored.draftEditorial;

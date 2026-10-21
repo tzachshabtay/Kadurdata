@@ -7,6 +7,8 @@ import { spawnSync } from "node:child_process";
 import { blankStoryBrief, assertStoryBrief, assertStoryGate, assertStoredStoryGate, storyEvidenceHash } from "../scripts/content_story_gate.mjs";
 import { buildReviewPacket, hashJson } from "../scripts/content_language_review.mjs";
 import { stageCandidates } from "../scripts/preview_content_candidate.mjs";
+import { reportingEvidence } from "../scripts/content_match_context.mjs";
+import { matchPlayerRecapEvidence } from "../scripts/content_match_player_recaps.mjs";
 
 const published = readdirSync(new URL('../src/content/generated/', import.meta.url)).filter(f=>f.endsWith('.json'))
   .map(f=>JSON.parse(readFileSync(new URL('../src/content/generated/'+f, import.meta.url))));
@@ -118,6 +120,23 @@ test('match and weekly native finalizers reject unbriefed packages before writin
       assert.equal(result.status,1);assert.match(result.stderr,/Story gate: a pre-draft story brief/);assert.equal(existsSync(path.join(dir,'candidate.json')),false);
     }finally{rmSync(dir,{recursive:true,force:true});}
   }
+});
+
+test('context-enabled CLI binds the same completed player evidence as finalization',()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),'kadurdata-context-brief-'));
+  try {
+    const a=storyFixture(), reportingContext={sources:[{id:'match-report',publisher:'ynet',title:'דיווח',url:'https://www.ynet.co.il/example',phase:'after',publishedAt:'2026-10-10',accessedAt:'2026-10-21T10:00:00Z',facts:[{textHe:'המשחק הסתיים בתיקו.',values:[0]}]}]};
+    const evidence=a.evidence.filter(e=>!e.id.startsWith('player.match.'));
+    const source={evidence,players:a.players};
+    const authored={analysisPlan:a.analysisPlan,playerRecaps:a.playerRecaps,reportingContext};
+    writeFileSync(path.join(dir,'source.json'),JSON.stringify(source));writeFileSync(path.join(dir,'authored.json'),JSON.stringify(authored));
+    const result=spawnSync(process.execPath,['scripts/content_story_gate.mjs','--source',path.join(dir,'source.json'),'--authored',path.join(dir,'authored.json')],{encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr);
+    const combined=[...evidence,...reportingEvidence(reportingContext),...matchPlayerRecapEvidence(a.players)];
+    assert.equal(JSON.parse(result.stdout).evidenceHash,storyEvidenceHash(a.analysisPlan.storyBrief,combined));
+    const changed=structuredClone(combined);changed.find(e=>e.id.startsWith('player.match.')).values.push(999);
+    assert.notEqual(JSON.parse(result.stdout).evidenceHash,storyEvidenceHash(a.analysisPlan.storyBrief,changed));
+  } finally {rmSync(dir,{recursive:true,force:true});}
 });
 
 test('a stale incoming preview preserves existing staged work even after a valid input',async()=>{

@@ -81,3 +81,15 @@ test("requires the exact Peretz clearance identity and avoids counting a later s
   assert.equal(reclassified.count, 1);
   assert.equal(reclassified.goalLineBlocks.length, 0);
 });
+
+test("reconciles Carabali's 89th-minute clearance without changing the shot data", () => {
+  const shot = { ...peretzClearance, match_id: "fe0a16ab-0cfc-40b3-9634-39733223c77e", source_event_id: "324739311", minute: 89 };
+  const shots = [shot, ...Array.from({ length: 2 }, (_, index) => ({ ...shot, source_event_id: `save-${index}`, outcome: "Saved" }))];
+  const before = structuredClone(shots), summary = shotsOnTargetSummary(shots, shot.team_id);
+  assert.equal(summary.count, 3);
+  assert.equal(summary.goalsAndSaves, 2);
+  assert.equal(summary.goalLineBlocks[0].sourceUrl, "https://www.ynet.co.il/sport/israelisoccer/article/bkzrtkm2fe");
+  assert.deepEqual(shots, before);
+  for (const key of ["match_id", "source_code", "source_event_id", "team_id", "player_id", "minute"]) assert.equal(verifiedGoalLineBlock({ ...shot, [key]: "different" }), null);
+  assert.equal(shotsOnTargetSummary([{ ...shot, outcome: "Saved" }], shot.team_id).count, 1);
+});

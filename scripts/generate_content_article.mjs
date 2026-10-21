@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
 import { shotsOnTargetSummary, shotsOnTargetDetail } from "./content_shot_reconciliation.mjs";
 import { blankStoryBrief } from "./content_story_gate.mjs";
+import { buildMatchContext, matchContextEvidence } from "./content_match_context.mjs";
 import {
   buildGameStateContext,
   buildHistoricalAuditContext,
@@ -230,6 +231,21 @@ async function fetchMatchDataset(client, match) {
     assets: queries[3].data ?? [],
     heatmaps: queries[4].data ?? [],
   };
+}
+
+async function fetchLeagueContext(client, match) {
+  if (!["Israeli Premier League", "Liga Leumit", "Division 3", "Division 4"].includes(match.competition_name)) return null;
+  const rows = [];
+  for (let offset = 0; ; offset += 1000) {
+    const result = await client.from("api_matches").select("*")
+      .eq("competition_id", match.competition_id).eq("season_id", match.season_id)
+      .lt("scheduled_at", match.scheduled_at).in("status", [...TERMINAL_MATCH_STATUSES])
+      .order("scheduled_at").order("match_id").range(offset, offset + 999);
+    if (result.error) throw result.error;
+    rows.push(...result.data);
+    if (result.data.length < 1000) break;
+  }
+  return buildMatchContext(match, rows);
 }
 
 async function fetchHistoricalTeamDataset(client, match, teamId) {
@@ -2745,6 +2761,8 @@ async function prepareWorkbench() {
   const generatedAt = new Date().toISOString();
   const analysisPlan = fixtureAnalysisPlan(insightCandidates);
   const editorial = draftEditorialTemplate(home, away);
+  const matchContext = await fetchLeagueContext(client, match);
+  evidence.push(...matchContextEvidence(matchContext));
   const article = {
     schemaVersion: 1,
     slug,
@@ -2773,6 +2791,7 @@ async function prepareWorkbench() {
       status: match.status,
     },
     teams: { home, away },
+    ...(matchContext ? { matchContext } : {}),
     tags: [],
     aiDisclosure: "גילוי נאות: הכתבה נוצרה בעזרת בינה מלאכותית על בסיס נתוני כדורדאטה. הנתונים והטענות המספריות עברו בדיקות אוטומטיות לפני הפרסום.",
     players,

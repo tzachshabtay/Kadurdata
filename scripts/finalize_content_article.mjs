@@ -16,6 +16,7 @@ import { buildReviewPacket, visibleSentenceEntries } from "./content_language_re
 import { postprocessVisibleCopy } from "./postprocess_content_article.mjs";
 import { matchPlayerRecapEvidence, validateMatchPlayerRecaps } from "./content_match_player_recaps.mjs";
 import { assertStoryGate, STORY_GATE_VERSION } from "./content_story_gate.mjs";
+import { reportingEvidence, withMatchContextEvidence } from "./content_match_context.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generatedDirectory = path.join(projectRoot, "src", "content", "generated");
@@ -68,7 +69,7 @@ function requirePostprocessedCopy(authored) {
   ) {
     throw new Error("Visible article copy has not passed content:postprocess; em dashes must be replaced before editorial and blind review.");
   }
-  const visibleCopy = visibleSentenceEntries(authored.editorial, authored.analysisPlan, authored.playerRecaps)
+  const visibleCopy = visibleSentenceEntries(authored.editorial, authored.analysisPlan, authored.playerRecaps, authored.reportingContext)
     .map((entry) => entry.text)
     .join("\n");
   for (const [pattern, guidance] of [
@@ -203,10 +204,8 @@ async function main() {
   }
   rejectScaffoldText(authored);
   if (!authored.analysisPlan || !authored.editorial) throw new Error("Authored package must include analysisPlan and editorial.");
-  const evidence = authored.playerRecaps
-    ? [...source.evidence, ...matchPlayerRecapEvidence(source.players)]
-    : source.evidence;
-  assertStoryGate(authored, evidence);
+  const evidence = [...withMatchContextEvidence(source.evidence, source.matchContext), ...reportingEvidence(authored.reportingContext), ...(authored.playerRecaps ? matchPlayerRecapEvidence(source.players) : [])];
+  assertStoryGate(authored, evidence, { contextRequired: true });
   requirePostprocessedCopy(authored);
   requireCompleteReview(authored.editorialReview, "Editorial review");
   requireCompleteReview(authored.qualityReview, "Quality review");
@@ -285,6 +284,7 @@ async function main() {
       qualityModel: model,
       pipelineVersion: PIPELINE_VERSION,
       storyGateVersion: STORY_GATE_VERSION,
+      matchContextVersion: 1,
     },
     authorship: authored.authorship,
     tags,
@@ -292,6 +292,7 @@ async function main() {
     editorialReview,
     qualityReview,
     editorial: authored.editorial,
+    ...(authored.reportingContext ? { reportingContext: authored.reportingContext } : {}),
     ...(authored.playerRecaps ? { playerRecaps: authored.playerRecaps } : {}),
     evidence,
     approval: {

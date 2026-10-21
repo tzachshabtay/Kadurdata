@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildReviewPacket, hashJson } from "./content_language_review.mjs";
+import { reportingEvidence, assertContextUse, withMatchContextEvidence } from "./content_match_context.mjs";
+import { matchPlayerRecapEvidence } from "./content_match_player_recaps.mjs";
 
 export const STORY_GATE_VERSION = 1;
 export const blankStoryBrief = () => ({ status: "reject", questionHe: "", answerHe: "", tensionHe: "", whyItMattersHe: "", evidenceIds: [], rejectionReasonHe: "" });
@@ -25,11 +27,16 @@ export function assertStoryBrief(brief, evidence) {
 
 export function storyEvidenceHash(brief, evidence) {
   const byId = new Map(evidence.map(item => [item.id, item]));
-  return hashJson(brief.evidenceIds.map(id => byId.get(id)));
+  // Context-enabled packages bind the native evidence behind the added insight
+  // as well as background. Legacy packages keep their original hash contract.
+  const contextEnabled = evidence.some(e => e.id.startsWith('context.'));
+  const ids = [...new Set([...brief.evidenceIds, ...(contextEnabled ? evidence.map(e => e.id) : [])])];
+  return hashJson(ids.map(id => byId.get(id)));
 }
 
-export function assertStoryGate(authored, evidence) {
+export function assertStoryGate(authored, evidence, { contextRequired = false } = {}) {
   const brief = assertStoryBrief(authored.analysisPlan?.storyBrief, evidence);
+  assertContextUse(authored, evidence, { required: contextRequired });
   const review = authored.qualityReview?.storyReview;
   requireValue(review?.status === "passed" && Array.isArray(review.issues) && review.issues.length === 0,
     "the blind reader must pass the narrative review with no unresolved issues.");
@@ -59,7 +66,13 @@ export function assertStoredStoryGate(article) {
   const version = article.generation?.storyGateVersion;
   requireValue(version === undefined || version === STORY_GATE_VERSION, "unsupported story gate version.");
   if (version !== undefined || article.analysisPlan?.storyBrief
-    || article.factCheck?.checks?.some(check => check.id === "story-contract")) return assertStoryGate(article, article.evidence);
+    || article.factCheck?.checks?.some(check => check.id === "story-contract")) {
+    if (article.matchContext) {
+      const derived = withMatchContextEvidence([], article.matchContext);
+      requireValue(derived.every(item => hashJson(item) === hashJson(article.evidence.find(e => e.id === item.id))), "historical context differs from its reviewed evidence.");
+    }
+    return assertStoryGate(article, article.evidence, { contextRequired: article.generation?.matchContextVersion === 1 });
+  }
   return null;
 }
 
@@ -68,8 +81,9 @@ async function main() {
   if (!args.includes("--source") || !args.includes("--authored")) throw new Error("Usage: content:check:story --source <source.json> --authored <authored.json>");
   const source = JSON.parse(await readFile(path.resolve(value("--source")), "utf8"));
   const authored = JSON.parse(await readFile(path.resolve(value("--authored")), "utf8"));
-  const brief = assertStoryBrief(authored.analysisPlan?.storyBrief, source.evidence);
-  console.log(JSON.stringify({ status: "ready_for_writer", storyBriefHash: hashJson(brief), evidenceHash: storyEvidenceHash(brief, source.evidence), note: "Premise handoff checked; independent narrative review is still required before finalization." }, null, 2));
+  const evidence = [...withMatchContextEvidence(source.evidence, source.matchContext), ...reportingEvidence(authored.reportingContext), ...(authored.playerRecaps ? matchPlayerRecapEvidence(source.players) : [])];
+  const brief = assertStoryBrief(authored.analysisPlan?.storyBrief, evidence);
+  console.log(JSON.stringify({ status: "ready_for_writer", storyBriefHash: hashJson(brief), evidenceHash: storyEvidenceHash(brief, evidence), note: "Premise handoff checked; independent narrative review is still required before finalization." }, null, 2));
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(error => { console.error(error.message); process.exitCode = 1; });
