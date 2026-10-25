@@ -35,6 +35,7 @@ import {
   YAxis,
 } from "recharts";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
+import { fetchLoanPlayerContexts } from "./lib/loanStats";
 import { calculateMatchAveragePositions, renderSeasonHeatmap } from "./lib/seasonHeatmap";
 import {
   LocaleContext,
@@ -779,6 +780,12 @@ export function App() {
   const [matchShots, setMatchShots] = useState<MatchShot[]>([]);
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
+  const [loanPlayerContexts, setLoanPlayerContexts] = useState<SeasonPlayer[]>([]);
+  const [loanLeaderboardRows, setLoanLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
+  const [loanContextsLoading, setLoanContextsLoading] = useState(false);
+  const [loanLeaderboardLoading, setLoanLeaderboardLoading] = useState(false);
+  const [loanContextsError, setLoanContextsError] = useState<string | null>(null);
+  const [loanLeaderboardError, setLoanLeaderboardError] = useState<string | null>(null);
   const [explorerLeaderboardRows, setExplorerLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [legionnaires, setLegionnaires] = useState<Legionnaire[]>([]);
   const [legionnaireLeaderboardRows, setLegionnaireLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
@@ -2263,6 +2270,64 @@ export function App() {
       .forEach((loan) => latestByPlayerId.set(loan.player_id, loan));
     return [...latestByPlayerId.values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
   }, [clubId, playerLoans]);
+  useEffect(() => {
+    let cancelled = false;
+    setLoanPlayerContexts([]);
+    setLoanContextsError(null);
+    if (view !== "clubs" || seasonLoading || !clubLoans.length || !hasSupabaseConfig || !supabase) {
+      setLoanContextsLoading(false);
+      return;
+    }
+    setLoanContextsLoading(true);
+    void fetchLoanPlayerContexts(supabase, clubLoans, currentSeason.season_name).then((result) => {
+      if (cancelled) return;
+      setLoanPlayerContexts(result.players);
+      setLoanContextsError(result.error);
+      setLoanContextsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [clubLoans, currentSeason.season_name, refreshToken, seasonLoading, view]);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLoanLeaderboard() {
+      setLoanLeaderboardRows([]);
+      setLoanLeaderboardLoading(false);
+      setLoanLeaderboardError(null);
+      if (view !== "clubs" || !loanPlayerContexts.length) return;
+      if (squadMetricCode.startsWith("season_")) {
+        setLoanLeaderboardRows(loanPlayerContexts.flatMap((player) => (
+          makeSeasonSummaryLeaderboard([player], player.season_id, squadMetricCode)
+        )));
+        return;
+      }
+      if (!hasSupabaseConfig || !supabase) return;
+      setLoanLeaderboardLoading(true);
+      const client = supabase;
+      const seasonIds = [...new Set(loanPlayerContexts.map((player) => player.season_id))];
+      const results = await Promise.all(seasonIds.map(async (id) => {
+        const seasonPlayers = loanPlayerContexts.filter((player) => player.season_id === id);
+        const playerIds = seasonPlayers.map((player) => player.player_id);
+        const query = isValuationMetricCode(squadMetricCode)
+          ? client.rpc("api_player_valuation_leaderboard", { p_season_id: id })
+          : client.rpc("api_player_leaderboard", {
+            p_season_id: id,
+            p_metric_code: leaderboardSourceMetricCode(squadMetricCode),
+            p_min_minutes: ratingMinimumForMetric(squadMetricCode, squadRatingMinimumMinutes),
+          });
+        const result = await query.in("player_id", playerIds);
+        return {
+          rows: result.error ? [] : prepareLeaderboardRows((result.data ?? []) as PlayerLeaderboardRow[], seasonPlayers, squadMetricCode),
+          error: result.error?.message ?? null,
+        };
+      }));
+      if (cancelled) return;
+      setLoanLeaderboardRows(results.flatMap((result) => result.rows));
+      setLoanLeaderboardError(results.find((result) => result.error)?.error ?? null);
+      setLoanLeaderboardLoading(false);
+    }
+    void loadLoanLeaderboard();
+    return () => { cancelled = true; };
+  }, [loanPlayerContexts, squadMetricCode, squadRatingMinimumMinutes, view]);
   const clubSquad = useMemo(
     () => {
       const loanedPlayerIds = new Set(clubLoans.map((loan) => loan.player_id));
@@ -2307,8 +2372,8 @@ export function App() {
   }, [clubSquad, clubSquadLeaders]);
   const clubLoanLeaderboardRows = useMemo(() => {
     const loanPlayerIds = new Set(clubLoans.map((loan) => loan.player_id));
-    return squadLeaderboardRows.filter((row) => loanPlayerIds.has(row.player_id));
-  }, [clubLoans, squadLeaderboardRows]);
+    return loanLeaderboardRows.filter((row) => loanPlayerIds.has(row.player_id));
+  }, [clubLoans, loanLeaderboardRows]);
   const selectedPlayerMetric = playerViewMetrics.find((metric) => metric.chartKey === metricCode);
   const seasonNameById = useMemo(() => new Map(seasons.map((season) => [season.season_id, season.season_name])), [seasons]);
   const comparisonSeasonIdsByPlayer = useMemo(() => Object.fromEntries(
@@ -2897,6 +2962,7 @@ export function App() {
             management={clubManagement}
             loans={clubLoans}
             loanLeaderboardRows={clubLoanLeaderboardRows}
+            loanLoading={loanContextsLoading || loanLeaderboardLoading}
             metrics={leaderboardMetrics}
             metricCode={squadMetricCode}
             setMetricCode={setSquadMetricCode}
@@ -2906,9 +2972,16 @@ export function App() {
             ratingMinimumMinutes={squadRatingMinimumMinutes}
             setRatingMinimumMinutes={setSquadRatingMinimumMinutes}
             leaderboardLoading={squadLeaderboardLoading}
-            leaderboardError={squadLeaderboardError}
+            leaderboardError={squadLeaderboardError ?? loanContextsError ?? loanLeaderboardError}
             openMatch={openMatch}
-            openPlayer={openPlayer}
+            openPlayer={(id) => {
+              const context = loanPlayerContexts.find((player) => player.player_id === id);
+              if (context) {
+                setCompetitionId(context.competition_id);
+                setSeasonId(context.season_id);
+              }
+              openPlayer(id, context?.season_id, context);
+            }}
             compareTopPlayers={compareTopPlayers}
           />
         ) : view === "legionnaires" ? (
@@ -3662,6 +3735,7 @@ function ClubsView({
   management,
   loans,
   loanLeaderboardRows,
+  loanLoading,
   metrics,
   metricCode,
   setMetricCode,
@@ -3692,6 +3766,7 @@ function ClubsView({
   management: SeasonPlayer[];
   loans: PlayerLoan[];
   loanLeaderboardRows: PlayerLeaderboardRow[];
+  loanLoading: boolean;
   metrics: LeaderboardMetricOption[];
   metricCode: string;
   setMetricCode: (code: string) => void;
@@ -3801,11 +3876,11 @@ function ClubsView({
                         );
                         const position = loan.specific_position ?? loan.primary_position ?? text.player;
                         return (
-                          <button className="loaned-player" key={loan.loan_id} type="button" onClick={() => openPlayer(loan.player_id)}>
+                          <button className="loaned-player" key={loan.loan_id} type="button" disabled={loanLoading} onClick={() => openPlayer(loan.player_id)}>
                             <span className="squad-rank" title={text.loaned}><ArrowUpRight size={12} aria-hidden="true" /></span>
                             <span className="avatar">{initials(playerName)}</span>
                             <span><strong>{playerName}</strong><small>{position} · ({text.loanedTo} {destinationName})</small></span>
-                            <em>{ranking ? formatLeaderboardValue(ranking, language) : "-"}</em>
+                            <em>{loanLoading ? <Loader2 className="spin" size={12} aria-label={text.updatingRanking} /> : ranking ? formatLeaderboardValue(ranking, language) : "-"}</em>
                           </button>
                         );
                       })}

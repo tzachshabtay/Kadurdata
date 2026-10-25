@@ -233,6 +233,45 @@ class RefreshPostgresTests(unittest.TestCase):
         self.cur.execute("select metric_code,value_numeric from public.api_match_player_stats where match_id=%s order by metric_code", (self.match,))
         self.assertEqual(self.cur.fetchall(), [{"metric_code":"future_value","value_numeric":2.5},{"metric_code":"test_value","value_numeric":0}])
 
+    def test_loan_context_uses_destination_minutes_instead_of_parent_bench_record(self):
+        root = Path(__file__).resolve().parents[1]
+        # Only the prerequisites for the context API; everything rolls back.
+        roster = (root / "db/migrations/029_team_rosters_and_loan_coverage.sql").read_text()
+        self.cur.execute(roster[:roster.index("create or replace function")])
+        self.cur.execute("alter table obs.player_match_stats add column if not exists goals numeric, add column if not exists assists numeric, add column if not exists rating_365 numeric")
+        identity = (root / "db/migrations/033_player_identity_and_valuation_leaderboards.sql").read_text()
+        self.cur.execute(identity[:identity.index("$function$;", identity.index("as $function$")) + len("$function$;")])
+        for role in ("anon", "authenticated"):
+            self.cur.execute("select 1 from pg_roles where rolname=%s", (role,))
+            if not self.cur.fetchone():
+                self.cur.execute(psycopg.sql.SQL("create role {}").format(psycopg.sql.Identifier(role)))
+        self.cur.execute((root / "db/migrations/043_loan_destination_player_context.sql").read_text())
+        self.cur.execute("update core.competitions set name='Israeli Premier League' where id=(select competition_id from core.seasons where id=%s)", (self.season,))
+        self.cur.execute("insert into core.players (display_name) values ('Loan regression') returning id")
+        player = self.cur.fetchone()["id"]
+        self.cur.execute("insert into core.player_match_appearances (match_id,player_id,team_id,lineup_status,minutes_played) values (%s,%s,%s,'Substitute',0) returning id", (self.match,player,self.home))
+        parent_appearance = self.cur.fetchone()["id"]
+        self.cur.execute("insert into core.competitions (name,competition_type) values ('Liga Leumit','league') returning id")
+        competition = self.cur.fetchone()["id"]
+        self.cur.execute("insert into core.seasons (competition_id,name) values (%s,'2026/2027') returning id", (competition,))
+        destination_season = self.cur.fetchone()["id"]
+        for minutes in [79, 80, 0]:
+            self.cur.execute("insert into core.matches (season_id,home_team_id,away_team_id) values (%s,%s,%s) returning id", (destination_season,self.away,self.replacement))
+            match = self.cur.fetchone()["id"]
+            self.cur.execute("insert into core.player_match_appearances (match_id,player_id,team_id,lineup_status,minutes_played) values (%s,%s,%s,%s,%s) returning id", (match,player,self.away,'Starting' if minutes else 'Substitute',minutes))
+            appearance = self.cur.fetchone()["id"]
+            if minutes:
+                self.cur.execute("insert into obs.player_match_stats (source_id,appearance_id,goals,metric_count) values (%s,%s,1,1)", (self.source,appearance))
+        self.cur.execute("select * from public.api_player_context_for_season(%s,'2026/2027')", (player,))
+        context = self.cur.fetchone()
+        self.assertEqual((context["season_id"], context["team_id"], context["minutes"], context["appearances"], context["goals"]), (destination_season,self.away,159,2,2))
+        # Even if the parent has more minutes, a loan row must use its destination.
+        self.cur.execute("update core.player_match_appearances set minutes_played=200 where id=%s", (parent_appearance,))
+        self.cur.execute("select * from public.api_player_context_for_team_season(%s,'2026/2027',%s)", (player,self.away))
+        self.assertEqual(self.cur.fetchone()["minutes"], 159)
+        self.cur.execute("select * from public.api_player_context_for_team_season(%s,'2026/2027',%s)", (player,self.replacement))
+        self.assertEqual(self.cur.fetchall(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

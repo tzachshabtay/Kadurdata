@@ -34,6 +34,9 @@ jobs:
       - name: Test weekly appearance eligibility
         run: node --test tests/test_legionnaire_eligibility.mjs
 
+      - name: Test loan destination statistics
+        run: node --experimental-strip-types --test tests/test_loan_stats.mjs
+
       - name: Test editorial pipeline
         run: npm run content:check:pipeline
 
