@@ -35,7 +35,7 @@ import {
   YAxis,
 } from "recharts";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
-import { fetchLoanPlayerContexts } from "./lib/loanStats";
+import { fetchLoanPlayerContexts, mergeLoanLeaderboardRows, type LoanPlayerContext } from "./lib/loanStats";
 import { calculateMatchAveragePositions, renderSeasonHeatmap } from "./lib/seasonHeatmap";
 import {
   LocaleContext,
@@ -780,7 +780,7 @@ export function App() {
   const [matchShots, setMatchShots] = useState<MatchShot[]>([]);
   const [leaderboardRows, setLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [squadLeaderboardRows, setSquadLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
-  const [loanPlayerContexts, setLoanPlayerContexts] = useState<SeasonPlayer[]>([]);
+  const [loanPlayerContexts, setLoanPlayerContexts] = useState<LoanPlayerContext[]>([]);
   const [loanLeaderboardRows, setLoanLeaderboardRows] = useState<PlayerLeaderboardRow[]>([]);
   const [loanContextsLoading, setLoanContextsLoading] = useState(false);
   const [loanLeaderboardLoading, setLoanLeaderboardLoading] = useState(false);
@@ -2297,6 +2297,7 @@ export function App() {
       if (squadMetricCode.startsWith("season_")) {
         setLoanLeaderboardRows(loanPlayerContexts.flatMap((player) => (
           makeSeasonSummaryLeaderboard([player], player.season_id, squadMetricCode)
+            .map((row) => ({ ...row, player_id: player.loan_player_id }))
         )));
         return;
       }
@@ -2316,7 +2317,9 @@ export function App() {
           });
         const result = await query.in("player_id", playerIds);
         return {
-          rows: result.error ? [] : prepareLeaderboardRows((result.data ?? []) as PlayerLeaderboardRow[], seasonPlayers, squadMetricCode),
+          rows: result.error ? [] : prepareLeaderboardRows((result.data ?? []) as PlayerLeaderboardRow[], seasonPlayers, squadMetricCode)
+            .flatMap((row) => seasonPlayers.filter((player) => player.player_id === row.player_id)
+              .map((player) => ({ ...row, player_id: player.loan_player_id }))),
           error: result.error?.message ?? null,
         };
       }));
@@ -2370,10 +2373,9 @@ export function App() {
       .map((player) => ({ player, ranking: null }));
     return [...ranked, ...unranked];
   }, [clubSquad, clubSquadLeaders]);
-  const clubLoanLeaderboardRows = useMemo(() => {
-    const loanPlayerIds = new Set(clubLoans.map((loan) => loan.player_id));
-    return loanLeaderboardRows.filter((row) => loanPlayerIds.has(row.player_id));
-  }, [clubLoans, loanLeaderboardRows]);
+  const clubLoanLeaderboardRows = useMemo(() => mergeLoanLeaderboardRows(
+    clubLoans, clubId, squadLeaderboardRows, loanLeaderboardRows,
+  ), [clubId, clubLoans, loanLeaderboardRows, squadLeaderboardRows]);
   const selectedPlayerMetric = playerViewMetrics.find((metric) => metric.chartKey === metricCode);
   const seasonNameById = useMemo(() => new Map(seasons.map((season) => [season.season_id, season.season_name])), [seasons]);
   const comparisonSeasonIdsByPlayer = useMemo(() => Object.fromEntries(
@@ -2975,12 +2977,15 @@ export function App() {
             leaderboardError={squadLeaderboardError ?? loanContextsError ?? loanLeaderboardError}
             openMatch={openMatch}
             openPlayer={(id) => {
-              const context = loanPlayerContexts.find((player) => player.player_id === id);
+              const context = loanPlayerContexts.find((player) => player.loan_player_id === id)
+                ?? (clubLoans.some((loan) => loan.player_id === id)
+                  ? players.find((player) => player.player_id === id && player.team_id !== clubId)
+                  : undefined);
               if (context) {
                 setCompetitionId(context.competition_id);
                 setSeasonId(context.season_id);
               }
-              openPlayer(id, context?.season_id, context);
+              openPlayer(context?.player_id ?? id, context?.season_id, context);
             }}
             compareTopPlayers={compareTopPlayers}
           />
