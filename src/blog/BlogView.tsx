@@ -145,7 +145,7 @@ function MatchFlowGraphic({ article, spec }: { article: MatchReviewArticle; spec
               </div>
               <small>{window.home.shots}–{window.away.shots} בעיטות</small>
               <div className="flow-event-list" dir="rtl">
-                {highlighted.map((event) => <i className={event.type === "Red Card" ? "red" : ""} key={event.id}>{event.eventTime} {eventTypeHe[event.type]}</i>)}
+                {highlighted.map((event) => <i className={event.type === "Red Card" ? "red" : ""} key={event.id}>{event.eventTime} {event.ownGoal ? "שער עצמי" : eventTypeHe[event.type]}</i>)}
                 {substitutions > 0 && <i>{substitutions} חילופים</i>}
               </div>
             </section>

@@ -1,3 +1,5 @@
+import { shootingAttempts } from "./content_goal_events.mjs";
+
 // A goal-line clearance is both a blocked shot and a shot on target. The shot
 // chart's outcome alone cannot distinguish it from an ordinary blocked shot.
 // Add entries only after primary-source verification of the specific event;
@@ -54,7 +56,7 @@ export function verifiedGoalLineBlock(shot) {
 }
 
 export function shotsOnTargetSummary(shots, teamId) {
-  const relevant = shots.filter((shot) => shot.team_id === teamId);
+  const relevant = shootingAttempts(shots).filter((shot) => shot.team_id === teamId);
   const goalsAndSaves = relevant.filter((shot) => ["Goal", "Saved"].includes(shot.outcome)).length;
   const goalLineBlocks = relevant.map(verifiedGoalLineBlock).filter(Boolean);
   return { count: goalsAndSaves + goalLineBlocks.length, goalsAndSaves, goalLineBlocks };

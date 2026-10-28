@@ -16,7 +16,7 @@
     "content:review-packet": "node scripts/content_language_review.mjs",
     "content:check:language-review": "node scripts/check_content_language_review.mjs",
     "content:check:story": "node scripts/content_story_gate.mjs",
-    "content:check:pipeline": "node --test tests/test_content_story_gate.mjs tests/test_league_analysis.mjs tests/test_content_match_context.mjs tests/test_content_shot_reconciliation.mjs",
+    "content:check:pipeline": "node --test tests/test_content_story_gate.mjs tests/test_league_analysis.mjs tests/test_content_match_context.mjs tests/test_content_shot_reconciliation.mjs tests/test_content_own_goals.mjs",
     "content:finalize": "node scripts/finalize_content_article.mjs",
     "content:finalize:legionnaires": "node scripts/finalize_legionnaire_weekly_article.mjs",
     "content:preview": "node scripts/preview_content_candidate.mjs",

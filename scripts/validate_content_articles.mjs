@@ -8,6 +8,7 @@ import { buildReviewPacket } from "./content_language_review.mjs";
 import { assertStoredStoryGate } from "./content_story_gate.mjs";
 import { assertLeagueData, assertLeagueCopy, LEAGUE_PIPELINE_VERSION } from "./content_league_analysis.mjs";
 import { matchPlayerRecapEvidence, validateMatchPlayerRecaps } from "./content_match_player_recaps.mjs";
+import { storedGoalErrors } from "./content_goal_events.mjs";
 import {
   AWKWARD_FOOTBALL_COPY_PATTERNS,
   mentionsPlayerByFullOrIntroducedShortName,
@@ -243,8 +244,7 @@ function validateArticle(article, filename) {
   const awayShots = article.shots.filter((shot) => shot.teamId === away.teamId);
   if (homeShots.length !== home.stats.team_total_shots) fail("home shot total does not match the shot map");
   if (awayShots.length !== away.stats.team_total_shots) fail("away shot total does not match the shot map");
-  if (homeShots.filter((shot) => shot.outcome === "Goal").length !== home.score) fail("home goals do not match shot events");
-  if (awayShots.filter((shot) => shot.outcome === "Goal").length !== away.score) fail("away goals do not match shot events");
+  storedGoalErrors(article).forEach(fail);
 
   const historicalMatches = article.historicalContext
     ? [...article.historicalContext.teams.home.matches, ...article.historicalContext.teams.away.matches]

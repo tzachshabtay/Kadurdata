@@ -127,6 +127,7 @@ export type ArticleTimelineEvent = {
   minute: number;
   eventTime: string;
   type: string;
+  ownGoal?: boolean;
   teamId: string;
   teamNameHe: string;
   playerNameHe: string | null;

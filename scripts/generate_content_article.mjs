@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
 import { shotsOnTargetSummary, shotsOnTargetDetail } from "./content_shot_reconciliation.mjs";
+import { isOwnGoal, shootingAttempts, goalsForTeam } from "./content_goal_events.mjs";
 import { blankStoryBrief } from "./content_story_gate.mjs";
 import { buildMatchContext, matchContextEvidence } from "./content_match_context.mjs";
 import {
@@ -540,6 +541,7 @@ function normalizeTimelineEvents(game, players, home, away) {
       minute: eventMinute(event),
       eventTime: event.gameTimeDisplay ?? `${eventMinute(event)}'`,
       type: event.eventType?.name ?? "Event",
+      ...(event.eventType?.name === "Goal" && event.eventType?.subTypeName === "Own Goal" ? { ownGoal: true } : {}),
       teamId: isHome ? home.teamId : away.teamId,
       teamNameHe: isHome ? home.nameHe : away.nameHe,
       playerNameHe: hebrewName(event.playerId),
@@ -553,11 +555,12 @@ function buildFlowWindows(shots, homeTeamId, awayTeamId, matchStatus = "Ended") 
   if (["After ET", "After Penalties"].includes(matchStatus)) windows.push([91, 105], [106, 120]);
   return windows.map(([start, end]) => {
     const summary = (teamId) => {
-      const relevant = shots.filter((shot) => shot.team_id === teamId && Number(shot.minute) >= start && Number(shot.minute) <= end);
+      const events = shots.filter((shot) => Number(shot.minute) >= start && Number(shot.minute) <= end);
+      const relevant = shootingAttempts(events).filter((shot) => shot.team_id === teamId);
       return {
         shots: relevant.length,
         xg: round(relevant.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
-        goals: relevant.filter((shot) => shot.outcome === "Goal").length,
+        goals: goalsForTeam(events, teamId, teamId === homeTeamId ? awayTeamId : homeTeamId),
       };
     };
     return { start, end, home: summary(homeTeamId), away: summary(awayTeamId) };
@@ -643,7 +646,7 @@ function teamUnits(players, teamId) {
 }
 
 function shotSummary(shots, teamId) {
-  const relevant = shots.filter((shot) => shot.team_id === teamId);
+  const relevant = shootingAttempts(shots).filter((shot) => shot.team_id === teamId);
   return {
     count: relevant.length,
     goals: relevant.filter((shot) => shot.outcome === "Goal").length,
@@ -654,7 +657,7 @@ function shotSummary(shots, teamId) {
 }
 
 function providerComparableTeamXg(shots, teamId) {
-  const relevant = shots.filter((shot) => (shot.team_id ?? shot.teamId) === teamId);
+  const relevant = shootingAttempts(shots).filter((shot) => (shot.team_id ?? shot.teamId) === teamId);
   const shotsByDisplayedTime = new Map();
   for (const shot of relevant) {
     const eventTime = shot.event_time ?? shot.eventTime ?? `${shot.minute ?? "unknown"}'`;
@@ -782,6 +785,13 @@ function historicalPlayerEvidenceValues(player) {
 
 function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile, historicalContext, historicalAuditContext, gameStateContext, mechanismContext) {
   const goals = shots.filter((shot) => shot.outcome === "Goal");
+  const ownGoals = goals.filter(isOwnGoal).map((shot) => ({
+    sourceEventId: shot.source_event_id,
+    playerNameHe: shot.display_name_he ?? shot.display_name,
+    minute: Number(shot.minute),
+    teamId: shot.team_id === home.teamId ? away.teamId : home.teamId,
+  }));
+  shots = shootingAttempts(shots);
   const firstGoal = [...goals].sort((left, right) => Number(left.minute) - Number(right.minute))[0];
   const standoutPlayers = [...players]
     .filter((player) => Number(player.minutes ?? 0) >= 30 && player.roleGroup !== "Goalkeeper")
@@ -844,8 +854,8 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
       )] : [];
     }),
     evidenceItem("match.opening_goal", "שער הפתיחה", "api_match_shots", firstGoal ? 1 : 0, firstGoal ? [firstGoal.minute, firstGoal.xg] : [], firstGoal ? {
-      teamId: firstGoal.team_id,
-      teamNameHe: firstGoal.team_name_he ?? firstGoal.team_name,
+      teamId: isOwnGoal(firstGoal) ? (firstGoal.team_id === home.teamId ? away.teamId : home.teamId) : firstGoal.team_id,
+      teamNameHe: isOwnGoal(firstGoal) ? (firstGoal.team_id === home.teamId ? away.nameHe : home.nameHe) : (firstGoal.team_name_he ?? firstGoal.team_name),
       playerId: firstGoal.player_id,
       playerNameHe: firstGoal.display_name_he ?? firstGoal.display_name,
       minute: Number(firstGoal.minute),
@@ -977,7 +987,7 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
     }),
     evidenceItem("timeline.goals", "ציר שערי המשחק", "api_match_shots", goals.length, goals.flatMap((shot) => [
       shot.minute, shot.event_time?.includes("+") ? Number(shot.event_time.match(/\+\s*(\d+)/)?.[1] ?? 0) : null,
-    ])),
+    ]), ownGoals.length ? { ownGoals } : undefined),
     evidenceItem("match.shot_map", "מפת הבעיטות", "api_match_shots", shots.length, [
       shots.length, home.shotSummary.count, away.shotSummary.count, home.stats.team_expected_goals, away.stats.team_expected_goals,
     ], {
@@ -2076,8 +2086,10 @@ function validateAnalysisPlan(analysisPlan, evidence, insightCandidates, gameSta
 }
 
 function buildChecks(match, home, away, players, shots, evidence, editorial, editorialReview, qualityReview, flowWindows, timelineEvents, spatialProfile, historicalContext, tags, requiresAiReview, analysisPlan, insightCandidates, gameStateContext, mechanismContext) {
-  const homeGoals = shots.filter((shot) => shot.team_id === home.teamId && shot.outcome === "Goal").length;
-  const awayGoals = shots.filter((shot) => shot.team_id === away.teamId && shot.outcome === "Goal").length;
+  const homeGoals = goalsForTeam(shots, home.teamId, away.teamId);
+  const awayGoals = goalsForTeam(shots, away.teamId, home.teamId);
+  const ownGoals = shots.filter(isOwnGoal);
+  const attempts = shootingAttempts(shots);
   const playersWithGoalMetric = players.filter((player) => player.metrics.goals !== null && player.metrics.goals !== undefined);
   const playerGoals = playersWithGoalMetric.reduce((sum, player) => sum + Number(player.metrics.goals), 0);
   const playersMissingGoalMetric = new Set(
@@ -2085,16 +2097,24 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
       .filter((player) => player.metrics.goals === null || player.metrics.goals === undefined)
       .map((player) => player.playerId),
   );
-  const goalEventsWithoutPlayerMetric = shots.filter((shot) => (
+  const goalEventsWithoutPlayerMetric = attempts.filter((shot) => (
     shot.outcome === "Goal" && playersMissingGoalMetric.has(shot.player_id)
   ));
-  const verifiedPlayerGoals = playerGoals + goalEventsWithoutPlayerMetric.length;
+  const verifiedPlayerGoals = playerGoals + goalEventsWithoutPlayerMetric.length + ownGoals.length;
+  const playerGoalDetail = `${goalEventsWithoutPlayerMetric.length
+    ? `${playerGoals} שערים אומתו במדדי השחקנים ו-${goalEventsWithoutPlayerMetric.length} באירועי בעיטה עבור שחקנים שמדד השערים שלהם חסר`
+    : `${playerGoals} שערים בשורות השחקנים`}${ownGoals.length ? `; ${ownGoals.length} ${ownGoals.length === 1 ? "שער עצמי" : "שערים עצמיים"} בנפרד` : ""}`;
   const editorialFailures = validateEditorial(editorial, evidence);
   const windowShotTotal = flowWindows.reduce((sum, window) => sum + window.home.shots + window.away.shots, 0);
   const timelineGoalTotal = timelineEvents.filter((event) => event.type === "Goal").length;
+  const timelineGoalsMatch = timelineGoalTotal === home.score + away.score && [home, away].every((team) => {
+    const goals = timelineEvents.filter((event) => event.type === "Goal" && event.teamId === team.teamId);
+    return goals.length === team.score
+      && goals.filter((event) => event.ownGoal === true).length === ownGoals.filter((shot) => shot.team_id !== team.teamId).length;
+  });
   const playerGoalEventsMatch = playersWithGoalMetric.every((player) => (
     Number(player.metrics.goals)
-    === shots.filter((shot) => shot.player_id === player.playerId && shot.outcome === "Goal").length
+    === attempts.filter((shot) => shot.player_id === player.playerId && shot.outcome === "Goal").length
   ));
   const historicalMatches = [
     ...historicalContext.teams.home.matches,
@@ -2224,7 +2244,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const checks = [
     ["match-ended", "המשחק הסתיים", TERMINAL_MATCH_STATUSES.has(match.status), `סטטוס המקור: ${match.status}`],
     ["score-vs-events", "התוצאה תואמת לאירועי השערים", home.score === homeGoals && away.score === awayGoals, `${homeGoals}:${awayGoals} באירועים`],
-    ["score-vs-players", "סך שערי השחקנים תואם לתוצאה", verifiedPlayerGoals === home.score + away.score, goalEventsWithoutPlayerMetric.length ? `${playerGoals} שערים אומתו במדדי השחקנים ו-${goalEventsWithoutPlayerMetric.length} באירועי בעיטה עבור שחקנים שמדד השערים שלהם חסר` : `${playerGoals} שערים בשורות השחקנים`],
+    ["score-vs-players", "סך שערי השחקנים תואם לתוצאה", verifiedPlayerGoals === home.score + away.score, playerGoalDetail],
     ["shots-home", `בעיטות ${home.nameHe} תואמות למפת הבעיטות`, home.stats.team_total_shots === home.shotSummary.count, `${home.shotSummary.count} בעיטות`],
     ["shots-away", `בעיטות ${away.nameHe} תואמות למפת הבעיטות`, away.stats.team_total_shots === away.shotSummary.count, `${away.shotSummary.count} בעיטות`],
     ["target-home", `בעיטות ${home.nameHe} למסגרת תואמות`, home.stats.team_shots_on_target === homeOnTarget.count, shotsOnTargetDetail(homeOnTarget)],
@@ -2232,8 +2252,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - homeComparableXg) <= xgTolerance(home.shotSummary.count), `${home.stats.team_expected_goals} מול ${homeComparableXg}; סכום אירועי בעיטה גולמי ${home.shotSummary.xg}; סבילות עיגול לפי ${home.shotSummary.count} בעיטות`],
     ["xg-away", `xG ${away.nameHe} עקבי בין המקורות`, Math.abs(away.stats.team_expected_goals - awayComparableXg) <= xgTolerance(away.shotSummary.count), `${away.stats.team_expected_goals} מול ${awayComparableXg}; סכום אירועי בעיטה גולמי ${away.shotSummary.xg}; סבילות עיגול לפי ${away.shotSummary.count} בעיטות`],
     ["player-goal-events", "שערי השחקנים תואמים לאירועי הבעיטה", playerGoalEventsMatch, goalEventsWithoutPlayerMetric.length ? `${playerGoals} שערים נבדקו בין מדדי השחקנים לאירועים; ${goalEventsWithoutPlayerMetric.length} אירועי שער נשענו על אירוע הבעיטה משום שמדד השחקן חסר` : `${playerGoals} שערים נבדקו ברמת השחקן`],
-    ["flow-shot-total", "חלונות הזמן מכסים את כל הבעיטות", windowShotTotal === shots.length, `${windowShotTotal} בעיטות בחלונות הזמן`],
-    ["timeline-goals", "אירועי המשחק תואמים לשערים", timelineGoalTotal === home.score + away.score, `${timelineGoalTotal} שערים בציר האירועים`],
+    ["flow-shot-total", "חלונות הזמן מכסים את כל הבעיטות", windowShotTotal === attempts.length, `${windowShotTotal} בעיטות בחלונות הזמן`],
+    ["timeline-goals", "אירועי המשחק תואמים לשערים", timelineGoalsMatch, `${timelineGoalTotal} שערים בציר האירועים`],
     ["heatmap-coverage", "כיסוי מפות החום מספיק לניתוח מבני", Number(spatialProfile?.starterHeatmaps ?? 0) >= 18, `${spatialProfile?.starterHeatmaps ?? 0} שחקני הרכב עם מפה`],
     ["history-order", "כל משחקי ההשוואה קדמו למשחק", historyPrecedesMatch, `${historicalMatches.length} משחקים קודמים נבדקו`],
     ["historical-player-volume", "השוואות שחקנים נשענות על מדדי נפח", weakHistoricalPlayerClaims.length === 0, weakHistoricalPlayerClaims.length ? `${weakHistoricalPlayerClaims.length} השוואות נשענו על מדגם חלש` : "לא נמצאו מגמות אישיות ממדגם קטן"],
@@ -2814,7 +2834,7 @@ async function prepareWorkbench() {
     mechanismContext,
     insightCandidates,
     analysisPlan,
-    shots: dataset.shots.map(normalizeShot),
+    shots: shootingAttempts(dataset.shots).map(normalizeShot),
     editorialReview: {
       mode: "codex_skill_editor_pending",
       model: null,
@@ -2861,6 +2881,8 @@ export {
   QUALITY_REVIEW_MODE,
   buildArticleTags,
   buildChecks,
+  buildFlowWindows,
+  normalizeTimelineEvents,
   claimEntries,
   mentionsPlayerByFullOrIntroducedShortName,
   providerComparableTeamXg,

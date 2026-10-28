@@ -1,14 +1,17 @@
+import { shootingAttempts, goalsForTeam } from "./content_goal_events.mjs";
+
 function round(value, digits = 2) {
   const factor = 10 ** digits;
   return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
 }
 
-function shotSummary(shots, teamId, predicate = () => true) {
-  const relevant = shots.filter((shot) => shot.team_id === teamId && predicate(shot));
+function shotSummary(shots, teamId, predicate = () => true, opponentTeamId) {
+  const events = shots.filter(predicate);
+  const relevant = shootingAttempts(events).filter((shot) => shot.team_id === teamId);
   return {
     shots: relevant.length,
     expectedGoals: round(relevant.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0)),
-    goals: relevant.filter((shot) => shot.outcome === "Goal").length,
+    goals: goalsForTeam(events, teamId, opponentTeamId),
   };
 }
 
@@ -21,8 +24,8 @@ function scoreAtMinute(timelineEvents, homeTeamId, awayTeamId, minute) {
 }
 
 export function buildGameStateContext(shots, timelineEvents, home, away) {
-  const homeTotal = shotSummary(shots, home.teamId);
-  const awayTotal = shotSummary(shots, away.teamId);
+  const homeTotal = shotSummary(shots, home.teamId, undefined, away.teamId);
+  const awayTotal = shotSummary(shots, away.teamId, undefined, home.teamId);
   homeTotal.expectedGoals = round(home.stats?.team_expected_goals ?? homeTotal.expectedGoals);
   awayTotal.expectedGoals = round(away.stats?.team_expected_goals ?? awayTotal.expectedGoals);
   const materialEvents = timelineEvents
@@ -30,10 +33,10 @@ export function buildGameStateContext(shots, timelineEvents, home, away) {
     .sort((left, right) => left.minute - right.minute)
     .map((event) => {
       const score = scoreAtMinute(timelineEvents, home.teamId, away.teamId, event.minute);
-      const homeBefore = shotSummary(shots, home.teamId, (shot) => Number(shot.minute) <= event.minute);
-      const awayBefore = shotSummary(shots, away.teamId, (shot) => Number(shot.minute) <= event.minute);
-      const homeAfter = shotSummary(shots, home.teamId, (shot) => Number(shot.minute) > event.minute);
-      const awayAfter = shotSummary(shots, away.teamId, (shot) => Number(shot.minute) > event.minute);
+      const homeBefore = shotSummary(shots, home.teamId, (shot) => Number(shot.minute) <= event.minute, away.teamId);
+      const awayBefore = shotSummary(shots, away.teamId, (shot) => Number(shot.minute) <= event.minute, home.teamId);
+      const homeAfter = shotSummary(shots, home.teamId, (shot) => Number(shot.minute) > event.minute, away.teamId);
+      const awayAfter = shotSummary(shots, away.teamId, (shot) => Number(shot.minute) > event.minute, home.teamId);
       return {
         eventId: event.id,
         type: event.type,
@@ -57,8 +60,8 @@ export function buildGameStateContext(shots, timelineEvents, home, away) {
     });
 
   const lateCutoff = 75;
-  const homeLate = shotSummary(shots, home.teamId, (shot) => Number(shot.minute) > lateCutoff);
-  const awayLate = shotSummary(shots, away.teamId, (shot) => Number(shot.minute) > lateCutoff);
+  const homeLate = shotSummary(shots, home.teamId, (shot) => Number(shot.minute) > lateCutoff, away.teamId);
+  const awayLate = shotSummary(shots, away.teamId, (shot) => Number(shot.minute) > lateCutoff, home.teamId);
   const shotTotalGap = Math.abs(homeTotal.shots - awayTotal.shots);
   const similarShotTotals = shotTotalGap <= 2;
   const distortingEvent = materialEvents.find((event) => (
@@ -200,7 +203,7 @@ function spatialRoleContext(spatialTeam) {
 
 function teamMechanismSummary(team, shots, players, units, spatialTeam, distortionMinute) {
   const playerById = new Map(players.map((player) => [player.playerId, player]));
-  const relevant = shots.filter((shot) => shot.team_id === team.teamId && Number(shot.minute) <= distortionMinute);
+  const relevant = shootingAttempts(shots).filter((shot) => shot.team_id === team.teamId && Number(shot.minute) <= distortionMinute);
   const rawExpectedGoals = round(relevant.reduce((sum, shot) => sum + Number(shot.xg ?? 0), 0));
   const expectedGoals = relevant.length === Number(team.stats?.team_total_shots)
     ? round(team.stats?.team_expected_goals ?? rawExpectedGoals)
