@@ -1,3 +1,5 @@
+import { excludeVerifiedDuplicateShots } from "./content_shot_duplicates.mjs";
+
 // An explicitly tagged own goal changes the score, but is not a shooting
 // attempt or a goal scored by the player whose deflection caused it.
 export function isOwnGoal(shot) {
@@ -5,7 +7,7 @@ export function isOwnGoal(shot) {
 }
 
 export function shootingAttempts(shots) {
-  return shots.filter((shot) => !isOwnGoal(shot));
+  return excludeVerifiedDuplicateShots(shots).filter((shot) => !isOwnGoal(shot));
 }
 
 export function goalsForTeam(shots, teamId, opponentTeamId) {

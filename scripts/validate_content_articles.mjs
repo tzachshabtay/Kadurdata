@@ -9,6 +9,7 @@ import { assertStoredStoryGate } from "./content_story_gate.mjs";
 import { assertLeagueData, assertLeagueCopy, LEAGUE_PIPELINE_VERSION } from "./content_league_analysis.mjs";
 import { matchPlayerRecapEvidence, validateMatchPlayerRecaps } from "./content_match_player_recaps.mjs";
 import { storedGoalErrors } from "./content_goal_events.mjs";
+import { storedShotDuplicateErrors } from "./content_shot_duplicates.mjs";
 import {
   AWKWARD_FOOTBALL_COPY_PATTERNS,
   mentionsPlayerByFullOrIntroducedShortName,
@@ -74,6 +75,7 @@ function chanceMechanismRepresentativeNames(mechanismContext) {
 function validateArticle(article, filename) {
   const failures = [];
   const fail = (message) => failures.push(`${filename}: ${message}`);
+  storedShotDuplicateErrors(article).forEach(fail);
   try { assertStoredStoryGate(article); } catch (error) { fail(error.message); }
   if (article.schemaVersion !== 1) fail("unsupported schemaVersion");
   if (article.language !== "he") fail("content must be Hebrew-only");

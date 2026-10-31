@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { analyzeContentHeatmaps } from "./analyze_content_heatmaps.mjs";
 import { shotsOnTargetSummary, shotsOnTargetDetail } from "./content_shot_reconciliation.mjs";
 import { isOwnGoal, shootingAttempts, goalsForTeam } from "./content_goal_events.mjs";
+import { verifiedShotDuplicates } from "./content_shot_duplicates.mjs";
 import { blankStoryBrief } from "./content_story_gate.mjs";
 import { buildMatchContext, matchContextEvidence } from "./content_match_context.mjs";
 import {
@@ -784,6 +785,7 @@ function historicalPlayerEvidenceValues(player) {
 }
 
 function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps, flowWindows, timelineEvents, spatialProfile, historicalContext, historicalAuditContext, gameStateContext, mechanismContext) {
+  const duplicateResolutions = verifiedShotDuplicates(shots);
   const goals = shots.filter((shot) => shot.outcome === "Goal");
   const ownGoals = goals.filter(isOwnGoal).map((shot) => ({
     sourceEventId: shot.source_event_id,
@@ -842,6 +844,11 @@ function buildEvidence(match, home, away, players, shots, unitMatchups, heatmaps
   ];
   return [
     evidenceItem("match.result", "תוצאת המשחק", "api_matches", 1, [home.score, away.score], { home: { teamNameHe: home.nameHe, score: home.score }, away: { teamNameHe: away.nameHe, score: away.score } }),
+    ...(duplicateResolutions.length ? [evidenceItem(
+      "shots.reconciliation", "התאמת אירועי הבעיטה", "verified_primary_match_report + provider_player_statistics", duplicateResolutions.length * 2,
+      [duplicateResolutions.length, ...duplicateResolutions.flatMap((entry) => [entry.kept.xg, entry.duplicate.xg])],
+      { presentation: "internal", resolutions: duplicateResolutions },
+    )] : []),
     ...[home, away].flatMap((team) => {
       const summary = shotsOnTargetSummary(shots, team.teamId);
       return summary.goalLineBlocks.length ? [evidenceItem(
@@ -2090,6 +2097,8 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
   const awayGoals = goalsForTeam(shots, away.teamId, home.teamId);
   const ownGoals = shots.filter(isOwnGoal);
   const attempts = shootingAttempts(shots);
+  const duplicateResolutions = verifiedShotDuplicates(shots);
+  const duplicateEvidence = evidence.find((item) => item.id === "shots.reconciliation")?.context;
   const playersWithGoalMetric = players.filter((player) => player.metrics.goals !== null && player.metrics.goals !== undefined);
   const playerGoals = playersWithGoalMetric.reduce((sum, player) => sum + Number(player.metrics.goals), 0);
   const playersMissingGoalMetric = new Set(
@@ -2247,6 +2256,7 @@ function buildChecks(match, home, away, players, shots, evidence, editorial, edi
     ["score-vs-players", "סך שערי השחקנים תואם לתוצאה", verifiedPlayerGoals === home.score + away.score, playerGoalDetail],
     ["shots-home", `בעיטות ${home.nameHe} תואמות למפת הבעיטות`, home.stats.team_total_shots === home.shotSummary.count, `${home.shotSummary.count} בעיטות`],
     ["shots-away", `בעיטות ${away.nameHe} תואמות למפת הבעיטות`, away.stats.team_total_shots === away.shotSummary.count, `${away.shotSummary.count} בעיטות`],
+    ...((duplicateResolutions.length || duplicateEvidence) ? [["shot-reconciliation", "רישומי הבעיטות תואמים לאירועים שאומתו", JSON.stringify(duplicateEvidence) === JSON.stringify({ presentation: "internal", resolutions: duplicateResolutions }), "רישום חוזר נבדק מול תיאור האירוע ומדדי השחקן"]] : []),
     ["target-home", `בעיטות ${home.nameHe} למסגרת תואמות`, home.stats.team_shots_on_target === homeOnTarget.count, shotsOnTargetDetail(homeOnTarget)],
     ["target-away", `בעיטות ${away.nameHe} למסגרת תואמות`, away.stats.team_shots_on_target === awayOnTarget.count, shotsOnTargetDetail(awayOnTarget)],
     ["xg-home", `xG ${home.nameHe} עקבי בין המקורות`, Math.abs(home.stats.team_expected_goals - homeComparableXg) <= xgTolerance(home.shotSummary.count), `${home.stats.team_expected_goals} מול ${homeComparableXg}; סכום אירועי בעיטה גולמי ${home.shotSummary.xg}; סבילות עיגול לפי ${home.shotSummary.count} בעיטות`],

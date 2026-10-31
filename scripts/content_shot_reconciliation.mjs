@@ -6,6 +6,18 @@ import { shootingAttempts } from "./content_goal_events.mjs";
 // never infer them from coordinates or from the aggregate count being short.
 const verifiedGoalLineBlocks = [
   {
+    matchId: "6f9fd23a-48b9-4547-9fae-adfdf0d9797b",
+    sourceCode: "365scores",
+    sourceEventId: "164739306",
+    teamId: "a3de4ba2-63b7-475e-9975-8f2bb118d546",
+    playerId: "3c2fc94a-90e4-41dc-9325-2f710214d51b",
+    minute: 59,
+    findingHe: "גדראני הרחיק מקו השער את בעיטת רועי לוי לאחר שעבר את סילבה, כפי שמתועד בדיווח הרשמי של בית״ר ירושלים.",
+    sourceUrl: "https://www.beitarfc.co.il/news/חוזרים-למסלול-01-לביתר-על-הפועל-פתח-תקו/",
+    definitionUrl: "https://www.statsperform.com/opta-event-definitions/",
+    verifiedAt: "2026-10-31",
+  },
+  {
     matchId: "fe0a16ab-0cfc-40b3-9634-39733223c77e",
     sourceCode: "365scores",
     sourceEventId: "324739311",
