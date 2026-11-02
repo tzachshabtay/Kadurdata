@@ -16,7 +16,7 @@ Each scheduled run seeks at most one worthwhile local candidate. If no eligible 
 - Before any article draft or blind review, read [story-first.md](references/story-first.md) for the story brief, rejection criteria and narrative-review contract.
 - For Hebrew voice and sentence-level editing, read `../kadurdata-match-review/references/hebrew-voice-guide.md` and `../kadurdata-match-review/references/editorial-standards.md` in full.
 - When the selected daily item is a match review, follow `../kadurdata-match-review/SKILL.md` in full after selection.
-- For every match article, read [match-context.md](references/match-context.md): establish the table and recent form at the match date, read relevant Israeli reporting, and develop a data-backed insight beyond the reports reviewed.
+- For every match article, read [match-context.md](references/match-context.md): establish the table and recent form at the match date, read relevant Israeli reporting including available post-match coach/player interviews before choosing the story, and develop a data-backed insight beyond the reports reviewed.
 
 ## Mandatory roles
 
@@ -41,7 +41,7 @@ The writer, editor, and reviewer must be fresh-context agents. Do not collapse t
 - Compare like-for-like time windows and normalize player volume per 90 minutes when minutes differ materially.
 - A claim that an individual player improved or declined requires at least three prior substantial appearances for the baseline. A shorter player history is context only, not trend evidence. This threshold does not apply to league-wide aggregates, position-group comparisons, single-match explanations, or other non-trend topics.
 - Every visible number must be present in the cited evidence package.
-- Use news reporting as internal context only. The visible article, graphics, recaps and fact-check panel must not mention other news outlets/reporters or display their source links; retain provenance for internal verification.
+- Keep news-outlet/reporting provenance internal. A verified post-match claim may be attributed to its coach or player and tested in the story against native data; distinguish what they said from what the evidence supports. The visible article, graphics, recaps and fact-check panel must not mention other news outlets/reporters or display their source links.
 - Graphics are selected after the story and must let the reader see a claim from the article. Do not add decorative graphics.
 - Replace every em dash (`—`) in visible copy with a hyphen-minus (`-`) before language review.
 - Read every visible sentence aloud. Reject translationese, analysis jargon, and phrases an Israeli sports editor would rewrite.
