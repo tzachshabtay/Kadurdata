@@ -6,6 +6,18 @@ import { shootingAttempts } from "./content_goal_events.mjs";
 // never infer them from coordinates or from the aggregate count being short.
 const verifiedGoalLineBlocks = [
   {
+    matchId: "0611476f-b059-444b-9655-84102f8c6432",
+    sourceCode: "365scores",
+    sourceEventId: "134739299",
+    teamId: "63150a5c-d5cb-4a07-85cc-15853457e0b0",
+    playerId: "d8da6bfc-11eb-4845-b1d7-9e6bfd6b6f23",
+    minute: 54,
+    findingHe: "ניסיון של דניאל דאפה הורחק מקו השער לאחר שבעט פעמיים, כפי שמתועד בדקה ה-54 ביומן המשחק הרשמי של הפועל תל אביב.",
+    sourceUrl: "https://www.htafc.co.il/ביתי-הוא-מבצרי/",
+    definitionUrl: "https://www.statsperform.com/opta-event-definitions/",
+    verifiedAt: "2026-11-04",
+  },
+  {
     matchId: "6f9fd23a-48b9-4547-9fae-adfdf0d9797b",
     sourceCode: "365scores",
     sourceEventId: "164739306",

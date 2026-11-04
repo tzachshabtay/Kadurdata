@@ -157,3 +157,22 @@ test("counts the independently documented Levi goal-line clearance separately fr
   for (const key of ["match_id", "source_code", "source_event_id", "team_id", "player_id", "minute"]) assert.equal(verifiedGoalLineBlock({ ...levi, [key]: "changed" }), null, key);
   assert.equal(shotsOnTargetSummary([{ ...levi, outcome: "Saved" }], levi.team_id).count, 1);
 });
+
+test("reconciles Tsunami's documented clearance of Dappa's second attempt without counting the first save twice", () => {
+  const blocked = { match_id: "0611476f-b059-444b-9655-84102f8c6432", source_code: "365scores", source_event_id: "134739299", team_id: "63150a5c-d5cb-4a07-85cc-15853457e0b0", player_id: "d8da6bfc-11eb-4845-b1d7-9e6bfd6b6f23", minute: 54, outcome: "Blocked", xg: 0.36 };
+  const saved = { ...blocked, source_event_id: "124739299", outcome: "Saved", xg: 0.39 };
+  const shots = [blocked, saved, { ...blocked, source_event_id: "goal", minute: 45, outcome: "Goal", xg: 0.08 }];
+  const before = structuredClone(shots), summary = shotsOnTargetSummary(shots, blocked.team_id);
+  assert.equal(summary.count, 3);
+  assert.equal(summary.goalsAndSaves, 2);
+  assert.equal(summary.goalLineBlocks.length, 1);
+  assert.equal(summary.goalLineBlocks[0].sourceUrl, "https://www.htafc.co.il/ביתי-הוא-מבצרי/");
+  assert.deepEqual(shots, before);
+  assert.equal(providerComparableTeamXg(shots, blocked.team_id), 0.83);
+  for (const key of ["match_id", "source_code", "source_event_id", "team_id", "player_id", "minute"]) assert.equal(verifiedGoalLineBlock({ ...blocked, [key]: "changed" }), null, key);
+  assert.equal(verifiedGoalLineBlock({ ...blocked, source_event_id: "124739299" }), null);
+  assert.equal(shotsOnTargetSummary([blocked], "other-team").count, 0);
+  const reclassified = shotsOnTargetSummary([{ ...blocked, outcome: "Saved" }, saved], blocked.team_id);
+  assert.equal(reclassified.count, 2);
+  assert.equal(reclassified.goalLineBlocks.length, 0);
+});
